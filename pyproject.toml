@@ -1,0 +1,38 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "carbon-badge"
+version = "0.1.0"
+description = "Shields-style README badge for a repo's CI carbon footprint"
+readme = "README.md"
+license = "Apache-2.0"
+authors = [{ name = "Fabio Cicerchia" }]
+requires-python = ">=3.10"
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Environment :: Console",
+    "Intended Audience :: Developers",
+    "Intended Audience :: System Administrators",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+]
+dependencies = ["requests>=2.31"]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0", "ruff>=0.4", "build>=1.2"]
+
+[project.urls]
+Homepage = "https://github.com/fabiocicerchia/carbon-badge"
+Issues = "https://github.com/fabiocicerchia/carbon-badge/issues"
+Changelog = "https://github.com/fabiocicerchia/carbon-badge/blob/main/CHANGELOG.md"
+
+[project.scripts]
+carbon-badge = "carbon_badge:main"
+
+[tool.setuptools]
+py-modules = ["carbon_badge"]
+
+[tool.ruff]
+line-length = 100

@@ -1,0 +1,36 @@
+# Secrets / local env
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# Dependencies / build output
+node_modules/
+dist/
+build/
+target/
+*.egg-info/
+__pycache__/
+.venv/
+venv/
+
+# Logs / caches
+*.log
+.cache/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+coverage/
+*.coverage
+
+# Generated reports (security scans, etc.) and docs site build
+reports/
+site/
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp

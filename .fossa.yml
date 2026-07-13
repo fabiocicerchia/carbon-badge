@@ -1,0 +1,7 @@
+# FOSSA license & dependency compliance. Run `fossa analyze` locally or in CI
+# with FOSSA_API_KEY set. Docs: https://github.com/fossas/fossa-cli
+version: 3
+
+project:
+  id: github.com/fabiocicerchia/carbon-badge
+  name: carbon-badge

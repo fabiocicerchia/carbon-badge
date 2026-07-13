@@ -1,0 +1,12 @@
+#!/bin/sh
+# Blocks commits containing secrets. Enabled via `make setup`
+# (git config core.hooksPath .githooks). Uses gitleaks on staged changes.
+
+if ! command -v gitleaks >/dev/null 2>&1; then
+	echo "✗ gitleaks not installed — cannot scan for secrets."
+	echo "  Install: https://github.com/gitleaks/gitleaks#installing"
+	echo "  (or bypass once with: git commit --no-verify)"
+	exit 1
+fi
+
+gitleaks protect --staged --redact --verbose

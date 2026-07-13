@@ -1,0 +1,9 @@
+# Normalize line endings
+* text=auto eol=lf
+
+# Binary files (no diff/merge)
+*.png binary
+*.jpg binary
+*.gif binary
+*.pdf binary
+*.zip binary

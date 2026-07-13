@@ -1,0 +1,20 @@
+# Keep build context small and free of secrets.
+.git
+.github
+.githooks
+.env
+.env.*
+!.env.example
+dist/
+build/
+*.egg-info/
+__pycache__/
+.venv/
+venv/
+.pytest_cache/
+.ruff_cache/
+*.log
+docs/
+examples/
+reports/
+site/
