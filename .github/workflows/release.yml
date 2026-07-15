@@ -27,6 +27,9 @@ jobs:
     steps:
       - uses: googleapis/release-please-action@v4
         id: release
+        with:
+          # Bumps `version` in pyproject.toml and maintains CHANGELOG.md.
+          release-type: python
 
   build:
     needs: release-please
