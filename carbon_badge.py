@@ -163,6 +163,18 @@ def gitlab_kwh_last_30d(project, token, api="https://gitlab.com/api/v4"):
     return kwh
 
 
+def live_grid_intensity(zone, token=None, api="https://api.electricitymap.org/v3", get=requests.get):
+    """Fetch a zone's current carbon intensity (gCO2eq/kWh) from Electricity Maps.
+
+    `get` is injectable (defaults to `requests.get`) so callers/tests can
+    supply a fake without a live network call.
+    """
+    headers = {"auth-token": token} if token else {}
+    r = get(f"{api}/carbon-intensity/latest", params={"zone": zone}, headers=headers, timeout=30)
+    r.raise_for_status()
+    return float(r.json()["carbonIntensity"])
+
+
 def badge_color(grams):
     """Return the Shields badge color for a monthly gCO2e figure."""
     for limit, color in THRESHOLDS:
@@ -215,7 +227,18 @@ def main(argv=None):
         type=float,
         default=DEFAULT_GRID_INTENSITY,
         metavar="G",
-        help="gCO2e per kWh (default %(default)s, world avg)",
+        help="gCO2e per kWh (default %(default)s, world avg); ignored if --grid-region is set",
+    )
+    p.add_argument(
+        "--grid-region",
+        default=None,
+        metavar="ZONE",
+        help="Electricity Maps zone (e.g. SE, US-CAL-CISO) for live grid intensity",
+    )
+    p.add_argument(
+        "--electricitymaps-token",
+        default=None,
+        help="Electricity Maps API token (or ELECTRICITYMAPS_TOKEN env)",
     )
     p.add_argument(
         "--minutes",
@@ -229,16 +252,21 @@ def main(argv=None):
 
     env_var = "GITLAB_TOKEN" if args.provider == "gitlab" else "GITHUB_TOKEN"
     token = args.token or os.environ.get(env_var)
+    grid_intensity = args.grid_intensity
+    if args.grid_region:
+        em_token = args.electricitymaps_token or os.environ.get("ELECTRICITYMAPS_TOKEN")
+        grid_intensity = live_grid_intensity(args.grid_region, token=em_token)
+        print(f"carbon-badge: live grid intensity for {args.grid_region} = {grid_intensity:.0f} gCO2e/kWh", file=sys.stderr)
     if args.minutes is not None:
-        grams = grams_co2e(args.minutes, args.grid_intensity)
+        grams = grams_co2e(args.minutes, grid_intensity)
         detail = f"{args.minutes:.0f} CI min/30d"
     elif args.provider == "gitlab":
         kwh = gitlab_kwh_last_30d(args.repo, token, api=args.api or "https://gitlab.com/api/v4")
-        grams = grams_co2e_kwh(kwh, args.grid_intensity)
+        grams = grams_co2e_kwh(kwh, grid_intensity)
         detail = f"{kwh:.3f} kWh/30d"
     else:
         kwh = ci_kwh_last_30d(args.repo, token, api=args.api or "https://api.github.com")
-        grams = grams_co2e_kwh(kwh, args.grid_intensity)
+        grams = grams_co2e_kwh(kwh, grid_intensity)
         detail = f"{kwh:.3f} kWh/30d"
     json.dump(endpoint_json(grams), sys.stdout, indent=2)
     print(file=sys.stderr)

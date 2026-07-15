@@ -72,3 +72,13 @@ def test_gitlab_kwh_skips_self_hosted(monkeypatch):
     monkeypatch.setattr(carbon_badge.requests, "get", fake_get)
     kwh = carbon_badge.gitlab_kwh_last_30d("group/project", token=None)
     assert round(kwh, 6) == round(1 * carbon_badge.DEFAULT_RUNNER_POWER_W / 1000, 6)
+
+
+def test_live_grid_intensity_injected_client():
+    """live_grid_intensity reads carbonIntensity via the injected `get` callable."""
+
+    def fake_get(url, params=None, headers=None, timeout=None):
+        assert params["zone"] == "SE"
+        return _FakeResponse({"carbonIntensity": 42.5})
+
+    assert carbon_badge.live_grid_intensity("SE", get=fake_get) == 42.5
