@@ -11,9 +11,11 @@ from a gist, S3, or GitHub Pages.
 """
 
 import argparse
+import http.server
 import re
 import sys
 import json
+import time
 from datetime import datetime, timedelta, timezone
 
 import requests
@@ -198,6 +200,72 @@ def endpoint_json(grams):
     }
 
 
+def estimate(args, token):
+    """Run one carbon estimate for the parsed CLI args. Returns (endpoint_json, detail)."""
+    import os
+
+    grid_intensity = args.grid_intensity
+    if args.grid_region:
+        em_token = args.electricitymaps_token or os.environ.get("ELECTRICITYMAPS_TOKEN")
+        grid_intensity = live_grid_intensity(args.grid_region, token=em_token)
+        print(f"carbon-badge: live grid intensity for {args.grid_region} = {grid_intensity:.0f} gCO2e/kWh", file=sys.stderr)
+    if args.minutes is not None:
+        grams = grams_co2e(args.minutes, grid_intensity)
+        detail = f"{args.minutes:.0f} CI min/30d"
+    elif args.provider == "gitlab":
+        kwh = gitlab_kwh_last_30d(args.repo, token, api=args.api or "https://gitlab.com/api/v4")
+        grams = grams_co2e_kwh(kwh, grid_intensity)
+        detail = f"{kwh:.3f} kWh/30d"
+    else:
+        kwh = ci_kwh_last_30d(args.repo, token, api=args.api or "https://api.github.com")
+        grams = grams_co2e_kwh(kwh, grid_intensity)
+        detail = f"{kwh:.3f} kWh/30d"
+    return endpoint_json(grams), detail
+
+
+def badge_handler(compute, ttl=300):
+    """Build a request handler serving /badge.json from compute(), cached for ttl seconds."""
+    cache = {"t": 0.0, "body": b""}
+
+    class Handler(http.server.BaseHTTPRequestHandler):
+        def do_GET(self):
+            if self.path not in ("/", "/badge.json"):
+                self.send_response(404)
+                self.end_headers()
+                return
+            now = time.monotonic()
+            if now - cache["t"] > ttl:
+                cache["body"] = json.dumps(compute()).encode()
+                cache["t"] = now
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Access-Control-Allow-Origin", "*")
+            self.end_headers()
+            self.wfile.write(cache["body"])
+
+        def log_message(self, *a):
+            pass
+
+    return Handler
+
+
+def serve(port, args, token, ttl=300):
+    """Serve the badge JSON at /badge.json on localhost:port.
+
+    Recomputes at most once every `ttl` seconds (default 5 min) so repeated
+    hits (Shields refreshes the endpoint on every badge view) don't hammer
+    the CI/grid APIs.
+    """
+
+    def compute():
+        data, detail = estimate(args, token)
+        print(f"carbon-badge: {detail} ≈ {data['message']}", file=sys.stderr)
+        return data
+
+    print(f"carbon-badge: serving /badge.json on :{port} (ttl {ttl}s)", file=sys.stderr)
+    http.server.HTTPServer(("0.0.0.0", port), badge_handler(compute, ttl)).serve_forever()
+
+
 def main(argv=None):
     """CLI entry point: parse args, estimate emissions, emit badge JSON."""
     p = argparse.ArgumentParser(
@@ -246,31 +314,28 @@ def main(argv=None):
         default=None,
         help="skip the API and use this many CI minutes (testing/offline)",
     )
+    p.add_argument(
+        "--serve",
+        type=int,
+        default=None,
+        metavar="PORT",
+        help="serve /badge.json on this port instead of printing once and exiting",
+    )
     args = p.parse_args(argv)
 
     import os
 
     env_var = "GITLAB_TOKEN" if args.provider == "gitlab" else "GITHUB_TOKEN"
     token = args.token or os.environ.get(env_var)
-    grid_intensity = args.grid_intensity
-    if args.grid_region:
-        em_token = args.electricitymaps_token or os.environ.get("ELECTRICITYMAPS_TOKEN")
-        grid_intensity = live_grid_intensity(args.grid_region, token=em_token)
-        print(f"carbon-badge: live grid intensity for {args.grid_region} = {grid_intensity:.0f} gCO2e/kWh", file=sys.stderr)
-    if args.minutes is not None:
-        grams = grams_co2e(args.minutes, grid_intensity)
-        detail = f"{args.minutes:.0f} CI min/30d"
-    elif args.provider == "gitlab":
-        kwh = gitlab_kwh_last_30d(args.repo, token, api=args.api or "https://gitlab.com/api/v4")
-        grams = grams_co2e_kwh(kwh, grid_intensity)
-        detail = f"{kwh:.3f} kWh/30d"
-    else:
-        kwh = ci_kwh_last_30d(args.repo, token, api=args.api or "https://api.github.com")
-        grams = grams_co2e_kwh(kwh, grid_intensity)
-        detail = f"{kwh:.3f} kWh/30d"
-    json.dump(endpoint_json(grams), sys.stdout, indent=2)
+
+    if args.serve:
+        serve(args.serve, args, token)
+        return 0
+
+    data, detail = estimate(args, token)
+    json.dump(data, sys.stdout, indent=2)
     print(file=sys.stderr)
-    print(f"carbon-badge: {detail} ≈ {format_grams(grams)}", file=sys.stderr)
+    print(f"carbon-badge: {detail} ≈ {data['message']}", file=sys.stderr)
     return 0
 
 

@@ -75,12 +75,23 @@ Jobs on project/group (non-shared) runners are skipped either way — their
 power draw is unknown, so they'd skew the estimate; a stderr line reports
 how many were excluded.
 
+For a badge that always reflects the last 5 minutes without a refresh
+workflow, run it as a tiny local endpoint instead of a one-shot:
+
+```sh
+carbon-badge fabiocicerchia/nginx-lua --token $GITHUB_TOKEN --serve 8080
+# -> http://localhost:8080/badge.json, recomputed at most once per 5 min
+```
+
+Put a reverse proxy (or an SSH tunnel) in front of it for anything public —
+this is a bare `http.server`, not a hardened production service.
+
 ## Roadmap
 
 - [x] Per-runner-type power model (macOS/Windows/larger runners)
 - [x] GitLab CI + self-hosted runner support
 - [x] Live regional grid intensity via Electricity Maps API
-- [ ] Hosted endpoint mode (badge-poser style service)
+- [x] Hosted endpoint mode (badge-poser style service)
 
 ## Documentation
 
