@@ -27,6 +27,24 @@ Defaults: world-average grid intensity (480 gCO2e/kWh); override with
 Color bands: <100 g bright green · <500 g green · <2 kg yellow · <10 kg
 orange · above red.
 
+## Install
+
+```sh
+pipx install git+https://github.com/fabiocicerchia/carbon-badge
+```
+
+Or with pip:
+
+```sh
+pip install git+https://github.com/fabiocicerchia/carbon-badge
+```
+
+Or the one-line installer:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/fabiocicerchia/carbon-badge/main/install.sh | bash
+```
+
 ## Usage
 
 ```sh
