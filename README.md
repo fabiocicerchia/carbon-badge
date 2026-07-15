@@ -63,7 +63,7 @@ Nightly refresh workflow: see
 
 ## Roadmap
 
-- [ ] Per-runner-type power model (macOS/Windows/larger runners)
+- [x] Per-runner-type power model (macOS/Windows/larger runners)
 - [ ] GitLab CI + self-hosted runner support
 - [ ] Live regional grid intensity via Electricity Maps API
 - [ ] Hosted endpoint mode (badge-poser style service)

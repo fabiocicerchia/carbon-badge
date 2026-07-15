@@ -2,12 +2,21 @@
 
 import json
 
-from carbon_badge import badge_color, endpoint_json, format_grams, grams_co2e, main
+from carbon_badge import badge_color, endpoint_json, format_grams, grams_co2e, main, runner_power_w
 
 
 def test_conversion_math():
     """1000 minutes * 12.5W runner at 480 g/kWh ≈ 100 g."""
     assert round(grams_co2e(1000), 0) == 100
+
+
+def test_runner_power_by_type():
+    """runner_power_w maps OS labels to their published power draw."""
+    assert runner_power_w(["ubuntu-latest"]) == 12.5
+    assert runner_power_w(["windows-latest"]) == 30.0
+    assert runner_power_w(["macos-latest"]) == 65.0
+    assert runner_power_w(["ubuntu-latest-4-cores"]) == 25.0  # 2x the 2-core baseline
+    assert runner_power_w(["some-custom-label"]) == 12.5  # unknown -> ubuntu baseline
 
 
 def test_color_thresholds():

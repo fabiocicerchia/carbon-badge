@@ -11,8 +11,9 @@ from a gist, S3, or GitHub Pages.
 """
 
 import argparse
-import json
+import re
 import sys
+import json
 from datetime import datetime, timedelta, timezone
 
 import requests
@@ -23,6 +24,17 @@ import requests
 KWH_PER_RUNNER_MINUTE = 12.5 / 1000 / 60
 DEFAULT_GRID_INTENSITY = 480.0  # gCO2e/kWh, ~world average
 
+# Per-runner-type average power draw (W, incl. PUE), from published
+# GitHub-hosted runner specs. "ubuntu" is the baseline (2-core); Windows and
+# macOS hosts draw more for the same job. Larger runners (N-core labels)
+# scale roughly linearly off the 2-core baseline.
+RUNNER_POWER_W = {
+    "macos": 65.0,
+    "windows": 30.0,
+    "ubuntu": 12.5,
+}
+DEFAULT_RUNNER_POWER_W = RUNNER_POWER_W["ubuntu"]
+
 THRESHOLDS = [  # gCO2e/month -> badge color
     (100, "brightgreen"),
     (500, "green"),
@@ -31,11 +43,40 @@ THRESHOLDS = [  # gCO2e/month -> badge color
 ]
 
 
-def ci_minutes_last_30d(repo, token, api="https://api.github.com"):
-    """Sum billable-ish run durations over the last 30 days (public data)."""
+def runner_power_w(labels):
+    """Map GitHub Actions job labels (e.g. ["windows-latest"]) to a W draw.
+
+    Larger runners are labelled e.g. "ubuntu-latest-4-cores"; scale the
+    matching OS baseline by core count over the 2-core default.
+    """
+    labels_lower = [label.lower() for label in labels]
+    for key, watts in RUNNER_POWER_W.items():
+        if any(key in label for label in labels_lower):
+            cores = next(
+                (int(m.group(1)) for label in labels_lower if (m := re.search(r"-(\d+)-cores?\b", label))),
+                None,
+            )
+            return watts * (cores / 2) if cores else watts
+    return DEFAULT_RUNNER_POWER_W
+
+
+def run_jobs(run_id, repo, token, api="https://api.github.com"):
+    """Fetch the jobs (with per-job runner labels/timing) for one run."""
+    headers = {"Authorization": f"Bearer {token}"} if token else {}
+    r = requests.get(f"{api}/repos/{repo}/actions/runs/{run_id}/jobs", headers=headers, timeout=30)
+    r.raise_for_status()
+    return r.json().get("jobs", [])
+
+
+def ci_kwh_last_30d(repo, token, api="https://api.github.com"):
+    """Sum kWh across the last 30 days of runs, weighted by runner type.
+
+    Self-hosted jobs are skipped (unknown power draw) and counted so the
+    caller can warn about them.
+    """
     since = (datetime.now(timezone.utc) - timedelta(days=30)).isoformat()
     headers = {"Authorization": f"Bearer {token}"} if token else {}
-    minutes, page = 0.0, 1
+    kwh, skipped_self_hosted, page = 0.0, 0, 1
     while page <= 10:  # cap pagination defensively
         r = requests.get(
             f"{api}/repos/{repo}/actions/runs",
@@ -48,20 +89,36 @@ def ci_minutes_last_30d(repo, token, api="https://api.github.com"):
         if not runs:
             break
         for run in runs:
-            start = run.get("run_started_at")
-            end = run.get("updated_at")
-            if start and end:
+            for job in run_jobs(run["id"], repo, token, api):
+                labels = job.get("labels", [])
+                if any("self-hosted" in label.lower() for label in labels):
+                    skipped_self_hosted += 1
+                    continue
+                start, end = job.get("started_at"), job.get("completed_at")
+                if not (start and end):
+                    continue
                 dt = datetime.fromisoformat(end.replace("Z", "+00:00")) - datetime.fromisoformat(
                     start.replace("Z", "+00:00")
                 )
-                minutes += max(dt.total_seconds(), 0) / 60
+                hours = max(dt.total_seconds(), 0) / 3600
+                kwh += hours * runner_power_w(labels) / 1000
         page += 1
-    return minutes
+    if skipped_self_hosted:
+        print(
+            f"carbon-badge: skipped {skipped_self_hosted} self-hosted job(s) (unknown power draw)",
+            file=sys.stderr,
+        )
+    return kwh
 
 
 def grams_co2e(minutes, grid_intensity=DEFAULT_GRID_INTENSITY):
     """Convert CI runner-minutes to gCO2e for the given grid intensity."""
     return minutes * KWH_PER_RUNNER_MINUTE * grid_intensity
+
+
+def grams_co2e_kwh(kwh, grid_intensity=DEFAULT_GRID_INTENSITY):
+    """Convert kWh to gCO2e for the given grid intensity."""
+    return kwh * grid_intensity
 
 
 def badge_color(grams):
@@ -114,11 +171,16 @@ def main(argv=None):
     import os
 
     token = args.token or os.environ.get("GITHUB_TOKEN")
-    minutes = args.minutes if args.minutes is not None else ci_minutes_last_30d(args.repo, token)
-    grams = grams_co2e(minutes, args.grid_intensity)
+    if args.minutes is not None:
+        grams = grams_co2e(args.minutes, args.grid_intensity)
+        detail = f"{args.minutes:.0f} CI min/30d"
+    else:
+        kwh = ci_kwh_last_30d(args.repo, token)
+        grams = grams_co2e_kwh(kwh, args.grid_intensity)
+        detail = f"{kwh:.3f} kWh/30d"
     json.dump(endpoint_json(grams), sys.stdout, indent=2)
     print(file=sys.stderr)
-    print(f"carbon-badge: {minutes:.0f} CI min/30d ≈ {format_grams(grams)}", file=sys.stderr)
+    print(f"carbon-badge: {detail} ≈ {format_grams(grams)}", file=sys.stderr)
     return 0
 
 
