@@ -1,7 +1,9 @@
 """Unit tests for carbon_badge."""
 
 import json
+from datetime import datetime, timezone
 
+import carbon_badge
 from carbon_badge import badge_color, endpoint_json, format_grams, grams_co2e, main, runner_power_w
 
 
@@ -43,3 +45,30 @@ def test_cli_offline(capsys):
     assert main(["owner/repo", "--minutes", "1000"]) == 0
     data = json.loads(capsys.readouterr().out)
     assert data["message"].endswith("gCO2e/mo")
+
+
+class _FakeResponse:
+    def __init__(self, payload):
+        self._payload = payload
+
+    def raise_for_status(self):
+        pass
+
+    def json(self):
+        return self._payload
+
+
+def test_gitlab_kwh_skips_self_hosted(monkeypatch):
+    """gitlab_kwh_last_30d sums shared-runner job duration, skips self-hosted."""
+    now = datetime.now(timezone.utc).isoformat()
+    jobs_page1 = [
+        {"created_at": now, "duration": 3600, "runner": {"is_shared": True}},
+        {"created_at": now, "duration": 3600, "runner": {"is_shared": False}},
+    ]
+
+    def fake_get(url, params=None, headers=None, timeout=None):
+        return _FakeResponse(jobs_page1 if params["page"] == 1 else [])
+
+    monkeypatch.setattr(carbon_badge.requests, "get", fake_get)
+    kwh = carbon_badge.gitlab_kwh_last_30d("group/project", token=None)
+    assert round(kwh, 6) == round(1 * carbon_badge.DEFAULT_RUNNER_POWER_W / 1000, 6)

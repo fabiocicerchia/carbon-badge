@@ -121,6 +121,48 @@ def grams_co2e_kwh(kwh, grid_intensity=DEFAULT_GRID_INTENSITY):
     return kwh * grid_intensity
 
 
+def gitlab_kwh_last_30d(project, token, api="https://gitlab.com/api/v4"):
+    """Sum kWh across the last 30 days of GitLab CI jobs (ubuntu-baseline power).
+
+    GitLab's job list already carries per-job `duration` and `runner` info,
+    so unlike GitHub this is a single paginated endpoint. Jobs on a
+    project/group (non-shared) runner are skipped (unknown power draw).
+    """
+    since = datetime.now(timezone.utc) - timedelta(days=30)
+    headers = {"PRIVATE-TOKEN": token} if token else {}
+    project_path = project.replace("/", "%2F")
+    kwh, skipped_self_hosted, page = 0.0, 0, 1
+    while page <= 10:  # cap pagination defensively
+        r = requests.get(
+            f"{api}/projects/{project_path}/jobs",
+            params={"per_page": 100, "page": page},
+            headers=headers,
+            timeout=30,
+        )
+        r.raise_for_status()
+        jobs = r.json()
+        if not jobs:
+            break
+        for job in jobs:
+            created = job.get("created_at")
+            if not created or datetime.fromisoformat(created.replace("Z", "+00:00")) < since:
+                continue
+            runner = job.get("runner") or {}
+            if runner and runner.get("is_shared") is False:
+                skipped_self_hosted += 1
+                continue
+            duration = job.get("duration")
+            if duration:
+                kwh += (duration / 3600) * DEFAULT_RUNNER_POWER_W / 1000
+        page += 1
+    if skipped_self_hosted:
+        print(
+            f"carbon-badge: skipped {skipped_self_hosted} self-hosted job(s) (unknown power draw)",
+            file=sys.stderr,
+        )
+    return kwh
+
+
 def badge_color(grams):
     """Return the Shields badge color for a monthly gCO2e figure."""
     for limit, color in THRESHOLDS:
@@ -151,8 +193,23 @@ def main(argv=None):
         description=__doc__,
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
-    p.add_argument("repo", help="owner/repo")
-    p.add_argument("--token", default=None, help="GitHub token (or GITHUB_TOKEN env)")
+    p.add_argument("repo", help="owner/repo (GitHub) or group/project (GitLab)")
+    p.add_argument(
+        "--provider",
+        choices=["github", "gitlab"],
+        default="github",
+        help="CI provider to query (default %(default)s)",
+    )
+    p.add_argument(
+        "--api",
+        default=None,
+        help="override API base URL (GitHub Enterprise / self-hosted GitLab)",
+    )
+    p.add_argument(
+        "--token",
+        default=None,
+        help="API token (or GITHUB_TOKEN / GITLAB_TOKEN env, matching --provider)",
+    )
     p.add_argument(
         "--grid-intensity",
         type=float,
@@ -170,12 +227,17 @@ def main(argv=None):
 
     import os
 
-    token = args.token or os.environ.get("GITHUB_TOKEN")
+    env_var = "GITLAB_TOKEN" if args.provider == "gitlab" else "GITHUB_TOKEN"
+    token = args.token or os.environ.get(env_var)
     if args.minutes is not None:
         grams = grams_co2e(args.minutes, args.grid_intensity)
         detail = f"{args.minutes:.0f} CI min/30d"
+    elif args.provider == "gitlab":
+        kwh = gitlab_kwh_last_30d(args.repo, token, api=args.api or "https://gitlab.com/api/v4")
+        grams = grams_co2e_kwh(kwh, args.grid_intensity)
+        detail = f"{kwh:.3f} kWh/30d"
     else:
-        kwh = ci_kwh_last_30d(args.repo, token)
+        kwh = ci_kwh_last_30d(args.repo, token, api=args.api or "https://api.github.com")
         grams = grams_co2e_kwh(kwh, args.grid_intensity)
         detail = f"{kwh:.3f} kWh/30d"
     json.dump(endpoint_json(grams), sys.stdout, indent=2)

@@ -61,10 +61,20 @@ Serve `badge.json` anywhere public (gist, S3, gh-pages) and embed:
 Nightly refresh workflow: see
 [`.github-workflow-example/carbon-badge.yml`](.github-workflow-example/carbon-badge.yml).
 
+GitLab CI works the same way with `--provider gitlab`:
+
+```sh
+carbon-badge mygroup/myproject --provider gitlab --token $GITLAB_TOKEN > badge.json
+```
+
+Jobs on project/group (non-shared) runners are skipped either way — their
+power draw is unknown, so they'd skew the estimate; a stderr line reports
+how many were excluded.
+
 ## Roadmap
 
 - [x] Per-runner-type power model (macOS/Windows/larger runners)
-- [ ] GitLab CI + self-hosted runner support
+- [x] GitLab CI + self-hosted runner support
 - [ ] Live regional grid intensity via Electricity Maps API
 - [ ] Hosted endpoint mode (badge-poser style service)
 
