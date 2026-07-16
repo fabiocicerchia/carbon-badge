@@ -86,13 +86,6 @@ carbon-badge fabiocicerchia/nginx-lua --token $GITHUB_TOKEN --serve 8080
 Put a reverse proxy (or an SSH tunnel) in front of it for anything public —
 this is a bare `http.server`, not a hardened production service.
 
-## Roadmap
-
-- [x] Per-runner-type power model (macOS/Windows/larger runners)
-- [x] GitLab CI + self-hosted runner support
-- [x] Live regional grid intensity via Electricity Maps API
-- [x] Hosted endpoint mode (badge-poser style service)
-
 ## Documentation
 
 Full docs live in [`docs/`](docs/). Runnable examples live in [`examples/`](examples/).
