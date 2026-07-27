@@ -62,7 +62,24 @@ Serve `badge.json` anywhere public (gist, S3, gh-pages) and embed:
 ![CI carbon](https://img.shields.io/endpoint?url=https://example.com/badge.json)
 ```
 
-Nightly refresh workflow: see
+Or drop it in as a GitHub Action instead of installing the CLI yourself —
+it refreshes `badge.json` and publishes it to `gh-pages`:
+
+```yaml
+permissions:
+  contents: write
+jobs:
+  badge:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: fabiocicerchia/carbon-badge@main
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+```
+
+See all inputs/outputs in [`action.yml`](action.yml); full example workflow
+(with the cron schedule) at
 [`.github-workflow-example/carbon-badge.yml`](.github-workflow-example/carbon-badge.yml).
 
 GitLab CI works the same way with `--provider gitlab`:

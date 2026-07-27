@@ -1,0 +1,99 @@
+name: 'carbon-badge'
+description: 'Estimate a repo''s CI carbon footprint and publish a Shields.io endpoint badge.json'
+author: 'Fabio Cicerchia'
+branding:
+  icon: 'wind'
+  color: 'green'
+
+inputs:
+  repo:
+    description: 'owner/repo (GitHub) or group/project (GitLab) to measure'
+    default: ${{ github.repository }}
+  provider:
+    description: 'CI provider: github or gitlab'
+    default: 'github'
+  api:
+    description: 'override API base URL (GitHub Enterprise / self-hosted GitLab)'
+    default: ''
+  token:
+    description: 'API token for the provider'
+    default: ${{ github.token }}
+  grid-intensity:
+    description: 'gCO2e per kWh (default: world average, see the CLI --help)'
+    default: ''
+  grid-region:
+    description: 'Electricity Maps zone for live grid intensity (overrides grid-intensity)'
+    default: ''
+  electricitymaps-token:
+    description: 'Electricity Maps API token'
+    default: ''
+  minutes:
+    description: 'skip the API and use this many CI minutes (testing/offline)'
+    default: ''
+  output-path:
+    description: 'path to write the badge JSON'
+    default: 'badge.json'
+  publish-branch:
+    description: 'branch to commit output-path to; set to empty to skip publishing'
+    default: 'gh-pages'
+  commit-message:
+    description: 'commit message used when publishing'
+    default: 'refresh carbon badge'
+
+outputs:
+  message:
+    description: 'the badge message, e.g. "1.2 kgCO2e/mo"'
+    value: ${{ steps.estimate.outputs.message }}
+  color:
+    description: 'the badge color, e.g. "yellow"'
+    value: ${{ steps.estimate.outputs.color }}
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Install carbon-badge
+      shell: bash
+      env:
+        ACTION_PATH: ${{ github.action_path }}
+      run: pipx install "$ACTION_PATH"
+
+    - name: Estimate emissions
+      id: estimate
+      shell: bash
+      env:
+        CB_REPO: ${{ inputs.repo }}
+        CB_PROVIDER: ${{ inputs.provider }}
+        CB_API: ${{ inputs.api }}
+        CB_TOKEN: ${{ inputs.token }}
+        CB_GRID_INTENSITY: ${{ inputs.grid-intensity }}
+        CB_GRID_REGION: ${{ inputs.grid-region }}
+        CB_ELECTRICITYMAPS_TOKEN: ${{ inputs.electricitymaps-token }}
+        CB_MINUTES: ${{ inputs.minutes }}
+        CB_OUTPUT: ${{ inputs.output-path }}
+      run: |
+        args=("$CB_REPO" --provider "$CB_PROVIDER" --token "$CB_TOKEN")
+        [[ -n "$CB_API" ]] && args+=(--api "$CB_API")
+        [[ -n "$CB_GRID_INTENSITY" ]] && args+=(--grid-intensity "$CB_GRID_INTENSITY")
+        [[ -n "$CB_GRID_REGION" ]] && args+=(--grid-region "$CB_GRID_REGION")
+        [[ -n "$CB_ELECTRICITYMAPS_TOKEN" ]] && args+=(--electricitymaps-token "$CB_ELECTRICITYMAPS_TOKEN")
+        [[ -n "$CB_MINUTES" ]] && args+=(--minutes "$CB_MINUTES")
+        carbon-badge "${args[@]}" > "$CB_OUTPUT"
+        {
+          echo "message=$(jq -r .message "$CB_OUTPUT")"
+          echo "color=$(jq -r .color "$CB_OUTPUT")"
+        } >> "$GITHUB_OUTPUT"
+
+    - name: Publish to branch
+      if: inputs.publish-branch != ''
+      shell: bash
+      env:
+        CB_OUTPUT: ${{ inputs.output-path }}
+        CB_BRANCH: ${{ inputs.publish-branch }}
+        CB_MESSAGE: ${{ inputs.commit-message }}
+      run: |
+        git config user.name github-actions
+        git config user.email github-actions@github.com
+        git checkout -B "$CB_BRANCH"
+        git add "$CB_OUTPUT"
+        git commit -m "$CB_MESSAGE" || echo "carbon-badge: no change to publish"
+        git push -f origin "$CB_BRANCH"

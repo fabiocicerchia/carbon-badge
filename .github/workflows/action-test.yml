@@ -1,0 +1,27 @@
+name: action-test
+
+on:
+  push:
+    branches: [main]
+    paths: [action.yml, ".github/workflows/action-test.yml"]
+  pull_request:
+    paths: [action.yml, ".github/workflows/action-test.yml"]
+
+permissions:
+  contents: read
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - id: badge
+        uses: ./
+        with:
+          minutes: "600"
+          publish-branch: ""
+      - name: check outputs
+        run: |
+          [[ "${{ steps.badge.outputs.message }}" == *"CO2e/mo" ]] || { echo "unexpected message: ${{ steps.badge.outputs.message }}"; exit 1; }
+          [[ -n "${{ steps.badge.outputs.color }}" ]] || { echo "missing color output"; exit 1; }
+          echo "ok: ${{ steps.badge.outputs.message }} (${{ steps.badge.outputs.color }})"
