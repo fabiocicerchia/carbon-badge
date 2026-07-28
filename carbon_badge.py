@@ -12,10 +12,10 @@ from a gist, S3, or GitHub Pages.
 
 import argparse
 import http.server
+import json
 import os
 import re
 import sys
-import json
 import time
 from datetime import datetime, timedelta, timezone
 
@@ -70,9 +70,7 @@ def runner_power_w(labels):
 def run_jobs(run_id, repo, token, api="https://api.github.com"):
     """Fetch the jobs (with per-job runner labels/timing) for one run."""
     headers = {"Authorization": f"Bearer {token}"} if token else {}
-    r = requests.get(
-        f"{api}/repos/{repo}/actions/runs/{run_id}/jobs", headers=headers, timeout=30
-    )
+    r = requests.get(f"{api}/repos/{repo}/actions/runs/{run_id}/jobs", headers=headers, timeout=30)
     r.raise_for_status()
     return r.json().get("jobs", [])
 
@@ -106,9 +104,9 @@ def ci_kwh_last_30d(repo, token, api="https://api.github.com"):
                 start, end = job.get("started_at"), job.get("completed_at")
                 if not (start and end):
                     continue
-                dt = datetime.fromisoformat(
-                    end.replace("Z", "+00:00")
-                ) - datetime.fromisoformat(start.replace("Z", "+00:00"))
+                dt = datetime.fromisoformat(end.replace("Z", "+00:00")) - datetime.fromisoformat(
+                    start.replace("Z", "+00:00")
+                )
                 hours = max(dt.total_seconds(), 0) / 3600
                 kwh += hours * runner_power_w(labels) / 1000
         page += 1
@@ -158,10 +156,7 @@ def gitlab_kwh_last_30d(project, token, api="https://gitlab.com/api/v4"):
             break
         for job in jobs:
             created = job.get("created_at")
-            if (
-                not created
-                or datetime.fromisoformat(created.replace("Z", "+00:00")) < since
-            ):
+            if not created or datetime.fromisoformat(created.replace("Z", "+00:00")) < since:
                 continue
             runner = job.get("runner") or {}
             if runner and runner.get("is_shared") is False:
@@ -231,15 +226,11 @@ def estimate(args, token):
         grams = grams_co2e(args.minutes, grid_intensity)
         detail = f"{args.minutes:.0f} CI min/30d"
     elif args.provider == "gitlab":
-        kwh = gitlab_kwh_last_30d(
-            args.repo, token, api=args.api or "https://gitlab.com/api/v4"
-        )
+        kwh = gitlab_kwh_last_30d(args.repo, token, api=args.api or "https://gitlab.com/api/v4")
         grams = grams_co2e_kwh(kwh, grid_intensity)
         detail = f"{kwh:.3f} kWh/30d"
     else:
-        kwh = ci_kwh_last_30d(
-            args.repo, token, api=args.api or "https://api.github.com"
-        )
+        kwh = ci_kwh_last_30d(args.repo, token, api=args.api or "https://api.github.com")
         grams = grams_co2e_kwh(kwh, grid_intensity)
         detail = f"{kwh:.3f} kWh/30d"
     return endpoint_json(grams), detail
@@ -285,9 +276,7 @@ def serve(port, args, token, ttl=300):
         return data
 
     print(f"carbon-badge: serving /badge.json on :{port} (ttl {ttl}s)", file=sys.stderr)
-    http.server.HTTPServer(
-        ("0.0.0.0", port), badge_handler(compute, ttl)
-    ).serve_forever()
+    http.server.HTTPServer(("0.0.0.0", port), badge_handler(compute, ttl)).serve_forever()
 
 
 def main(argv=None):

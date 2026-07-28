@@ -110,16 +110,12 @@ def test_serve_badge_endpoint_caches_and_404s():
             "color": "brightgreen",
         }
 
-    httpd = http.server.HTTPServer(
-        ("127.0.0.1", 0), carbon_badge.badge_handler(compute, ttl=300)
-    )
+    httpd = http.server.HTTPServer(("127.0.0.1", 0), carbon_badge.badge_handler(compute, ttl=300))
     port = httpd.server_address[1]
     thread = threading.Thread(target=httpd.serve_forever, daemon=True)
     thread.start()
     try:
-        body = urllib.request.urlopen(
-            f"http://127.0.0.1:{port}/badge.json", timeout=5
-        ).read()
+        body = urllib.request.urlopen(f"http://127.0.0.1:{port}/badge.json", timeout=5).read()
         assert json.loads(body)["label"] == "CI carbon"
         urllib.request.urlopen(f"http://127.0.0.1:{port}/badge.json", timeout=5).read()
         assert calls["n"] == 1  # second hit within ttl served from cache
