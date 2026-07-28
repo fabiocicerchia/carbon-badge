@@ -120,6 +120,10 @@ See [CONTRIBUTING.md](CONTRIBUTING.md). By participating you agree to the
 
 Found a vulnerability? See [SECURITY.md](SECURITY.md) — please don't open a public issue.
 
+## Support
+
+Need help implementing this? [Get in touch](https://fabiocicerchia.it/contact).
+
 ## License
 
 Apache 2.0 — see [LICENSE](LICENSE).

@@ -12,24 +12,24 @@ jobs:
   quality:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
 
       # Lint the GitHub Actions workflows themselves.
       - name: actionlint
-        uses: raven-actions/actionlint@v2
+        uses: raven-actions/actionlint@3d39aea434753780c3b3d4a1a31c854b4dbf49d7  # v2
 
       # Enforce .editorconfig (indentation, EOL, trailing whitespace).
       - name: editorconfig-checker
-        uses: editorconfig-checker/action-editorconfig-checker@v2
+        uses: editorconfig-checker/action-editorconfig-checker@d2ed4fd072ae6f887e9407c909af0f585d2ad9f4  # v2
 
       # Catch common typos in code and docs.
       - name: typos
-        uses: crate-ci/typos@master
+        uses: crate-ci/typos@3bc303c295c081add5df4a4d52a1e117f2fb2dce  # master
 
       # pre-commit runs the language-specific hooks defined in
       # .pre-commit-config.yaml. It no-ops gracefully if none apply.
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065  # v5
         with:
           python-version: "3.x"
       - name: pre-commit
-        uses: pre-commit/action@v3.0.1
+        uses: pre-commit/action@2c7b3805fd2a0fd8c1884dcaebf91fc102a13ecd  # v3.0.1

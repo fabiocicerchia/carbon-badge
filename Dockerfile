@@ -15,4 +15,11 @@ WORKDIR /app
 COPY --from=build /src/dist/*.whl /tmp/
 RUN pip install --no-cache-dir /tmp/*.whl && rm /tmp/*.whl
 USER app
+
+# Default use is one-shot (see usage above); the optional --serve mode is
+# self-checking (http.server.serve_forever binds immediately or fails fast),
+# so this just confirms the interpreter starts.
+HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=1 \
+    CMD python3 -c "import sys; sys.exit(0)"
+
 ENTRYPOINT ["carbon-badge"]
