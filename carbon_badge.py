@@ -12,6 +12,7 @@ from a gist, S3, or GitHub Pages.
 
 import argparse
 import http.server
+import os
 import re
 import sys
 import json
@@ -111,12 +112,16 @@ def ci_kwh_last_30d(repo, token, api="https://api.github.com"):
                 hours = max(dt.total_seconds(), 0) / 3600
                 kwh += hours * runner_power_w(labels) / 1000
         page += 1
-    if skipped_self_hosted:
+    _warn_skipped_self_hosted(skipped_self_hosted)
+    return kwh
+
+
+def _warn_skipped_self_hosted(count):
+    if count:
         print(
-            f"carbon-badge: skipped {skipped_self_hosted} self-hosted job(s) (unknown power draw)",
+            f"carbon-badge: skipped {count} self-hosted job(s) (unknown power draw)",
             file=sys.stderr,
         )
-    return kwh
 
 
 def grams_co2e(minutes, grid_intensity=DEFAULT_GRID_INTENSITY):
@@ -166,11 +171,7 @@ def gitlab_kwh_last_30d(project, token, api="https://gitlab.com/api/v4"):
             if duration:
                 kwh += (duration / 3600) * DEFAULT_RUNNER_POWER_W / 1000
         page += 1
-    if skipped_self_hosted:
-        print(
-            f"carbon-badge: skipped {skipped_self_hosted} self-hosted job(s) (unknown power draw)",
-            file=sys.stderr,
-        )
+    _warn_skipped_self_hosted(skipped_self_hosted)
     return kwh
 
 
@@ -218,8 +219,6 @@ def endpoint_json(grams):
 
 def estimate(args, token):
     """Run one carbon estimate for the parsed CLI args. Returns (endpoint_json, detail)."""
-    import os
-
     grid_intensity = args.grid_intensity
     if args.grid_region:
         em_token = args.electricitymaps_token or os.environ.get("ELECTRICITYMAPS_TOKEN")
@@ -347,8 +346,6 @@ def main(argv=None):
         help="serve /badge.json on this port instead of printing once and exiting",
     )
     args = p.parse_args(argv)
-
-    import os
 
     env_var = "GITLAB_TOKEN" if args.provider == "gitlab" else "GITHUB_TOKEN"
     token = args.token or os.environ.get(env_var)
