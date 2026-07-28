@@ -11,6 +11,10 @@ permissions:
   contents: read
   security-events: write # upload SARIF to the Security tab
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   secrets:
     name: secret scan (gitleaks)
