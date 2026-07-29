@@ -238,7 +238,11 @@ def estimate(args, token):
 
 def badge_handler(compute, ttl=300):
     """Build a request handler serving /badge.json from compute(), cached for ttl seconds."""
-    cache = {"t": 0.0, "body": b""}
+    # `t=None` means "never computed yet" — not 0.0, since time.monotonic()'s
+    # epoch is arbitrary (e.g. near-zero shortly after a container boots), so
+    # `now - 0.0 > ttl` can be false on the very first request too, leaving
+    # cache["body"] permanently empty.
+    cache = {"t": None, "body": b""}
 
     class Handler(http.server.BaseHTTPRequestHandler):
         def do_GET(self):
@@ -247,7 +251,7 @@ def badge_handler(compute, ttl=300):
                 self.end_headers()
                 return
             now = time.monotonic()
-            if now - cache["t"] > ttl:
+            if cache["t"] is None or now - cache["t"] > ttl:
                 cache["body"] = json.dumps(compute()).encode()
                 cache["t"] = now
             self.send_response(200)
