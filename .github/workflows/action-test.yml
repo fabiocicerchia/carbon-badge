@@ -25,7 +25,10 @@ jobs:
           minutes: "600"
           publish-branch: ""
       - name: check outputs
+        env:
+          MESSAGE: ${{ steps.badge.outputs.message }}
+          COLOR: ${{ steps.badge.outputs.color }}
         run: |
-          [[ "${{ steps.badge.outputs.message }}" == *"CO2e/mo" ]] || { echo "unexpected message: ${{ steps.badge.outputs.message }}"; exit 1; }
-          [[ -n "${{ steps.badge.outputs.color }}" ]] || { echo "missing color output"; exit 1; }
-          echo "ok: ${{ steps.badge.outputs.message }} (${{ steps.badge.outputs.color }})"
+          [[ "$MESSAGE" == *"CO2e/mo" ]] || { echo "unexpected message: $MESSAGE"; exit 1; }
+          [[ -n "$COLOR" ]] || { echo "missing color output"; exit 1; }
+          echo "ok: $MESSAGE ($COLOR)"

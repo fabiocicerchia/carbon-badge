@@ -3,6 +3,7 @@
 import http.server
 import json
 import threading
+import time
 import urllib.error
 import urllib.request
 from datetime import datetime, timezone
@@ -110,18 +111,25 @@ def test_serve_badge_endpoint_caches_and_404s():
             "color": "brightgreen",
         }
 
-    httpd = http.server.HTTPServer(
-        ("127.0.0.1", 0), carbon_badge.badge_handler(compute, ttl=300)
-    )
+    httpd = http.server.HTTPServer(("127.0.0.1", 0), carbon_badge.badge_handler(compute, ttl=300))
     port = httpd.server_address[1]
     thread = threading.Thread(target=httpd.serve_forever, daemon=True)
     thread.start()
     try:
-        body = urllib.request.urlopen(
-            f"http://127.0.0.1:{port}/badge.json", timeout=5
-        ).read()
-        assert json.loads(body)["label"] == "CI carbon"
-        urllib.request.urlopen(f"http://127.0.0.1:{port}/badge.json", timeout=5).read()
+        url = f"http://127.0.0.1:{port}/badge.json"
+        # The server thread may not have reached its accept loop yet — retry
+        # briefly instead of racing the very first request against it.
+        for attempt in range(20):
+            try:
+                body = urllib.request.urlopen(url, timeout=5).read()
+                data = json.loads(body)
+                break
+            except (urllib.error.URLError, json.JSONDecodeError):
+                if attempt == 19:
+                    raise
+                time.sleep(0.05)
+        assert data["label"] == "CI carbon"
+        urllib.request.urlopen(url, timeout=5).read()
         assert calls["n"] == 1  # second hit within ttl served from cache
         with pytest.raises(urllib.error.HTTPError):
             urllib.request.urlopen(f"http://127.0.0.1:{port}/nope", timeout=5)
