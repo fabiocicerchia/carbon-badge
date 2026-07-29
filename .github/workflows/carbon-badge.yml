@@ -1,0 +1,16 @@
+# Refreshes the badge nightly and publishes badge.json to the gh-pages branch.
+name: carbon-badge
+on:
+  schedule: [{ cron: "17 2 * * *" }]
+  workflow_dispatch:
+permissions:
+  contents: write
+  actions: read
+jobs:
+  badge:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+      - uses: fabiocicerchia/carbon-badge@main
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
