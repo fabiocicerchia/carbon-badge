@@ -25,3 +25,20 @@ runs (30d) → runner-minutes → kWh (12.5 W, PUE incl.) → gCO2e (grid factor
   accounting. Assumptions are documented constants and overridable via flags.
 - Color bands: <100 g brightgreen · <500 g green · <2 kg yellow · <10 kg
   orange · above red.
+
+## How the estimate works
+
+```
+runs (30d) → runner-minutes → kWh (12.5 W, PUE incl.) → gCO2e (grid factor)
+```
+
+Defaults: world-average grid intensity (480 gCO2e/kWh); override with
+`--grid-intensity` (e.g. `--grid-intensity 56` for Sweden), or use a live
+figure with `--grid-region SE` (an [Electricity
+Maps](https://www.electricitymaps.com/) zone; needs
+`--electricitymaps-token`/`ELECTRICITYMAPS_TOKEN`) — this takes priority over
+`--grid-intensity` when set. It's an *estimate* — the value is trend and
+awareness, not accounting.
+
+Color bands: <100 g bright green · <500 g green · <2 kg yellow · <10 kg
+orange · above red.
