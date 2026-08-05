@@ -6,6 +6,10 @@ repos:
       - id: trailing-whitespace
       - id: end-of-file-fixer
       - id: check-yaml
+        # k8s manifests are legitimately multi-document, and Helm templates are Go
+        # templates rather than YAML — the parser cannot read either as-is.
+        args: [--allow-multiple-documents]
+        exclude: ^chart/templates/
       - id: check-json
       - id: check-added-large-files
       - id: check-merge-conflict
