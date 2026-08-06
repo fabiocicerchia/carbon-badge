@@ -1,1 +1,12 @@
-mkdocs-material
+# Pinned docs toolchain, kept in step with fabiocicerchia/mkdocs-material-pinned.
+# An unpinned `mkdocs-material` breaks the Read the Docs build whenever a
+# transitive plugin moves overnight — the whole reason that repo exists.
+mkdocs==1.6.1
+mkdocs-material==9.7.7
+mkdocs-material-extensions==1.3.1
+pymdown-extensions==11.0.1
+mkdocs-minify-plugin==0.8.0
+mkdocs-redirects==1.2.3
+mkdocs-awesome-pages-plugin==2.10.1
+mkdocs-git-revision-date-localized-plugin==1.5.3
+mike==2.2.0
