@@ -20,6 +20,6 @@ USER app
 # self-checking (http.server.serve_forever binds immediately or fails fast),
 # so this just confirms the interpreter starts.
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=1 \
-    CMD python3 -c "import sys; sys.exit(0)"
+    CMD ["python3", "-c", "import sys; sys.exit(0)"]
 
 ENTRYPOINT ["carbon-badge"]
