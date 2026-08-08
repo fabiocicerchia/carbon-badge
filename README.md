@@ -118,6 +118,48 @@ multipliers, not power ones. Same hardware draws the same watts.
 Full derivation, sources, and the known limits are in
 [`docs/assumptions.md`](docs/assumptions.md).
 
+## How this compares to Eco-CI
+
+[Eco-CI](https://github.com/green-coding-solutions/eco-ci-energy-estimation) by
+Green Coding Solutions solves a neighbouring problem, and the power curves this
+tool is calibrated against are theirs. They are worth knowing about before you
+pick one — for some questions they are simply the better answer.
+
+| | Eco-CI | carbon-badge |
+|---|---|---|
+| **measures** | CPU utilisation sampled during the job | job duration, after the fact |
+| **wattage** | integrated across the load curve | the full-load figure, flat |
+| **instrumentation** | required — `start` / `get` / `display` in every job | optional; adds accuracy, not required for a number |
+| **granularity** | per step and per run | 30-day repo total |
+| **badge** | via `metrics.green-coding.io` (`send-data` defaults to true) | your own `gh-pages`, no third party |
+| **CI systems** | GitHub, GitLab, Jenkins | GitHub, GitLab |
+| **platforms** | Linux and macOS (macOS needs GNU `date`) | ubuntu, windows, macos, arm, gpu, or declared |
+| **grid intensity** | Electricity Maps | Electricity Maps, or a fixed factor |
+
+### The difference that matters
+
+**Eco-CI knows how hard the CPU was working; this tool does not.** It samples
+utilisation into a time series and integrates it against the curve, so a job
+idling at 25% is priced near 4 W and a busy one near 8 W.
+
+carbon-badge only ever uses the full-load end of that same curve, because the
+Actions API exposes no utilisation figure — a retrospective tool cannot recover
+what nobody recorded. On mixed CI, where much of a job is waiting on the
+network, that plausibly **over-reports by 1.5–2×**. It is the largest known
+error in this tool and it is not fixable from the outside.
+
+### So which
+
+- **What did this build cost, and which step is the expensive one?** Eco-CI.
+  It measures the thing that actually varies, and reports per step.
+- **What has this repo's CI cost over the last month, across every workflow,
+  without touching any of them?** carbon-badge. It works on a repo you have not
+  instrumented, publishes to infrastructure you own, and states on the badge
+  how much of the figure was measured rather than modelled.
+
+They also compose: nothing stops a repo running Eco-CI on the workflow it cares
+about and carbon-badge for the fleet-wide rolling number.
+
 ## Documentation
 
 Full docs live in [`docs/`](docs/). Runnable examples live in [`examples/`](examples/).
