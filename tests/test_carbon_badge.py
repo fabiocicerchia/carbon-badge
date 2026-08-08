@@ -497,8 +497,11 @@ def test_gitlab_kwh_charges_self_managed_runners(monkeypatch):
         return _FakeResponse(jobs_page1 if params["page"] == 1 else [])
 
     monkeypatch.setattr(carbon_badge.requests, "get", fake_get)
-    kwh = carbon_badge.gitlab_kwh_last_30d("group/project", token=None)
-    assert round(kwh, 6) == round(2 * carbon_badge.DEFAULT_RUNNER_POWER_W / 1000, 6)
+    usage = carbon_badge.gitlab_kwh_last_30d("group/project", token=None)
+    assert round(usage.kwh, 6) == round(2 * carbon_badge.DEFAULT_RUNNER_POWER_W / 1000, 6)
+    # GitLab gets a confidence marker too: nothing self-reports there, but both
+    # jobs were priced at the fallback, so the badge must not read as measured.
+    assert carbon_badge.confidence(usage) == "rough"
 
 
 def test_gitlab_runner_watts_matches_on_tags(monkeypatch):
@@ -517,10 +520,12 @@ def test_gitlab_runner_watts_matches_on_tags(monkeypatch):
         return _FakeResponse(jobs_page1 if params["page"] == 1 else [])
 
     monkeypatch.setattr(carbon_badge.requests, "get", fake_get)
-    kwh = carbon_badge.gitlab_kwh_last_30d(
+    usage = carbon_badge.gitlab_kwh_last_30d(
         "group/project", token=None, runner_watts={"big-metal": 200.0}
     )
-    assert round(kwh, 6) == round(200.0 / 1000, 6)
+    assert round(usage.kwh, 6) == round(200.0 / 1000, 6)
+    # Declared, so nothing is guessed — "estimated", not "rough".
+    assert carbon_badge.confidence(usage) == "estimated"
 
 
 def test_live_grid_intensity_injected_client():

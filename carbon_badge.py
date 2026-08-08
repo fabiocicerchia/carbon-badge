@@ -1,10 +1,14 @@
 #!/usr/bin/env python3
 """carbon-badge — estimate a repo's CI carbon footprint and emit a badge.
 
-Estimates monthly CI minutes from the GitHub Actions API, converts them to
-gCO2e using published per-minute runner power draw and a grid intensity
-factor, and emits a Shields.io endpoint JSON (or a full SVG) you can serve
-from a gist, S3, or GitHub Pages.
+Sums 30 days of per-job runtime — from jobs that recorded themselves where
+they did, and from the GitHub Actions API where they did not — prices each at
+its runner's power draw, applies a grid factor, and emits a Shields.io
+endpoint JSON you can serve from a gist, S3, or GitHub Pages.
+
+The badge states how the figure was arrived at (measured / partial / estimated
+/ rough), because grams from instrumented jobs and grams from a wattage table
+are different claims. docs/assumptions.md has every constant and its source.
 
   carbon-badge owner/repo --token $GITHUB_TOKEN > badge.json
   # README: ![CI carbon](https://img.shields.io/endpoint?url=<badge.json url>)
@@ -351,7 +355,6 @@ def ci_kwh_last_30d(repo, token, api="https://api.github.com", runner_watts=None
 # Versioned because the name is the wire format. Artifact names may not contain
 # " : < > | * ? \ /, which is why the separator is a dot and the job slug is
 # sanitised at the source.
-ARTIFACT_PREFIX = "carbon.v1"
 _ARTIFACT_RE = re.compile(r"^carbon\.v1\.(\d+)\.(\d+)\.(\d+)\.([a-z]+)\.")
 
 # Linear model for a self-reported machine, anchored on the same Eco-CI curve:
@@ -495,7 +498,8 @@ def gitlab_kwh_last_30d(project, token, api="https://gitlab.com/api/v4", runner_
     headers = {"PRIVATE-TOKEN": token} if token else {}
     project_path = project.replace("/", "%2F")
     kwh, undeclared, page = 0.0, {}, 1
-    while page <= 10:  # cap pagination defensively
+    guessed_kwh, total_jobs = 0.0, 0
+    while page <= _MAX_PAGES:
         r = requests.get(
             f"{api}/projects/{project_path}/jobs",
             params={"per_page": 100, "page": page},
@@ -520,15 +524,31 @@ def gitlab_kwh_last_30d(project, token, api="https://gitlab.com/api/v4", runner_
             if runner.get("description"):
                 tags.append(runner["description"])
             watts = runner_power_w(tags, runner_watts) if tags else None
-            if watts is None:
+            guessed = watts is None
+            if guessed:
                 watts = DEFAULT_RUNNER_POWER_W
                 if runner.get("is_shared") is False:
                     key = ",".join(tags) or "(self-managed, untagged)"
                     undeclared[key] = undeclared.get(key, 0) + 1
-            kwh += (duration / 3600) * watts / 1000
+            job_kwh = (duration / 3600) * watts / 1000
+            kwh += job_kwh
+            guessed_kwh += job_kwh if guessed else 0.0
+            total_jobs += 1
         page += 1
+    else:
+        # Loop ran to the cap without a short page: GitLab returns its total in
+        # a header rather than the body, so we cannot say by how much — only
+        # that it may be short. Silence would read as a quiet month.
+        print(
+            f"carbon-badge: read {_MAX_PAGES} pages of jobs and stopped at the "
+            "cap; the figure may be an undercount.",
+            file=sys.stderr,
+        )
     _warn_undeclared_runners(undeclared)
-    return kwh
+    # record/ is a GitHub Action, so nothing self-reports on GitLab and measured
+    # is always zero — but the guessed share still separates "estimated" from
+    # "rough", which is the distinction a GitLab user needs most.
+    return CiUsage(kwh, 0, total_jobs, 0.0, guessed_kwh)
 
 
 def live_grid_intensity(
@@ -644,14 +664,14 @@ def estimate(args, token):
         grams = grams_co2e(args.minutes, grid_intensity, watts)
         detail = f"{args.minutes:.0f} CI min/30d at {watts:g} W"
     elif args.provider == "gitlab":
-        kwh = gitlab_kwh_last_30d(
+        usage = gitlab_kwh_last_30d(
             args.repo,
             token,
             api=args.api or "https://gitlab.com/api/v4",
             runner_watts=runner_watts,
         )
-        grams = grams_co2e_kwh(kwh, grid_intensity)
-        detail = f"{kwh:.3f} kWh/30d"
+        grams = grams_co2e_kwh(usage.kwh, grid_intensity)
+        detail = f"{usage.kwh:.3f} kWh/30d, confidence: {confidence(usage)}"
     else:
         usage = ci_kwh_last_30d(
             args.repo,

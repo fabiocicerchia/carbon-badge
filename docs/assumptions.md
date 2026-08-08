@@ -105,6 +105,11 @@ in a report.
 
 ## Changelog of these assumptions
 
+> **Every badge drops about 25% at this release, and nothing got cleaner.**
+> The wattages were too high; correcting them moved every figure at once. If
+> you are reading a trend line across this release, that step change is a
+> measurement change, not a reduction — do not claim it as one.
+
 **2026-08** — recalibrated against the Eco-CI curves. Previously `ubuntu` was
 12.5 W (~1.5× the measured full-load figure, and describing the retired 2-vCPU
 machine), `macos` 65 W (~4× high), `windows` 30 W (~3× high), and the
