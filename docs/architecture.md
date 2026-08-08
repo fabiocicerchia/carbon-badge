@@ -26,8 +26,7 @@ runs (30d) → per-job seconds (self-reported, else API) → kWh (per-runner W �
 - Only runtime dependency is `requests`; everything else is stdlib.
 - The estimate is deliberately simple — the value is trend and awareness, not
   accounting. Assumptions are documented constants and overridable via flags.
-- Color bands: <100 g brightgreen · <500 g green · <2 kg yellow · <10 kg
-  orange · above red.
+- Badge colour: constant; the badge reports a value and passes no verdict
 
 ## How the estimate works
 

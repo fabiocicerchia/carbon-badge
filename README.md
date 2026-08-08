@@ -70,12 +70,12 @@ Nine two-minute `ubuntu-latest` jobs plus one ten-hour job on an unrecognised
 
 ```
                 nine short jobs       the long one              total
-guessed    0.3 h total × 9.4 W  +  10 h × 9.4 W  =   97 Wh  ->   46 gCO2e/mo  (brightgreen)
-declared   0.3 h total × 9.4 W  +  10 h × 180 W  = 1803 Wh  ->  865 gCO2e/mo  (yellow)
+guessed    0.3 h total × 9.4 W  +  10 h × 9.4 W  =   97 Wh  ->   46 gCO2e/mo
+declared   0.3 h total × 9.4 W  +  10 h × 180 W  = 1803 Wh  ->  865 gCO2e/mo
 ```
 
-Same CI, 14× apart, **two colour bands** apart. The fallback is not a small
-inaccuracy — it silently prices a big machine as a small one. That is why an
+Same CI, **14× apart**. The fallback is not a small inaccuracy — it silently
+prices a big machine as a small one. That is why an
 unrecognised runner is named in the log with the exact flag to fix it, rather
 than quietly absorbed.
 
@@ -93,6 +93,12 @@ long job outweighs a dozen short ones — that came from each category.
 
 The grams always cover **all** CI, measured or not. A badge that shrank while
 instrumentation lagged would reward not instrumenting.
+
+The badge carries **no red-amber-green scale**. An absolute monthly total
+mostly reflects how big a project is, not how wastefully it runs, so colouring
+it would grade size while implying virtue. The confidence marker is the only
+judgement the badge makes, and it is a judgement about provenance rather than
+about you.
 
 This score is about instrumentation only. Even `measured` still assumes the
 linear watts model and a grid-intensity factor, which carry their own

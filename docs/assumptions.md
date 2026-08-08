@@ -105,6 +105,29 @@ or use `--grid-region` for a live Electricity Maps figure for your datacentre's
 zone — which is the single highest-leverage correction available, since real
 grids range from under 50 to over 700 gCO2e/kWh.
 
+## Why there is no red-amber-green scale
+
+The badge reports a value and passes no verdict, and that is deliberate.
+
+A red-amber-green scale was tried and removed. It did not discriminate: across
+the 40-repo fleet it was built for, every repo sat in the bottom band — 4 to 52
+gCO2e against a 100 g threshold — so the colour was a constant that looked like
+a signal. Re-cutting the thresholds only moves the window: CI footprints span
+four or five orders of magnitude, from a hobby project to a monorepo, and no
+published distribution exists to place a repo against.
+
+The deeper problem is what the colour would claim. An absolute monthly total
+mostly measures how *big* a project is. A small repo running a four-way matrix
+on every push is genuinely wasteful and would score green; a large project with
+well-managed CI would score amber. Grading size while implying virtue says
+something the number cannot support.
+
+[Eco-CI](https://github.com/green-coding-solutions/eco-ci-energy-estimation)
+reaches the same conclusion — its badge reports a value with no colour banding.
+
+What remains is the confidence marker, which describes how the figure was
+obtained rather than whether it is good. That is a claim this tool can defend.
+
 ## Known limits
 
 - **A flat wattage cannot be right.** Real draw swings 1.76–8.18 W with CPU

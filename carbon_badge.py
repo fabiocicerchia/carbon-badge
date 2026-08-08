@@ -92,12 +92,24 @@ DEFAULT_RUNNER_POWER_W = RUNNER_POWER_W["ubuntu"]
 # figure from a partly inferred one.
 CiUsage = namedtuple("CiUsage", "kwh measured_jobs total_jobs measured_kwh guessed_kwh")
 
-THRESHOLDS = [  # gCO2e/month -> badge color
-    (100, "brightgreen"),
-    (500, "green"),
-    (2000, "yellow"),
-    (10000, "orange"),
-]
+# One colour, always. The badge used to run a red-amber-green scale, which was
+# wrong in two ways.
+#
+# It did not discriminate: all 40 repos in the fleet it was built for sat in the
+# bottom band, 4-52 gCO2e against a 100 g threshold, so the colour was a
+# constant that merely looked like a signal. Any other set of cut-offs just
+# moves the window — CI footprints span four or five orders of magnitude and
+# nobody has published a distribution to place them against.
+#
+# Worse, an absolute total mostly measures project *size*. A small repo running
+# a four-way matrix on every push is genuinely wasteful and scored green; a
+# large project with well-managed CI scored amber. Colour-coding size while
+# implying virtue says something the number does not support.
+#
+# Eco-CI reaches the same conclusion — its badge reports a value and passes no
+# verdict. The confidence marker stays, because that describes how the figure
+# was obtained, which is a claim we can actually defend.
+BADGE_COLOR = "informational"
 
 
 # Core counts appear in labels in several shapes: GitHub's own convention is
@@ -698,14 +710,6 @@ def live_grid_intensity(
     return float(r.json()["carbonIntensity"])
 
 
-def badge_color(grams):
-    """Return the Shields badge color for a monthly gCO2e figure."""
-    for limit, color in THRESHOLDS:
-        if grams < limit:
-            return color
-    return "red"
-
-
 def format_grams(grams):
     """Format gCO2e as a human-readable per-month string (g or kg)."""
     return f"{grams / 1000:.1f} kgCO2e/mo" if grams >= 1000 else f"{grams:.0f} gCO2e/mo"
@@ -771,7 +775,7 @@ def endpoint_json(grams, usage=None):
         "schemaVersion": 1,
         "label": "CI carbon",
         "message": message,
-        "color": badge_color(grams),
+        "color": BADGE_COLOR,
     }
 
 

@@ -11,7 +11,6 @@ import pytest
 
 import carbon_badge
 from carbon_badge import (
-    badge_color,
     endpoint_json,
     format_grams,
     grams_co2e,
@@ -141,11 +140,12 @@ def test_unknown_runners_are_charged_not_skipped(monkeypatch, capsys):
     assert "self-hosted" in err and "--runner-watts" in err
 
 
-def test_color_thresholds():
-    """badge_color maps gCO2e figures onto the right Shields colors."""
-    assert badge_color(50) == "brightgreen"
-    assert badge_color(1500) == "yellow"
-    assert badge_color(50000) == "red"
+def test_badge_passes_no_verdict():
+    """One colour whatever the figure. A red-amber-green scale graded project
+    size while implying virtue, and on the fleet it was built for every repo
+    sat in the bottom band anyway — a constant dressed as a signal."""
+    for grams in (1, 50, 1500, 50000, 10_000_000):
+        assert endpoint_json(grams)["color"] == carbon_badge.BADGE_COLOR
 
 
 def test_format_switches_units():
@@ -260,8 +260,9 @@ def test_badge_grams_always_cover_all_ci():
     badge that shrank while instrumentation lagged would reward stalling."""
     partly = endpoint_json(1500, _usage(1.0, 5, 50, measured_kwh=0.1))
     fully = endpoint_json(1500, _usage(1.0, 50, 50, measured_kwh=1.0))
-    assert partly["color"] == fully["color"] == "yellow"
+    # Same grams either way — only the provenance marker differs.
     assert partly["message"].startswith("1.5 kgCO2e/mo")
+    assert fully["message"].startswith("1.5 kgCO2e/mo")
 
 
 class _FakeResponse:
