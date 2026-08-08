@@ -56,7 +56,7 @@ async function run() {
 
   try {
     await new DefaultArtifactClient().uploadArtifact(name, [file], dir, {
-      retentionDays: Number(core.getInput('retention-days') || 45),
+      retentionDays: Number(core.getInput('retention-days') || 35),
     });
     core.info(
       `carbon-badge: ${seconds}s on ${vcpu} vCPU / ${memMb} MB (${platform()})`,
