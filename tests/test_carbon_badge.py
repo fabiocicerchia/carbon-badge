@@ -161,7 +161,8 @@ def test_endpoint_schema():
 
 
 def _usage(kwh, measured_jobs=0, total_jobs=0, measured_kwh=0.0, guessed_kwh=0.0):
-    return carbon_badge.CiUsage(kwh, measured_jobs, total_jobs, measured_kwh, guessed_kwh)
+    grams = kwh * carbon_badge.DEFAULT_GRID_INTENSITY
+    return carbon_badge.CiUsage(kwh, grams, measured_jobs, total_jobs, measured_kwh, guessed_kwh)
 
 
 def test_pagination_cap_is_reported_not_silent(monkeypatch, capsys):
@@ -278,15 +279,14 @@ class _FakeResponse:
 
 def test_parse_carbon_artifact():
     """The artifact name is the wire format, so parsing it is load-bearing."""
-    assert carbon_badge.parse_carbon_artifact("carbon.v1.142.4.16384.ubuntu.build-a1b2c3d4") == (
-        142.0,
-        4,
-        16384,
-        "ubuntu",
-    )
+    assert carbon_badge.parse_carbon_artifact(
+        "carbon.v1.142.4.16384.ubuntu.eastus.build-a1b2c3d4"
+    ) == (142.0, 4, 16384, "ubuntu", "eastus")
     # The platform is load-bearing: the same specs draw very different power on
     # Apple silicon, so a name without one must not be accepted as v1.
     assert carbon_badge.parse_carbon_artifact("carbon.v1.142.4.16384.build") is None
+    # A name without a region is v1-shaped but incomplete, and must not parse.
+    assert carbon_badge.parse_carbon_artifact("carbon.v1.142.4.16384.ubuntu.build") is None
     # A repo's ordinary artifacts share the listing and must be ignored.
     assert carbon_badge.parse_carbon_artifact("gitleaks-results.sarif") is None
     assert carbon_badge.parse_carbon_artifact("github-pages") is None
@@ -382,9 +382,9 @@ def test_artifact_kwh_by_run_keys_by_run_and_downloads_nothing(monkeypatch):
     the answer is almost never all-or-nothing."""
     calls = []
     artifacts = [
-        _artifact("carbon.v1.3600.2.7168.ubuntu.build", 11),
-        _artifact("carbon.v1.1800.2.7168.ubuntu.test", 11),  # same run, second job
-        _artifact("carbon.v1.3600.2.7168.ubuntu.lint", 22),
+        _artifact("carbon.v1.3600.2.7168.ubuntu.eastus.build", 11),
+        _artifact("carbon.v1.1800.2.7168.ubuntu.eastus.test", 11),  # same run, second job
+        _artifact("carbon.v1.3600.2.7168.ubuntu.eastus.lint", 22),
         _artifact("some-build-output.zip", 33),  # not ours; ignored
     ]
     monkeypatch.setattr(carbon_badge.requests, "get", _serve(artifacts, [], calls))
@@ -393,7 +393,7 @@ def test_artifact_kwh_by_run_keys_by_run_and_downloads_nothing(monkeypatch):
     assert jobs == 3
     assert set(by_run) == {11, 22}
     watts = carbon_badge.watts_from_specs(2, 7168)
-    kwh, count = by_run[11]
+    kwh, _grams, count = by_run[11]
     assert round(kwh, 9) == round(1.5 * watts / 1000, 9)  # both jobs summed
     assert count == 2  # and the denominator the partial-run check needs
     assert not any("/jobs" in u or u.endswith("/zip") for u in calls)
@@ -408,8 +408,8 @@ def test_partial_instrumentation_tops_up_from_the_api(monkeypatch):
         {"id": i, "workflow_id": 7, "run_started_at": now, "updated_at": now} for i in (1, 2, 3, 4)
     ]
     artifacts = [
-        _artifact("carbon.v1.3600.2.7168.ubuntu.a", 1),
-        _artifact("carbon.v1.3600.2.7168.ubuntu.b", 2),
+        _artifact("carbon.v1.3600.2.7168.ubuntu.eastus.a", 1),
+        _artifact("carbon.v1.3600.2.7168.ubuntu.eastus.b", 2),
     ]
     calls = []
     monkeypatch.setattr(carbon_badge.requests, "get", _serve(artifacts, runs, calls))
@@ -436,7 +436,7 @@ def test_full_coverage_costs_one_sample_per_workflow(monkeypatch):
     runs = [
         {"id": i, "workflow_id": 7, "run_started_at": now, "updated_at": now} for i in (1, 2, 3)
     ]
-    artifacts = [_artifact(f"carbon.v1.3600.2.7168.ubuntu.j{i}", i) for i in (1, 2, 3)]
+    artifacts = [_artifact(f"carbon.v1.3600.2.7168.ubuntu.eastus.j{i}", i) for i in (1, 2, 3)]
     calls = []
     monkeypatch.setattr(carbon_badge.requests, "get", _serve(artifacts, runs, calls))
 
@@ -455,7 +455,7 @@ def test_ignore_self_reported_does_not_consult_artifacts(monkeypatch):
     monkeypatch.setattr(
         carbon_badge.requests,
         "get",
-        _serve([_artifact("carbon.v1.3600.2.7168.ubuntu.a", 1)], runs, calls),
+        _serve([_artifact("carbon.v1.3600.2.7168.ubuntu.eastus.a", 1)], runs, calls),
     )
     carbon_badge.ci_kwh_last_30d("o/r", token=None, use_artifacts=False)
     assert not any("/artifacts" in u for u in calls)
@@ -468,9 +468,9 @@ def test_expired_and_out_of_window_markers_are_ignored(monkeypatch):
     fresh = now.isoformat().replace("+00:00", "Z")
     old = (now - timedelta(days=40)).isoformat().replace("+00:00", "Z")
     artifacts = [
-        _artifact("carbon.v1.3600.2.7168.ubuntu.a", 1, fresh),
-        _artifact("carbon.v1.3600.2.7168.ubuntu.b", 2, old),
-        _artifact("carbon.v1.3600.2.7168.ubuntu.c", 3, fresh, expired=True),
+        _artifact("carbon.v1.3600.2.7168.ubuntu.eastus.a", 1, fresh),
+        _artifact("carbon.v1.3600.2.7168.ubuntu.eastus.b", 2, old),
+        _artifact("carbon.v1.3600.2.7168.ubuntu.eastus.c", 3, fresh, expired=True),
     ]
     monkeypatch.setattr(carbon_badge.requests, "get", _serve(artifacts, [], []))
     by_run, jobs = carbon_badge.artifact_kwh_by_run("o/r", token=None)
@@ -482,7 +482,7 @@ def test_declared_watts_still_beat_the_model(monkeypatch):
     monkeypatch.setattr(
         carbon_badge.requests,
         "get",
-        _serve([_artifact("carbon.v1.3600.2.7168.ubuntu.a", 1)], [], []),
+        _serve([_artifact("carbon.v1.3600.2.7168.ubuntu.eastus.a", 1)], [], []),
     )
     by_run, _ = carbon_badge.artifact_kwh_by_run(
         "o/r", token=None, runner_watts={carbon_badge.ANY_RUNNER: 200.0}
@@ -623,7 +623,7 @@ def test_a_partly_instrumented_run_does_not_lose_its_other_jobs(monkeypatch):
     runs = [{"id": 1, "workflow_id": 7, "run_started_at": now, "updated_at": now}]
     # The API says this run had two jobs; only one wrote a marker.
     jobs = [_job(["ubuntu-latest"], 60), _job(["ubuntu-latest"], 600)]
-    marker = _artifact("carbon.v1.3600.4.16384.ubuntu.short", 1)
+    marker = _artifact("carbon.v1.3600.4.16384.ubuntu.eastus.short", 1)
 
     def fake_get(url, params=None, headers=None, timeout=None):
         page = params["page"] if params else 1
@@ -654,7 +654,7 @@ def test_markers_are_not_double_counted_when_a_run_is_topped_up(monkeypatch):
         page = params["page"] if params else 1
         if "/artifacts" in url:
             return _FakeResponse(
-                {"artifacts": [_artifact("carbon.v1.3600.4.16384.ubuntu.a", 1)]}
+                {"artifacts": [_artifact("carbon.v1.3600.4.16384.ubuntu.eastus.a", 1)]}
                 if page == 1
                 else {"artifacts": []}
             )
@@ -728,9 +728,9 @@ def test_an_unusually_small_newest_run_cannot_lower_the_bar(monkeypatch):
     ]
     jobs_by_run = {1: 1, 2: 3, 3: 3}
     markers = (
-        [_artifact("carbon.v1.3600.4.16384.ubuntu.solo", 1)]
-        + [_artifact(f"carbon.v1.3600.4.16384.ubuntu.a{i}", 2) for i in range(3)]
-        + [_artifact(f"carbon.v1.3600.4.16384.ubuntu.b{i}", 3) for i in range(2)]
+        [_artifact("carbon.v1.3600.4.16384.ubuntu.eastus.solo", 1)]
+        + [_artifact(f"carbon.v1.3600.4.16384.ubuntu.eastus.a{i}", 2) for i in range(3)]
+        + [_artifact(f"carbon.v1.3600.4.16384.ubuntu.eastus.b{i}", 3) for i in range(2)]
     )
     queried = []
 
@@ -772,7 +772,7 @@ def test_skipped_jobs_do_not_make_completeness_unreachable(monkeypatch):
         dict(_job(["ubuntu-latest"], 0), name="build", conclusion="skipped"),
         dict(_job(["ubuntu-latest"], 0), name="pypi", conclusion="skipped"),
     ]
-    markers = [_artifact("carbon.v1.480.4.16384.ubuntu.release-please", 1)]
+    markers = [_artifact("carbon.v1.480.4.16384.ubuntu.eastus.release-please", 1)]
     queried = []
 
     def fake_get(url, params=None, headers=None, timeout=None):

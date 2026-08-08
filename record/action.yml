@@ -6,6 +6,15 @@ description: >-
 author: 'Fabio Cicerchia'
 
 inputs:
+  region:
+    description: >-
+      Override the runner's location. Leave unset for GitHub-hosted runners:
+      GitHub allocates them wherever it likes and exposes no region, so the
+      action reads it from Azure's Instance Metadata Service per job. Set it
+      for self-hosted runners, which are not Azure VMs — use an Azure region
+      name (e.g. "westeurope") to pick up its grid factor, or any label of your
+      own, which will read as unknown and fall back to the repo-level factor.
+    default: ''
   retention-days:
     description: >-
       How long the marker survives. Only needs to cover the 30-day window the
@@ -28,7 +37,7 @@ inputs:
 # a stable public HTTP API worth reimplementing. Rebuild with `npm run build`
 # in this directory after changing anything in src/.
 runs:
-  using: 'node20'
+  using: 'node24'
   main: 'dist/main/index.js'
   post: 'dist/post/index.js'
   # Explicit, though it is also the default — the whole point is that a

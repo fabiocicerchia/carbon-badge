@@ -54,6 +54,77 @@ BASELINE_VCPU = 4
 
 DEFAULT_GRID_INTENSITY = 480.0  # gCO2e/kWh, ~world average
 
+# Approximate annual-average grid carbon factor (gCO2e/kWh) for the grid each
+# Azure region sits on, used when a job reported which region it ran in.
+#
+# These are country-level annual averages, rounded — not the live grid, and not
+# a sub-national grid where a country has several. `--grid-region` with an
+# Electricity Maps token is strictly better where you have one. The point of
+# this table is that it costs nothing and still beats a single world average by
+# a wide margin: the spread below is roughly 25x end to end, which dwarfs every
+# other correction in this tool.
+#
+# Regions absent here fall back to DEFAULT_GRID_INTENSITY, so an unmapped or
+# newly launched region degrades rather than breaks.
+AZURE_REGION_GRID = {
+    # Nordics and hydro/nuclear-heavy Europe
+    "norwayeast": 30.0,
+    "norwaywest": 30.0,
+    "swedencentral": 45.0,
+    "switzerlandnorth": 45.0,
+    "francecentral": 85.0,
+    "francesouth": 85.0,
+    # Rest of Europe
+    "uksouth": 240.0,
+    "ukwest": 240.0,
+    "northeurope": 350.0,  # Ireland
+    "westeurope": 330.0,  # Netherlands
+    "germanywestcentral": 380.0,
+    "italynorth": 350.0,
+    "spaincentral": 200.0,
+    "polandcentral": 700.0,
+    # North America
+    "canadaeast": 30.0,  # Quebec hydro
+    "canadacentral": 130.0,
+    "westus2": 100.0,  # Washington hydro
+    "westus": 250.0,  # California
+    "eastus": 350.0,
+    "eastus2": 350.0,
+    "southcentralus": 400.0,
+    "westus3": 400.0,
+    "centralus": 430.0,
+    "northcentralus": 430.0,
+    # South America
+    "brazilsouth": 100.0,
+    # Asia-Pacific
+    "japaneast": 480.0,
+    "japanwest": 480.0,
+    "koreacentral": 440.0,
+    "southeastasia": 480.0,  # Singapore
+    "eastasia": 700.0,  # Hong Kong
+    "centralindia": 700.0,
+    "southindia": 700.0,
+    "westindia": 700.0,
+    "australiaeast": 600.0,
+    "australiasoutheast": 600.0,
+    # Middle East and Africa
+    "uaenorth": 450.0,
+    "southafricanorth": 900.0,
+}
+
+
+def grid_factor_for(region, override=None):
+    """gCO2e/kWh for a job, most specific source first.
+
+    An explicit --grid-intensity or --grid-region wins outright: someone who
+    named a figure knows something the table does not. Otherwise the region the
+    job reported, then the world average.
+    """
+    if override is not None:
+        return override
+    return AZURE_REGION_GRID.get(region or "", DEFAULT_GRID_INTENSITY)
+
+
 # Per-runner-type average power draw (W, incl. PUE), from published
 # GitHub-hosted runner specs. "ubuntu" is the baseline (2-core); Windows and
 # macOS hosts draw more for the same job. Larger runners (N-core labels)
@@ -90,7 +161,7 @@ DEFAULT_RUNNER_POWER_W = RUNNER_POWER_W["ubuntu"]
 # What a pass measured, and how much of it came from jobs that reported
 # themselves. The badge shows the ratio so a reader can tell a fully measured
 # figure from a partly inferred one.
-CiUsage = namedtuple("CiUsage", "kwh measured_jobs total_jobs measured_kwh guessed_kwh")
+CiUsage = namedtuple("CiUsage", "kwh grams measured_jobs total_jobs measured_kwh guessed_kwh")
 
 # One colour, always. The badge used to run a red-amber-green scale, which was
 # wrong in two ways.
@@ -335,7 +406,12 @@ def _run_kwh(run, repo, token, api, runner_watts, undeclared):
 
 
 def ci_kwh_last_30d(
-    repo, token, api="https://api.github.com", runner_watts=None, use_artifacts=True
+    repo,
+    token,
+    api="https://api.github.com",
+    runner_watts=None,
+    use_artifacts=True,
+    grid_override=None,
 ):
     """kWh across the last 30 days of runs: one API call per run, summing each
     job at its own runner's power draw.
@@ -363,12 +439,16 @@ def ci_kwh_last_30d(
     # answer stays correct the whole way through.
     by_run = {}
     if use_artifacts:
-        by_run, _ = artifact_kwh_by_run(repo, token, api, runner_watts)
+        by_run, _ = artifact_kwh_by_run(repo, token, api, runner_watts, grid_override)
     # How many markers a fully instrumented run of each workflow should have.
     expected = _expected_markers(runs, by_run, repo, token, api) if by_run else {}
 
-    kwh, total_jobs, used_markers = 0.0, 0, 0
+    kwh, grams, total_jobs, used_markers = 0.0, 0.0, 0, 0
     measured_kwh, guessed_kwh = 0.0, 0.0
+    # A run priced from the API reports no region, so it takes the repo-level
+    # factor. A partly instrumented repo therefore mixes region-accurate and
+    # world-average pricing, which is still strictly better than all-average.
+    api_factor = grid_factor_for(None, grid_override)
     for run in runs:
         entry = by_run.get(run.get("id"))
         want = expected.get(run.get("workflow_id"), 0)
@@ -376,16 +456,18 @@ def ci_kwh_last_30d(
         # instrumentation is still landing on that workflow, so the markers are
         # discarded and the API priced for the whole run — adding them would
         # double-count the jobs that did report.
-        if entry is not None and entry[1] >= want:
+        if entry is not None and entry[2] >= want:
             kwh += entry[0]
+            grams += entry[1]
             measured_kwh += entry[0]
-            used_markers += entry[1]
-            total_jobs += entry[1]
+            used_markers += entry[2]
+            total_jobs += entry[2]
         else:
             run_kwh, run_jobs_seen, run_guessed = _run_kwh(
                 run, repo, token, api, runner_watts, undeclared
             )
             kwh += run_kwh
+            grams += run_kwh * api_factor
             guessed_kwh += run_guessed
             total_jobs += run_jobs_seen
     if by_run:
@@ -395,7 +477,7 @@ def ci_kwh_last_30d(
         trusted = sum(
             1
             for r in runs
-            if (e := by_run.get(r.get("id"))) and e[1] >= expected.get(r.get("workflow_id"), 0)
+            if (e := by_run.get(r.get("id"))) and e[2] >= expected.get(r.get("workflow_id"), 0)
         )
         print(
             f"carbon-badge: {trusted}/{len(runs)} run(s) fully self-reported; "
@@ -406,14 +488,14 @@ def ci_kwh_last_30d(
     _warn_undeclared_runners(undeclared)
     # used_markers, not every marker read: markers from runs outside the window,
     # or from runs that turned out to be partial, are not part of this figure.
-    return CiUsage(kwh, used_markers, total_jobs, measured_kwh, guessed_kwh)
+    return CiUsage(kwh, grams, used_markers, total_jobs, measured_kwh, guessed_kwh)
 
 
 # Jobs self-report into an artifact *name*, which the artifacts API returns in
 # its listing — so reading a month of exact per-job measurements costs one
 # request per 100 artifacts and downloads nothing.
 #
-#   carbon.v1.<seconds>.<vcpu>.<memMB>.<platform>.<slug>
+#   carbon.v1.<seconds>.<vcpu>.<memMB>.<platform>.<region>.<slug>
 #
 # <platform> is one of the RUNNER_POWER_W keys, because CPU and memory alone do
 # not determine draw: the same 4 vCPU / 16 GiB reading means a very different
@@ -422,7 +504,7 @@ def ci_kwh_last_30d(
 # Versioned because the name is the wire format. Artifact names may not contain
 # " : < > | * ? \ /, which is why the separator is a dot and the job slug is
 # sanitised at the source.
-_ARTIFACT_RE = re.compile(r"^carbon\.v1\.(\d+)\.(\d+)\.(\d+)\.([a-z]+)\.")
+_ARTIFACT_RE = re.compile(r"^carbon\.v1\.(\d+)\.(\d+)\.(\d+)\.([a-z]+)\.([a-z0-9-]+)\.")
 
 # Linear model for a self-reported machine, anchored on the same Eco-CI curve:
 # a 4-vCPU / 16 GiB GitHub runner at 8.18 W machine draw x PUE ~= 9.4 W.
@@ -487,8 +569,8 @@ def parse_carbon_artifact(name):
     match = _ARTIFACT_RE.match(name or "")
     if not match:
         return None
-    seconds, vcpu, mem_mb, platform = match.groups()
-    return (float(seconds), int(vcpu), int(mem_mb), platform)
+    seconds, vcpu, mem_mb, platform, region = match.groups()
+    return (float(seconds), int(vcpu), int(mem_mb), platform, region)
 
 
 def list_artifacts(repo, token, api="https://api.github.com"):
@@ -540,7 +622,8 @@ def _expected_markers(runs, by_run, repo, token, api):
         entry = by_run.get(run.get("id"))
         if entry is None:
             continue
-        observed[wf] = max(observed.get(wf, 0), entry[1])
+        # entry is (kwh, grams, marker_count) — the count, not the energy.
+        observed[wf] = max(observed.get(wf, 0), entry[2])
         if wf not in seen:
             seen.add(wf)
             try:
@@ -550,8 +633,10 @@ def _expected_markers(runs, by_run, repo, token, api):
     return {wf: max(observed.get(wf, 0), sampled.get(wf, 0)) for wf in observed}
 
 
-def artifact_kwh_by_run(repo, token, api="https://api.github.com", runner_watts=None):
-    """{run_id: (kWh, marker_count)} for every run whose jobs recorded themselves.
+def artifact_kwh_by_run(
+    repo, token, api="https://api.github.com", runner_watts=None, grid_override=None
+):
+    """{run_id: (kWh, grams, marker_count)} for runs whose jobs recorded themselves.
 
     Keyed by run because instrumentation arrives one workflow file at a time,
     so the answer is almost never "all" or "none" — it is "these runs, not
@@ -573,12 +658,18 @@ def artifact_kwh_by_run(repo, token, api="https://api.github.com", runner_watts=
         run_id = (artifact.get("workflow_run") or {}).get("id")
         if run_id is None:
             continue
-        seconds, vcpu, mem_mb, platform = parsed
+        seconds, vcpu, mem_mb, platform, region = parsed
         # A declared figure still wins: someone who knows their hardware's real
         # draw beats a linear model of it.
         watts = blanket if blanket else watts_from_specs(vcpu, mem_mb, platform)
-        kwh, count = by_run.get(run_id, (0.0, 0))
-        by_run[run_id] = (kwh + (seconds / 3600) * watts / 1000, count + 1)
+        job_kwh = (seconds / 3600) * watts / 1000
+        # Each job priced at the grid it actually ran on. GitHub allocates
+        # runners across regions whose factors differ by ~25x, so this is the
+        # largest correction available and it costs nothing — the region came
+        # in on the marker.
+        job_g = job_kwh * grid_factor_for(region, grid_override)
+        kwh, grams, count = by_run.get(run_id, (0.0, 0.0, 0))
+        by_run[run_id] = (kwh + job_kwh, grams + job_g, count + 1)
         jobs += 1
     return by_run, jobs
 
@@ -622,7 +713,13 @@ def grams_co2e_kwh(kwh, grid_intensity=DEFAULT_GRID_INTENSITY):
     return kwh * grid_intensity
 
 
-def gitlab_kwh_last_30d(project, token, api="https://gitlab.com/api/v4", runner_watts=None):
+def gitlab_kwh_last_30d(
+    project,
+    token,
+    api="https://gitlab.com/api/v4",
+    runner_watts=None,
+    grid_override=None,
+):
     """Sum kWh across the last 30 days of GitLab CI jobs.
 
     GitLab's job list already carries per-job `duration` and `runner` info,
@@ -688,7 +785,8 @@ def gitlab_kwh_last_30d(project, token, api="https://gitlab.com/api/v4", runner_
     # record/ is a GitHub Action, so nothing self-reports on GitLab and measured
     # is always zero — but the guessed share still separates "estimated" from
     # "rough", which is the distinction a GitLab user needs most.
-    return CiUsage(kwh, 0, total_jobs, 0.0, guessed_kwh)
+    factor = grid_factor_for(None, grid_override)
+    return CiUsage(kwh, kwh * factor, 0, total_jobs, 0.0, guessed_kwh)
 
 
 def live_grid_intensity(
@@ -820,6 +918,8 @@ def endpoint_json(grams, usage=None):
 
 def estimate(args, token):
     """Run one carbon estimate for the parsed CLI args. Returns (endpoint_json, detail)."""
+    # None means "nothing declared, use each job's own region where it reported
+    # one". Any explicit figure overrides that for every job.
     grid_intensity = args.grid_intensity
     if args.grid_region:
         em_token = args.electricitymaps_token or os.environ.get("ELECTRICITYMAPS_TOKEN")
@@ -833,7 +933,8 @@ def estimate(args, token):
     usage = None
     if args.minutes is not None:
         watts = runner_watts.get(ANY_RUNNER, DEFAULT_RUNNER_POWER_W)
-        grams = grams_co2e(args.minutes, grid_intensity, watts)
+        # No jobs, so no regions: the offline path takes one factor.
+        grams = grams_co2e(args.minutes, grid_factor_for(None, grid_intensity), watts)
         detail = f"{args.minutes:.0f} CI min/30d at {watts:g} W"
     elif args.provider == "gitlab":
         usage = gitlab_kwh_last_30d(
@@ -841,8 +942,9 @@ def estimate(args, token):
             token,
             api=args.api or "https://gitlab.com/api/v4",
             runner_watts=runner_watts,
+            grid_override=grid_intensity,
         )
-        grams = grams_co2e_kwh(usage.kwh, grid_intensity)
+        grams = usage.grams
         detail = f"{usage.kwh:.3f} kWh/30d, confidence: {confidence(usage)}"
     else:
         usage = ci_kwh_last_30d(
@@ -851,12 +953,15 @@ def estimate(args, token):
             api=args.api or "https://api.github.com",
             runner_watts=runner_watts,
             use_artifacts=not getattr(args, "ignore_self_reported", False),
+            grid_override=grid_intensity,
         )
-        grams = grams_co2e_kwh(usage.kwh, grid_intensity)
+        grams = usage.grams
         level = confidence(usage)
         guessed_pct = 100 * usage.guessed_kwh / usage.kwh if usage.kwh else 0
+        effective = usage.grams / usage.kwh if usage.kwh else 0
         detail = (
-            f"{usage.kwh:.3f} kWh/30d, confidence: {level} "
+            f"{usage.kwh:.3f} kWh/30d at {effective:.0f} gCO2e/kWh effective, "
+            f"confidence: {level} "
             f"({usage.measured_jobs}/{usage.total_jobs} job(s) self-reported, "
             f"{guessed_pct:.0f}% of energy on unrecognised runners)"
         )
@@ -937,9 +1042,14 @@ def main(argv=None):
     p.add_argument(
         "--grid-intensity",
         type=float,
-        default=DEFAULT_GRID_INTENSITY,
+        default=None,
         metavar="G",
-        help="gCO2e per kWh (default %(default)s, world avg); ignored if --grid-region is set",
+        help=(
+            "gCO2e per kWh, applied to every job. Unset, each job that reported "
+            "its Azure region is priced on that region's grid and the rest fall "
+            f"back to {DEFAULT_GRID_INTENSITY:g} (world average). Ignored if "
+            "--grid-region is set"
+        ),
     )
     p.add_argument(
         "--grid-region",
