@@ -107,9 +107,25 @@ runs:
         CB_BRANCH: ${{ inputs.publish-branch }}
         CB_MESSAGE: ${{ inputs.commit-message }}
       run: |
+        set -euo pipefail
         git config user.name github-actions
         git config user.email github-actions@github.com
-        git checkout -B "$CB_BRANCH"
-        git add "$CB_OUTPUT"
+
+        # An *orphan* branch holding only the badge. `git checkout -B` branched
+        # from the checked-out default branch, so every weekly run force-pushed
+        # a complete copy of the repository to gh-pages — 50-odd files where one
+        # was wanted. Harmless while Pages is served from elsewhere, but it
+        # would publish the whole source tree the day anyone pointed Pages at
+        # gh-pages, and it is a lot of git objects to rewrite weekly for a tool
+        # whose purpose is to reduce waste.
+        payload="${RUNNER_TEMP:-/tmp}/carbon-badge-payload.json"
+        cp "$CB_OUTPUT" "$payload"
+
+        git checkout --orphan "$CB_BRANCH"
+        git rm -rf --quiet . 2>/dev/null || true
+
+        mkdir -p "$(dirname "$CB_OUTPUT")"
+        cp "$payload" "$CB_OUTPUT"
+        git add -f "$CB_OUTPUT"
         git commit -m "$CB_MESSAGE" || echo "carbon-badge: no change to publish"
         git push -f origin "$CB_BRANCH"
