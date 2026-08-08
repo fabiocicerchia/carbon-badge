@@ -685,3 +685,50 @@ def test_gitlab_honours_a_blanket_override_on_untagged_jobs(monkeypatch):
         "group/project", token=None, runner_watts={carbon_badge.ANY_RUNNER: 180.0}
     )
     assert round(usage.kwh, 6) == round(180.0 / 1000, 6)
+
+
+def test_an_unusually_small_newest_run_cannot_lower_the_bar(monkeypatch):
+    """The denominator is one number per workflow applied across a whole month,
+    and the sample is the newest instrumented run. If that run happened to be
+    small — conditional jobs that did not fire, a narrower matrix — the bar
+    dropped and genuinely partial runs passed, reviving the undercount.
+
+    A marker cannot outnumber its run's jobs, so the highest marker count seen
+    for the workflow is a free lower bound and the larger of the two wins.
+    """
+    now = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+    # Newest run had a single job. An older one ran three, fully instrumented.
+    # The middle one ran three and reported two — the case that must not pass.
+    runs = [
+        {"id": 1, "workflow_id": 7, "run_started_at": now, "updated_at": now},
+        {"id": 2, "workflow_id": 7, "run_started_at": now, "updated_at": now},
+        {"id": 3, "workflow_id": 7, "run_started_at": now, "updated_at": now},
+    ]
+    jobs_by_run = {1: 1, 2: 3, 3: 3}
+    markers = (
+        [_artifact("carbon.v1.3600.4.16384.ubuntu.solo", 1)]
+        + [_artifact(f"carbon.v1.3600.4.16384.ubuntu.a{i}", 2) for i in range(3)]
+        + [_artifact(f"carbon.v1.3600.4.16384.ubuntu.b{i}", 3) for i in range(2)]
+    )
+    queried = []
+
+    def fake_get(url, params=None, headers=None, timeout=None):
+        page = params["page"] if params else 1
+        if "/artifacts" in url:
+            return _FakeResponse({"artifacts": markers if page == 1 else []})
+        if "/jobs" in url:
+            rid = int(url.split("/runs/")[1].split("/jobs")[0])
+            queried.append(rid)
+            n = jobs_by_run[rid] if page == 1 else 0
+            return _FakeResponse({"jobs": [_job(["ubuntu-latest"], 60)] * n})
+        return _FakeResponse({"workflow_runs": runs if page == 1 else []})
+
+    monkeypatch.setattr(carbon_badge.requests, "get", fake_get)
+    usage = carbon_badge.ci_kwh_last_30d("o/r", token=None)
+
+    # Sampling run 1 alone would give a bar of 1, passing run 3 on two markers.
+    # Run 3 must instead be priced from the API.
+    assert 3 in queried, "the partly reported run was trusted on a low bar"
+    # Seven jobs really ran (1 + 3 + 3), each counted exactly once.
+    assert usage.total_jobs == 7
+    assert round(usage.kwh, 9) == round(7 * carbon_badge.RUNNER_POWER_W["ubuntu"] / 1000, 9)

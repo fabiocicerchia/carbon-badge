@@ -476,20 +476,32 @@ def _expected_markers(runs, by_run, repo, token, api):
     looks complete and the other nine count as zero energy. One API call per
     instrumented workflow buys the denominator; in steady state that is a
     handful of calls against the hundreds it saves.
+
+    Two sources, and the larger wins. The API sample is ground truth for the
+    run it looked at — but it is one run, applied to a whole month, so a
+    workflow whose newest run was unusually small (conditional jobs that did
+    not fire, a narrower matrix) would set the bar too low and let genuinely
+    partial runs through. A marker can never outnumber its run's jobs, so the
+    highest marker count seen for the workflow is itself a valid lower bound,
+    and it costs nothing.
+
+    Erring high means a legitimately small run gets priced from the API: a
+    wasted request, never a wrong number.
     """
-    expected, seen = {}, set()
+    observed, sampled, seen = {}, {}, set()
     for run in runs:
         wf = run.get("workflow_id")
-        if wf in seen or run.get("id") not in by_run:
+        entry = by_run.get(run.get("id"))
+        if entry is None:
             continue
-        seen.add(wf)
-        try:
-            expected[wf] = len(run_jobs(run["id"], repo, token, api))
-        except Exception:
-            # Unreachable sample: fall back to the most complete run observed,
-            # which is still better than trusting a single marker.
-            expected[wf] = max(n for _, n in by_run.values())
-    return expected
+        observed[wf] = max(observed.get(wf, 0), entry[1])
+        if wf not in seen:
+            seen.add(wf)
+            try:
+                sampled[wf] = len(run_jobs(run["id"], repo, token, api))
+            except Exception:
+                sampled[wf] = 0  # unreachable sample; the observed bound stands
+    return {wf: max(observed.get(wf, 0), sampled.get(wf, 0)) for wf in observed}
 
 
 def artifact_kwh_by_run(repo, token, api="https://api.github.com", runner_watts=None):
