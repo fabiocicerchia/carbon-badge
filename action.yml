@@ -27,6 +27,16 @@ inputs:
   electricitymaps-token:
     description: 'Electricity Maps API token'
     default: ''
+  runner-watts:
+    description: >-
+      Average power draw of your runners, set once when you add this workflow.
+      A bare number (e.g. "180") applies to every job — that is all most repos
+      need. Only if you mix runner types, give one LABEL=WATTS per line
+      (e.g. "my-builder=180"). Required to price self-hosted or custom-named
+      runners: the API exposes no CPU/memory for any runner, so size cannot be
+      detected, only declared. Undeclared runners are charged at the ubuntu
+      baseline and warned about in the log.
+    default: ''
   minutes:
     description: 'skip the API and use this many CI minutes (testing/offline)'
     default: ''
@@ -69,10 +79,16 @@ runs:
         CB_GRID_REGION: ${{ inputs.grid-region }}
         CB_ELECTRICITYMAPS_TOKEN: ${{ inputs.electricitymaps-token }}
         CB_MINUTES: ${{ inputs.minutes }}
+        CB_RUNNER_WATTS: ${{ inputs.runner-watts }}
         CB_OUTPUT: ${{ inputs.output-path }}
       run: |
         args=("$CB_REPO" --provider "$CB_PROVIDER" --token "$CB_TOKEN")
         [[ -n "$CB_API" ]] && args+=(--api "$CB_API")
+        # One LABEL=WATTS per line; blank lines skipped so a block scalar with
+        # trailing newlines doesn't produce an empty --runner-watts argument.
+        while IFS= read -r line; do
+          [[ -n "${line// }" ]] && args+=(--runner-watts "$line")
+        done <<< "$CB_RUNNER_WATTS"
         [[ -n "$CB_GRID_INTENSITY" ]] && args+=(--grid-intensity "$CB_GRID_INTENSITY")
         [[ -n "$CB_GRID_REGION" ]] && args+=(--grid-region "$CB_GRID_REGION")
         [[ -n "$CB_ELECTRICITYMAPS_TOKEN" ]] && args+=(--electricitymaps-token "$CB_ELECTRICITYMAPS_TOKEN")
@@ -91,9 +107,25 @@ runs:
         CB_BRANCH: ${{ inputs.publish-branch }}
         CB_MESSAGE: ${{ inputs.commit-message }}
       run: |
+        set -euo pipefail
         git config user.name github-actions
         git config user.email github-actions@github.com
-        git checkout -B "$CB_BRANCH"
-        git add "$CB_OUTPUT"
+
+        # An *orphan* branch holding only the badge. `git checkout -B` branched
+        # from the checked-out default branch, so every weekly run force-pushed
+        # a complete copy of the repository to gh-pages — 50-odd files where one
+        # was wanted. Harmless while Pages is served from elsewhere, but it
+        # would publish the whole source tree the day anyone pointed Pages at
+        # gh-pages, and it is a lot of git objects to rewrite weekly for a tool
+        # whose purpose is to reduce waste.
+        payload="${RUNNER_TEMP:-/tmp}/carbon-badge-payload.json"
+        cp "$CB_OUTPUT" "$payload"
+
+        git checkout --orphan "$CB_BRANCH"
+        git rm -rf --quiet . 2>/dev/null || true
+
+        mkdir -p "$(dirname "$CB_OUTPUT")"
+        cp "$payload" "$CB_OUTPUT"
+        git add -f "$CB_OUTPUT"
         git commit -m "$CB_MESSAGE" || echo "carbon-badge: no change to publish"
         git push -f origin "$CB_BRANCH"

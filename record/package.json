@@ -1,0 +1,17 @@
+{
+  "name": "carbon-badge-record",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Records a job's duration and real CPU/memory into an artifact name.",
+  "license": "Apache-2.0",
+  "scripts": {
+    "build": "ncc build src/main.js -o dist/main --minify && ncc build src/post.js -o dist/post --minify"
+  },
+  "dependencies": {
+    "@actions/artifact": "^2.3.2",
+    "@actions/core": "^1.11.1"
+  },
+  "devDependencies": {
+    "@vercel/ncc": "^0.38.3"
+  }
+}

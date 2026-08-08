@@ -1,0 +1,36 @@
+name: 'carbon-badge record'
+description: >-
+  Record this job's duration and the machine's real CPU/memory into an artifact
+  name, so the badge refresh reads a month of exact measurements from the
+  artifact listing instead of one API request per run.
+author: 'Fabio Cicerchia'
+
+inputs:
+  retention-days:
+    description: >-
+      How long the marker survives. Only needs to cover the 30-day window the
+      badge reports: the reader discards anything older, so a marker that
+      outlives the window is never read again — it just adds pages to the
+      artifact listing, which is the reader's one remaining per-repo cost.
+      35 gives a few days of slack for clock skew and a late refresh without
+      hoarding. Raise it only if you widen the reporting window.
+    default: '35'
+
+# A JavaScript action rather than a composite one, for two reasons. Only JS and
+# Docker actions may declare `post:`, which is what lets a single `uses:` line
+# cover both ends of the job. And a `post:` step runs even when the job is
+# *cancelled*, which an `if: always()` step does not — cancelled jobs are
+# disproportionately the long, expensive ones, so covering them materially
+# reduces the under-reporting bias.
+#
+# The cost is a vendored dist/: @actions/artifact is the only supported way to
+# upload an artifact from inside a JS action, and the artifact protocol is not
+# a stable public HTTP API worth reimplementing. Rebuild with `npm run build`
+# in this directory after changing anything in src/.
+runs:
+  using: 'node20'
+  main: 'dist/main/index.js'
+  post: 'dist/post/index.js'
+  # Explicit, though it is also the default — the whole point is that a
+  # cancelled or failed job still reports.
+  post-if: 'always()'

@@ -17,26 +17,78 @@ import os
 import re
 import sys
 import time
+from collections import namedtuple
 from datetime import datetime, timedelta, timezone
 
 import requests
 
-# Assumptions (documented, overridable): a standard GitHub-hosted ubuntu
-# runner ~ 12.5 W average draw incl. PUE overhead -> kWh per CI minute,
-# times grid intensity (gCO2e/kWh, world average default).
-KWH_PER_RUNNER_MINUTE = 12.5 / 1000 / 60
+# --------------------------------------------------------------------------
+# Where these wattages come from. See docs/assumptions.md for the full working.
+#
+# Base figures are the Cloud Energy power curves shipped by Green Coding
+# Solutions' Eco-CI, modelled from SPECpower data for the exact machines GitHub
+# runs jobs on. They are machine draw at full CPU; PUE is applied separately
+# below so the datacentre overhead is visible rather than baked in.
+#
+#   4-core EPYC 7763 shared (GitHub Linux/Windows):  1.76 W idle -> 8.18 W @100%
+#   Mac mini M1 (GitHub macOS):                      4.45 W idle -> 15.53 W @100%
+#
+# https://github.com/green-coding-solutions/eco-ci-energy-estimation
+#   /blob/main/machine-power-data/
+# --------------------------------------------------------------------------
+
+# Hyperscale operators publish 1.1-1.2; 1.15 is mid-range. Applied to machine
+# draw to get wall power.
+PUE = 1.15
+
+# Public repos have had 4-vCPU / 16 GiB standard runners since December 2023,
+# not the 2-vCPU / 7 GiB machines older estimates assume. Larger runners scale
+# off this, so it must match the baseline the wattages above describe.
+# https://github.blog/news-insights/product-news/
+#   github-hosted-runners-double-the-power-for-open-source/
+BASELINE_VCPU = 4
+
 DEFAULT_GRID_INTENSITY = 480.0  # gCO2e/kWh, ~world average
 
 # Per-runner-type average power draw (W, incl. PUE), from published
 # GitHub-hosted runner specs. "ubuntu" is the baseline (2-core); Windows and
 # macOS hosts draw more for the same job. Larger runners (N-core labels)
 # scale roughly linearly off the 2-core baseline.
+# Checked in order, first substring match wins, so the specific entries must
+# come before the generic ones: "ubuntu-22.04-arm" contains "ubuntu", and a GPU
+# runner's label normally names its OS too. Every figure here is a default —
+# --runner-watts arm=... / gpu=... overrides any of them.
 RUNNER_POWER_W = {
-    "macos": 65.0,
-    "windows": 30.0,
-    "ubuntu": 12.5,
+    # T4-class accelerator (~70 W TDP) plus its host. The weakest figure here —
+    # no measured curve exists for GitHub's GPU runners, so declare your own
+    # with --runner-watts gpu=<watts> if you use them seriously. Flat, not
+    # core-scaled: the accelerator dominates and does not grow with vCPUs.
+    "gpu": round(130.0 * PUE, 1),
+    # ARM (Cobalt/Graviton class): no measured curve either, taken as ~40% below
+    # the x86 baseline. Deliberately not the "3-4x more efficient" claim that
+    # circulates — AWS's own published figure is up to 60% less energy for equal
+    # work, and independent benchmarks land nearer 1.5-2.5x.
+    "arm": round(8.18 * 0.6 * PUE, 1),
+    # Mac mini M1, whole machine (dedicated hardware, not a shared VM slice).
+    # Apple silicon is far more efficient than the 65 W this used to assume.
+    "macos": round(15.53 * PUE, 1),
+    # Same Azure hardware as Linux, so the same draw. GitHub bills Windows at 2x
+    # and macOS at 10x, but those are *price* multipliers and say nothing about
+    # power — using them as energy factors would be wrong by a wide margin.
+    "windows": round(8.18 * PUE, 1),
+    "ubuntu": round(8.18 * PUE, 1),
 }
+# Core count scales the CPU share; on a GPU runner the accelerator is fixed and
+# dominates, so scaling it by cores would double-count.
+_NO_CORE_SCALING = {"gpu"}
 DEFAULT_RUNNER_POWER_W = RUNNER_POWER_W["ubuntu"]
+
+# What a pass measured, and how much of it came from jobs that reported
+# themselves. The badge shows the ratio so a reader can tell a fully measured
+# figure from a partly inferred one.
+CiUsage = namedtuple(
+    "CiUsage", "kwh measured_jobs total_jobs measured_kwh guessed_kwh"
+)
 
 THRESHOLDS = [  # gCO2e/month -> badge color
     (100, "brightgreen"),
@@ -46,25 +98,104 @@ THRESHOLDS = [  # gCO2e/month -> badge color
 ]
 
 
-def runner_power_w(labels):
-    """Map GitHub Actions job labels (e.g. ["windows-latest"]) to a W draw.
+# Core counts appear in labels in several shapes: GitHub's own convention is
+# "ubuntu-latest-4-cores", but "linux-x64-16core" and "...-8vcpu" are both
+# common in hand-named larger runners. Matching only the first shape priced a
+# 16-core runner as a 2-core one.
+_CORES_RE = re.compile(r"(\d+)\s*-?(?:cores?|vcpus?)\b")
 
-    Larger runners are labelled e.g. "ubuntu-latest-4-cores"; scale the
-    matching OS baseline by core count over the 2-core default.
+
+# Stands for "every runner in this repo". Not a valid Actions label (labels
+# can't contain "*"), so it can never collide with a real one.
+ANY_RUNNER = "*"
+
+
+def parse_runner_watts(pairs):
+    """["180"] -> {"*": 180.0}; ["my-builder=180"] -> {"my-builder": 180.0}.
+
+    A bare number is the common case and the whole point of the flag: nearly
+    every repo runs one runner type, so declaring it is a single value set once
+    when the workflow is first added. The LABEL=WATTS form is only for repos
+    that genuinely mix runner types.
+
+    Raises ValueError on anything malformed rather than silently dropping it: a
+    typo'd override that quietly does nothing would leave the badge wrong in
+    exactly the case the user was trying to correct.
+    """
+    table = {}
+    for pair in pairs or []:
+        pair = pair.strip()
+        if not pair:
+            continue
+        label, sep, value = pair.partition("=")
+        if not sep:
+            # Bare number: applies to every runner.
+            label, value = ANY_RUNNER, pair
+        label = label.strip().lower()
+        if not label:
+            raise ValueError(f"expected LABEL=WATTS or a bare number, got {pair!r}")
+        try:
+            watts = float(value)
+        except ValueError:
+            raise ValueError(f"{value!r} is not a number, in {pair!r}") from None
+        if watts <= 0:
+            raise ValueError(f"watts must be positive, got {watts} in {pair!r}")
+        table[label] = watts
+    return table
+
+
+def runner_power_w(labels, overrides=None):
+    """Map job labels (e.g. ["windows-latest"]) to a W draw, or None if unknown.
+
+    Resolution order: an exact --runner-watts label, then a substring one (so
+    one entry can price a whole family, e.g. "gpu=320"), then the built-in
+    GitHub-hosted table scaled by any core count in the label.
+
+    None means "cannot be determined" rather than a guess. The Actions API
+    exposes no CPU or memory for any runner, hosted or self-hosted — labels are
+    the only signal there is, and they are arbitrary user-chosen text. So a
+    self-hosted or custom-named runner can only be priced by declaring it, and
+    the caller needs to be able to tell that apart from a known runner to warn.
     """
     labels_lower = [label.lower() for label in labels]
+    overrides = overrides or {}
+    for label in labels_lower:
+        if label in overrides:
+            return overrides[label]
+    for key, watts in overrides.items():
+        if key != ANY_RUNNER and any(key in label for label in labels_lower):
+            return watts
+    # A declared blanket figure beats the built-in guess table — the developer
+    # knows what their runners are and the API does not.
+    if ANY_RUNNER in overrides:
+        return overrides[ANY_RUNNER]
     for key, watts in RUNNER_POWER_W.items():
         if any(key in label for label in labels_lower):
+            if key in _NO_CORE_SCALING:
+                return watts
             cores = next(
                 (
                     int(m.group(1))
                     for label in labels_lower
-                    if (m := re.search(r"-(\d+)-cores?\b", label))
+                    if (m := _CORES_RE.search(label))
                 ),
                 None,
             )
-            return watts * (cores / 2) if cores else watts
-    return DEFAULT_RUNNER_POWER_W
+            # Scaled off BASELINE_VCPU, not a hardcoded 2: the figures above
+            # describe a 4-vCPU machine, so dividing by 2 would double every
+            # larger runner.
+            return watts * (cores / BASELINE_VCPU) if cores else watts
+    return None
+
+
+def _hours(start, end):
+    """Hours between two ISO timestamps, or 0 if either is missing."""
+    if not (start and end):
+        return 0.0
+    dt = datetime.fromisoformat(end.replace("Z", "+00:00")) - datetime.fromisoformat(
+        start.replace("Z", "+00:00")
+    )
+    return max(dt.total_seconds(), 0) / 3600
 
 
 def run_jobs(run_id, repo, token, api="https://api.github.com"):
@@ -75,16 +206,28 @@ def run_jobs(run_id, repo, token, api="https://api.github.com"):
     return r.json().get("jobs", [])
 
 
-def ci_kwh_last_30d(repo, token, api="https://api.github.com"):
-    """Sum kWh across the last 30 days of runs, weighted by runner type.
+# Pagination backstop. Generous — a repo doing more than this in 30 days is
+# unusual — but a cap that silently drops data would read as a quiet month
+# rather than a truncated query, so hitting it is always reported.
+_MAX_PAGES = 20
 
-    Self-hosted jobs are skipped (unknown power draw) and counted so the
-    caller can warn about them.
-    """
-    since = (datetime.now(timezone.utc) - timedelta(days=30)).isoformat()
+
+def _warn_if_truncated(kind, fetched, total):
+    """A silent cap understates the badge and looks like good news."""
+    if total is not None and fetched < total:
+        print(
+            f"carbon-badge: only read {fetched} of {total} {kind}(s) — hit the "
+            f"{_MAX_PAGES}-page cap, so the figure is an undercount. Narrow the "
+            "window or raise _MAX_PAGES.",
+            file=sys.stderr,
+        )
+
+
+def _list_runs(repo, token, api, since):
+    """Every run in the window — cheap, 100 per request."""
     headers = {"Authorization": f"Bearer {token}"} if token else {}
-    kwh, skipped_self_hosted, page = 0.0, 0, 1
-    while page <= 10:  # cap pagination defensively
+    runs, page, total = [], 1, None
+    while page <= _MAX_PAGES:
         r = requests.get(
             f"{api}/repos/{repo}/actions/runs",
             params={"per_page": 100, "page": page, "created": f">={since}"},
@@ -92,39 +235,246 @@ def ci_kwh_last_30d(repo, token, api="https://api.github.com"):
             timeout=30,
         )
         r.raise_for_status()
-        runs = r.json().get("workflow_runs", [])
-        if not runs:
+        payload = r.json()
+        total = payload.get("total_count", total)
+        batch = payload.get("workflow_runs", [])
+        runs.extend(batch)
+        # A short page is the last page — stop rather than spend a request
+        # confirming the next one is empty.
+        if len(batch) < 100:
             break
-        for run in runs:
-            for job in run_jobs(run["id"], repo, token, api):
-                labels = job.get("labels", [])
-                if any("self-hosted" in label.lower() for label in labels):
-                    skipped_self_hosted += 1
-                    continue
-                start, end = job.get("started_at"), job.get("completed_at")
-                if not (start and end):
-                    continue
-                dt = datetime.fromisoformat(end.replace("Z", "+00:00")) - datetime.fromisoformat(
-                    start.replace("Z", "+00:00")
-                )
-                hours = max(dt.total_seconds(), 0) / 3600
-                kwh += hours * runner_power_w(labels) / 1000
         page += 1
-    _warn_skipped_self_hosted(skipped_self_hosted)
-    return kwh
+    _warn_if_truncated("run", len(runs), total)
+    return runs
 
 
-def _warn_skipped_self_hosted(count):
-    if count:
+def _run_kwh(run, repo, token, api, runner_watts, undeclared):
+    """Exact kWh for one run: sum its jobs, each at its own runner's draw.
+
+    Costs one API call. Jobs on a runner this cannot price — self-hosted, or
+    any custom label — are charged at the baseline and recorded in
+    `undeclared`, rather than skipped. Skipping scored them as zero, which made
+    moving a build onto the biggest machine you own *improve* the badge.
+    """
+    kwh, jobs, guessed_kwh = 0.0, 0, 0.0
+    for job in run_jobs(run["id"], repo, token, api):
+        labels = job.get("labels", [])
+        start, end = job.get("started_at"), job.get("completed_at")
+        # Skipped only when the job never ran (queued/in-progress). A genuine
+        # zero-duration job still gets its runner recorded, so an unrecognised
+        # one is reported even if that particular job was instant.
+        if not (start and end):
+            continue
+        hours = _hours(start, end)
+        watts = runner_power_w(labels, runner_watts)
+        guessed = watts is None
+        if guessed:
+            watts = DEFAULT_RUNNER_POWER_W
+            key = ",".join(labels) or "(no labels)"
+            undeclared[key] = undeclared.get(key, 0) + 1
+        job_kwh = hours * watts / 1000
+        kwh += job_kwh
+        # Tracked in energy, not job count: one long job on an unknown runner
+        # undermines the total far more than a dozen short known ones.
+        guessed_kwh += job_kwh if guessed else 0.0
+        jobs += 1
+    return kwh, jobs, guessed_kwh
+
+
+def ci_kwh_last_30d(repo, token, api="https://api.github.com", runner_watts=None,
+                    use_artifacts=True):
+    """kWh across the last 30 days of runs: one API call per run, summing each
+    job at its own runner's power draw.
+
+    Accurate but expensive — ~400 requests on a busy repo, against the 1,000
+    per hour per repository that GITHUB_TOKEN allows inside Actions. See
+    artifact_kwh_last_30d() for the cheap path, which needs one request per 100
+    runs and is exact rather than approximate.
+
+    Sampling a subset of runs was tried and removed. Four estimators were
+    measured against this function on real repositories and none converged:
+    per-run cost is right-skewed, so the sample size needed for a usable answer
+    was the same order as the population, and the error was non-monotonic in
+    the sample size. Approximating here is not viable; collecting the data at
+    source is.
+    """
+    since = (datetime.now(timezone.utc) - timedelta(days=30)).isoformat()
+    runs = _list_runs(repo, token, api, since)
+    undeclared = {}
+
+    # Runs whose jobs reported themselves are already measured — exactly, and
+    # for free. Only the rest need a request each. Instrumentation therefore
+    # pays off from the very first workflow file rather than at some threshold:
+    # every job you add removes a request from next week's refresh, and the
+    # answer stays correct the whole way through.
+    by_run, measured_jobs = {}, 0
+    if use_artifacts:
+        by_run, measured_jobs = artifact_kwh_by_run(repo, token, api, runner_watts)
+        jobs = measured_jobs
+        if by_run:
+            covered = sum(1 for r in runs if r.get("id") in by_run)
+            print(
+                f"carbon-badge: {covered}/{len(runs)} run(s) self-reported "
+                f"({jobs} job marker(s)); {len(runs) - covered} still need an API "
+                "call. Instrument the remaining workflows to shrink that.",
+                file=sys.stderr,
+            )
+
+    kwh, total_jobs = 0.0, measured_jobs
+    measured_kwh, guessed_kwh = 0.0, 0.0
+    for run in runs:
+        measured = by_run.get(run.get("id"))
+        if measured is not None:
+            kwh += measured
+            measured_kwh += measured
+        else:
+            run_kwh, run_jobs_seen, run_guessed = _run_kwh(
+                run, repo, token, api, runner_watts, undeclared
+            )
+            kwh += run_kwh
+            guessed_kwh += run_guessed
+            total_jobs += run_jobs_seen
+    _warn_undeclared_runners(undeclared)
+    return CiUsage(kwh, measured_jobs, total_jobs, measured_kwh, guessed_kwh)
+
+
+# Jobs self-report into an artifact *name*, which the artifacts API returns in
+# its listing — so reading a month of exact per-job measurements costs one
+# request per 100 artifacts and downloads nothing.
+#
+#   carbon.v1.<seconds>.<vcpu>.<memMB>.<platform>.<slug>
+#
+# <platform> is one of the RUNNER_POWER_W keys, because CPU and memory alone do
+# not determine draw: the same 4 vCPU / 16 GiB reading means a very different
+# wattage on Apple silicon than on a shared x86 VM.
+#
+# Versioned because the name is the wire format. Artifact names may not contain
+# " : < > | * ? \ /, which is why the separator is a dot and the job slug is
+# sanitised at the source.
+ARTIFACT_PREFIX = "carbon.v1"
+_ARTIFACT_RE = re.compile(r"^carbon\.v1\.(\d+)\.(\d+)\.(\d+)\.([a-z]+)\.")
+
+# Linear model for a self-reported machine, anchored on the same Eco-CI curve:
+# a 4-vCPU / 16 GiB GitHub runner at 8.18 W machine draw x PUE ~= 9.4 W.
+#   1.2 + 1.6*4 + 0.11*16 = 9.36
+# Crude — real draw swings 1.76-8.18 W with utilisation, which we cannot see —
+# but applied to the machine's *actual* vCPU count and memory rather than to a
+# guess scraped from a label.
+#
+# It was previously fitted to "2 vCPU / 7 GB = 12.5 W", which was wrong twice
+# over: public repos have had 4-vCPU/16 GiB runners since Dec 2023, and 12.5 W
+# was itself ~1.5x the measured full-load figure. That combination priced a
+# real 4-vCPU runner at 24.3 W, about 3x too high.
+WATTS_BASE = 1.2
+WATTS_PER_VCPU = 1.6
+WATTS_PER_GB = 0.11
+
+
+def watts_from_specs(vcpu, mem_mb, platform="ubuntu"):
+    """Power draw from a machine's actual CPU count, memory and platform.
+
+    The linear model is fitted to x86 shared VMs and does not transfer. A
+    Mac mini M1 reporting 3 vCPU / 7 GiB comes out at 6.8 W through it, against
+    a measured 15.53 W — so the self-reported path would have been 2.6x *worse*
+    than the label lookup it replaces. Apple silicon is dedicated hardware whose
+    draw does not track a vCPU slice, so it uses the measured figure directly;
+    ARM scales its own baseline rather than borrowing the x86 one.
+    """
+    if platform == "macos":
+        return RUNNER_POWER_W["macos"]
+    if platform == "arm":
+        return RUNNER_POWER_W["arm"] * (vcpu / BASELINE_VCPU)
+    return WATTS_BASE + WATTS_PER_VCPU * vcpu + WATTS_PER_GB * (mem_mb / 1024)
+
+
+def parse_carbon_artifact(name):
+    """"carbon.v1.142.4.16384.ubuntu.build" -> (142.0 s, 4 vcpu, 16384 MB, "ubuntu").
+
+    None for anything that is not one of ours, so a repo's normal build
+    artifacts sitting in the same listing are simply ignored.
+    """
+    match = _ARTIFACT_RE.match(name or "")
+    if not match:
+        return None
+    seconds, vcpu, mem_mb, platform = match.groups()
+    return (float(seconds), int(vcpu), int(mem_mb), platform)
+
+
+def list_artifacts(repo, token, api="https://api.github.com"):
+    """Every non-expired artifact, 100 per request."""
+    headers = {"Authorization": f"Bearer {token}"} if token else {}
+    artifacts, page, total = [], 1, None
+    while page <= _MAX_PAGES:
+        r = requests.get(
+            f"{api}/repos/{repo}/actions/artifacts",
+            params={"per_page": 100, "page": page},
+            headers=headers,
+            timeout=30,
+        )
+        r.raise_for_status()
+        payload = r.json()
+        total = payload.get("total_count", total)
+        batch = payload.get("artifacts", [])
+        artifacts.extend(batch)
+        if len(batch) < 100:  # short page = last page
+            break
+        page += 1
+    _warn_if_truncated("artifact", len(artifacts), total)
+    return artifacts
+
+
+def artifact_kwh_by_run(repo, token, api="https://api.github.com", runner_watts=None):
+    """{run_id: kWh} for every run whose jobs recorded themselves.
+
+    Keyed by run because instrumentation arrives one workflow file at a time,
+    so the answer is almost never "all" or "none" — it is "these runs, not
+    those". The artifacts listing carries workflow_run.id already, so knowing
+    *which* runs are covered is free.
+    """
+    cutoff = datetime.now(timezone.utc) - timedelta(days=30)
+    blanket = (runner_watts or {}).get(ANY_RUNNER)
+    by_run, jobs = {}, 0
+    for artifact in list_artifacts(repo, token, api):
+        if artifact.get("expired"):
+            continue
+        parsed = parse_carbon_artifact(artifact.get("name"))
+        if not parsed:
+            continue
+        created = artifact.get("created_at")
+        if created and datetime.fromisoformat(created.replace("Z", "+00:00")) < cutoff:
+            continue
+        run_id = (artifact.get("workflow_run") or {}).get("id")
+        if run_id is None:
+            continue
+        seconds, vcpu, mem_mb, platform = parsed
+        # A declared figure still wins: someone who knows their hardware's real
+        # draw beats a linear model of it.
+        watts = blanket if blanket else watts_from_specs(vcpu, mem_mb, platform)
+        by_run[run_id] = by_run.get(run_id, 0.0) + (seconds / 3600) * watts / 1000
+        jobs += 1
+    return by_run, jobs
+
+
+def _warn_undeclared_runners(undeclared):
+    """Name the labels, not just a count — the label *is* the fix, since it's
+    what the user passes back in --runner-watts."""
+    for labels, count in sorted(undeclared.items(), key=lambda kv: -kv[1]):
         print(
-            f"carbon-badge: skipped {count} self-hosted job(s) (unknown power draw)",
+            f"carbon-badge: {count} job(s) on unrecognised runner "
+            f"'{labels}' charged at the {DEFAULT_RUNNER_POWER_W} W baseline; "
+            f"pass --runner-watts '{labels.split(',')[0]}=<watts>' to price it",
             file=sys.stderr,
         )
 
 
-def grams_co2e(minutes, grid_intensity=DEFAULT_GRID_INTENSITY):
-    """Convert CI runner-minutes to gCO2e for the given grid intensity."""
-    return minutes * KWH_PER_RUNNER_MINUTE * grid_intensity
+def grams_co2e(minutes, grid_intensity=DEFAULT_GRID_INTENSITY, watts=DEFAULT_RUNNER_POWER_W):
+    """Convert CI runner-minutes to gCO2e for the given grid intensity.
+
+    `watts` honours a declared blanket --runner-watts: without it, an offline
+    --minutes estimate silently used the 12.5 W baseline however big the
+    runners were actually declared to be.
+    """
+    return minutes * (watts / 1000 / 60) * grid_intensity
 
 
 def grams_co2e_kwh(kwh, grid_intensity=DEFAULT_GRID_INTENSITY):
@@ -132,17 +482,19 @@ def grams_co2e_kwh(kwh, grid_intensity=DEFAULT_GRID_INTENSITY):
     return kwh * grid_intensity
 
 
-def gitlab_kwh_last_30d(project, token, api="https://gitlab.com/api/v4"):
-    """Sum kWh across the last 30 days of GitLab CI jobs (ubuntu-baseline power).
+def gitlab_kwh_last_30d(project, token, api="https://gitlab.com/api/v4", runner_watts=None):
+    """Sum kWh across the last 30 days of GitLab CI jobs.
 
     GitLab's job list already carries per-job `duration` and `runner` info,
-    so unlike GitHub this is a single paginated endpoint. Jobs on a
-    project/group (non-shared) runner are skipped (unknown power draw).
+    so unlike GitHub this is a single paginated endpoint. Self-managed runners
+    are charged at the baseline and reported rather than skipped, for the same
+    reason as the GitHub path — and matched against --runner-watts by tag or
+    runner description, GitLab's equivalent of a label.
     """
     since = datetime.now(timezone.utc) - timedelta(days=30)
     headers = {"PRIVATE-TOKEN": token} if token else {}
     project_path = project.replace("/", "%2F")
-    kwh, skipped_self_hosted, page = 0.0, 0, 1
+    kwh, undeclared, page = 0.0, {}, 1
     while page <= 10:  # cap pagination defensively
         r = requests.get(
             f"{api}/projects/{project_path}/jobs",
@@ -158,15 +510,24 @@ def gitlab_kwh_last_30d(project, token, api="https://gitlab.com/api/v4"):
             created = job.get("created_at")
             if not created or datetime.fromisoformat(created.replace("Z", "+00:00")) < since:
                 continue
-            runner = job.get("runner") or {}
-            if runner and runner.get("is_shared") is False:
-                skipped_self_hosted += 1
-                continue
             duration = job.get("duration")
-            if duration:
-                kwh += (duration / 3600) * DEFAULT_RUNNER_POWER_W / 1000
+            if not duration:
+                continue
+            runner = job.get("runner") or {}
+            # Tags and the runner's description are the only size signal GitLab
+            # gives, exactly as labels are on GitHub.
+            tags = list(job.get("tag_list") or [])
+            if runner.get("description"):
+                tags.append(runner["description"])
+            watts = runner_power_w(tags, runner_watts) if tags else None
+            if watts is None:
+                watts = DEFAULT_RUNNER_POWER_W
+                if runner.get("is_shared") is False:
+                    key = ",".join(tags) or "(self-managed, untagged)"
+                    undeclared[key] = undeclared.get(key, 0) + 1
+            kwh += (duration / 3600) * watts / 1000
         page += 1
-    _warn_skipped_self_hosted(skipped_self_hosted)
+    _warn_undeclared_runners(undeclared)
     return kwh
 
 
@@ -202,12 +563,66 @@ def format_grams(grams):
     return f"{grams / 1000:.1f} kgCO2e/mo" if grams >= 1000 else f"{grams:.0f} gCO2e/mo"
 
 
-def endpoint_json(grams):
-    """Build the Shields.io endpoint JSON payload for the badge."""
+# Share of energy that must be directly measured before the figure is called
+# measured rather than estimated. Not 1.0: a cancelled job never reaches its
+# recording step, so a fully instrumented repo still sits just under parity.
+MEASURED_THRESHOLD = 0.95
+# Share of energy priced at the fallback wattage — an unrecognised runner whose
+# real draw nobody declared — above which the total is only a rough figure. A
+# quarter of the energy resting on a guess is enough to move a badge a colour.
+ROUGH_THRESHOLD = 0.25
+
+
+def confidence(usage):
+    """How far the total can be trusted, in one word.
+
+    Driven by the share of *energy*, not the share of jobs: a single long job on
+    an unknown runner undermines the total far more than a dozen short known
+    ones. Coverage alone would rank an all-`ubuntu-latest` repo at 0%
+    instrumentation the same as one running entirely on unpriced self-hosted
+    hardware, and those are not the same claim.
+
+    "measured"  - essentially all the energy came from jobs that timed
+                  themselves and reported their own CPU and memory.
+    "partial"   - some did, the rest is inferred from the API.
+    "rough"     - a meaningful share rests on a fallback wattage for a runner
+                  nobody declared, so the number could be out by a lot.
+    "estimated" - nothing self-reported, but every runner was recognised;
+                  durations are real, only the wattages are modelled.
+    """
+    if usage.kwh <= 0:
+        return "no CI"
+    if usage.guessed_kwh / usage.kwh >= ROUGH_THRESHOLD:
+        return "rough"
+    if usage.measured_kwh / usage.kwh >= MEASURED_THRESHOLD:
+        return "measured"
+    if usage.measured_kwh > 0:
+        return "partial"
+    return "estimated"
+
+
+def endpoint_json(grams, usage=None):
+    """Build the Shields.io endpoint JSON payload for the badge.
+
+    The message carries how the figure was arrived at, because "113 gCO2e/mo"
+    from fully instrumented jobs and "113 gCO2e/mo" from a wattage table are
+    very different claims and a badge that renders them identically is
+    misleading. Only a wholly measured figure gets to say so unqualified.
+
+    The grams always cover *all* CI, measured or inferred — a badge that
+    silently shrank as instrumentation lagged would reward not instrumenting.
+    """
+    message = format_grams(grams)
+    if usage is not None:
+        level = confidence(usage)
+        if level == "partial":
+            message += f" (~{usage.measured_jobs}/{usage.total_jobs} measured)"
+        elif level in ("estimated", "rough"):
+            message += f" ({level})"
     return {
         "schemaVersion": 1,
         "label": "CI carbon",
-        "message": format_grams(grams),
+        "message": message,
         "color": badge_color(grams),
     }
 
@@ -222,18 +637,38 @@ def estimate(args, token):
             f"carbon-badge: live grid intensity for {args.grid_region} = {grid_intensity:.0f} gCO2e/kWh",
             file=sys.stderr,
         )
+    runner_watts = parse_runner_watts(getattr(args, "runner_watts", None))
+    usage = None
     if args.minutes is not None:
-        grams = grams_co2e(args.minutes, grid_intensity)
-        detail = f"{args.minutes:.0f} CI min/30d"
+        watts = runner_watts.get(ANY_RUNNER, DEFAULT_RUNNER_POWER_W)
+        grams = grams_co2e(args.minutes, grid_intensity, watts)
+        detail = f"{args.minutes:.0f} CI min/30d at {watts:g} W"
     elif args.provider == "gitlab":
-        kwh = gitlab_kwh_last_30d(args.repo, token, api=args.api or "https://gitlab.com/api/v4")
+        kwh = gitlab_kwh_last_30d(
+            args.repo,
+            token,
+            api=args.api or "https://gitlab.com/api/v4",
+            runner_watts=runner_watts,
+        )
         grams = grams_co2e_kwh(kwh, grid_intensity)
         detail = f"{kwh:.3f} kWh/30d"
     else:
-        kwh = ci_kwh_last_30d(args.repo, token, api=args.api or "https://api.github.com")
-        grams = grams_co2e_kwh(kwh, grid_intensity)
-        detail = f"{kwh:.3f} kWh/30d"
-    return endpoint_json(grams), detail
+        usage = ci_kwh_last_30d(
+            args.repo,
+            token,
+            api=args.api or "https://api.github.com",
+            runner_watts=runner_watts,
+            use_artifacts=not getattr(args, "ignore_self_reported", False),
+        )
+        grams = grams_co2e_kwh(usage.kwh, grid_intensity)
+        level = confidence(usage)
+        guessed_pct = 100 * usage.guessed_kwh / usage.kwh if usage.kwh else 0
+        detail = (
+            f"{usage.kwh:.3f} kWh/30d, confidence: {level} "
+            f"({usage.measured_jobs}/{usage.total_jobs} job(s) self-reported, "
+            f"{guessed_pct:.0f}% of energy on unrecognised runners)"
+        )
+    return endpoint_json(grams, usage), detail
 
 
 def badge_handler(compute, ttl=300):
@@ -326,6 +761,28 @@ def main(argv=None):
         help="Electricity Maps API token (or ELECTRICITYMAPS_TOKEN env)",
     )
     p.add_argument(
+        "--runner-watts",
+        action="append",
+        metavar="WATTS|LABEL=WATTS",
+        help=(
+            "average power draw of your runners, set once. A bare number "
+            "(--runner-watts 180) applies to every job; LABEL=WATTS, "
+            "repeatable, is only needed if you mix runner types. The API "
+            "exposes no CPU/memory for any runner, so size cannot be detected, "
+            "only declared"
+        ),
+    )
+    p.add_argument(
+        "--ignore-self-reported",
+        action="store_true",
+        help=(
+            "query the API for every run, ignoring what jobs recorded about "
+            "themselves. Slower and no more accurate, so this exists for one "
+            "job: reconciling the two paths against each other to see what the "
+            "self-reported figure is missing (see docs/getting-started.md)"
+        ),
+    )
+    p.add_argument(
         "--minutes",
         type=float,
         default=None,
@@ -339,6 +796,13 @@ def main(argv=None):
         help="serve /badge.json on this port instead of printing once and exiting",
     )
     args = p.parse_args(argv)
+
+    # Validated up front so a typo fails the command rather than surfacing as a
+    # traceback from inside estimate() — or, under --serve, on every request.
+    try:
+        parse_runner_watts(args.runner_watts)
+    except ValueError as exc:
+        p.error(f"--runner-watts: {exc}")
 
     env_var = "GITLAB_TOKEN" if args.provider == "gitlab" else "GITHUB_TOKEN"
     token = args.token or os.environ.get(env_var)
