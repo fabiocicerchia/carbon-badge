@@ -104,6 +104,28 @@ unnecessary — though a declared value still wins if you set one.
 No extra permissions are needed: `upload-artifact` authenticates with
 `ACTIONS_RUNTIME_TOKEN`, not `GITHUB_TOKEN`, so your jobs keep `contents: read`.
 
+#### Adopting it: whole workflow files, busiest first
+
+A run is priced from its markers only when **every job that ran** reported one.
+One job short and the whole run falls back to the API — correctly, since
+trusting a partial run would score its uninstrumented jobs as zero energy.
+
+Three consequences worth knowing before you start:
+
+- **Instrument a whole workflow file at a time.** Adding the step to some jobs
+  in `ci.yml` and not others buys nothing at all: every run of that workflow
+  still costs an API call. Finishing the file converts all of its runs at once.
+- **Different workflows are independent.** `ci.yml` fully instrumented pays off
+  immediately even if `security.yml` is untouched. The badge reads `partial`
+  and the log tells you how far along you are.
+- **Start with the busiest workflow.** It has both the most runs and usually
+  the most jobs per run, so it converts the most volume per file edited.
+
+Conditional jobs are not a problem: a skipped job never runs a step, so it
+cannot report, and it is excluded from the count on both sides. A workflow
+where two of three jobs are skipped by their `if:` still reaches completeness
+on the one that ran.
+
 #### How jobs that end badly are handled
 
 Measured, not assumed. Every termination path was run against a live repo
