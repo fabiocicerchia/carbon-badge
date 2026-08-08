@@ -101,22 +101,40 @@ becomes unnecessary (a declared value still wins if you set one).
 No extra permissions are needed: `upload-artifact` authenticates with
 `ACTIONS_RUNTIME_TOKEN`, not `GITHUB_TOKEN`, so your jobs keep `contents: read`.
 
-#### Known limitation: cancelled and killed jobs
+#### How jobs that end badly are handled
 
-`if: always()` covers a job that *fails*. It does not cover a job that is
-**cancelled, hits its `timeout-minutes`, or is killed by the OOM killer** — the
-runner stops without reaching the step, so no marker is written.
+Measured, not assumed. Every termination path was run against a live repo
+([cron-translate#26](https://github.com/fabiocicerchia/cron-translate/pull/26)):
 
-Those are disproportionately the long, expensive jobs, so the bias is
-**downward**: the badge under-reports exactly the runs that cost the most.
-Querying the API has no such gap, because GitHub records a job's end time
-whatever killed it.
+| how the job ended | marker written? |
+|---|---|
+| succeeded | yes |
+| failed (`exit 1`, and by extension an OOM-killed step) | **yes** |
+| cancelled mid-run | **yes** |
+| killed by `timeout-minutes` | **yes** |
 
-What limits the damage, without removing it: a run that recorded nothing simply
-isn't treated as self-reported, so it gets queried like any uninstrumented run.
-The loss is confined to *jobs* that vanished inside a run that did report —
-their siblings' markers still count, but theirs are missing. Every run's
-coverage is printed to stderr, so a drift shows up in the workflow log.
+This is why `record/` is a JavaScript action with a `post:` step rather than a
+composite step with `if: always()`. An `if: always()` step does **not** run on
+cancellation; a `post:` step does, and GitHub treats a `timeout-minutes` kill as
+a cancellation too, so both are covered.
+
+What is still not covered is the runner itself dying — an infrastructure
+failure that takes the VM with it before teardown. Nothing inside the job can
+survive that, and it is rare.
+
+A run that recorded nothing isn't treated as self-reported at all, so it gets
+queried like any uninstrumented run. The exposure is therefore limited to a
+*job* that vanished inside a run whose siblings did report. Every run's coverage
+is printed to stderr, so a drift shows up in the workflow log.
+
+#### Known limitation: the job's own setup time is invisible
+
+The recorder starts its clock when its step executes — after runner
+provisioning, "Set up job", and downloading the action. That time is real
+energy and cannot be seen from inside the job. Measured across six jobs on the
+trial repo it was a near-constant **~5.7 s/job**, so the error scales inversely
+with job length: ~39% on ten-second jobs, ~1% on a ten-minute build. It biases
+the self-reported figure **downward**. See `TODO.md` for the candidate fix.
 
 **Before trusting the self-reported figure, reconcile it once.** Run both paths
 against the same repo and compare:

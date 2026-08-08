@@ -39,17 +39,12 @@ record of what shipped.
       between two different errors, not an obvious win, which is why it is
       parked here rather than applied.
 
-- [ ] **Cancellation is unverified.** A `post:` step is supposed to run when a
-      job is cancelled, and that is the entire reason `record/` is a JavaScript
-      action rather than a second composite step with `if: always()`. No
-      cancelled run has ever been observed producing a marker. Needs a
-      deliberate mid-flight cancel on the trial branch.
-
-- [ ] **Jobs killed by `timeout-minutes` or the OOM killer never record.** Known
-      and documented in `docs/getting-started.md`; disproportionately the long,
-      expensive jobs, so the bias is downward. Not fixable from inside the job —
-      the mitigation is the reconciliation procedure, which has not been run on
-      real data yet.
+- [ ] **Reconcile the two paths on real data.** `docs/getting-started.md`
+      prescribes comparing the default against `--ignore-self-reported`; it has
+      never been run against a repo with meaningful coverage. With the
+      termination paths now all confirmed to record, the setup-time gap above is
+      the only bias left that the comparison should reveal — so it doubles as a
+      check on that measurement.
 
 ## Assumptions
 
