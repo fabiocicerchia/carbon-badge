@@ -367,9 +367,9 @@ def test_full_coverage_costs_no_per_run_calls(monkeypatch):
     assert (usage.measured_jobs, usage.total_jobs) == (3, 3)
 
 
-def test_source_jobs_ignores_self_reported_data(monkeypatch):
-    """The escape hatch: --source jobs must not consult artifacts at all, so the
-    two paths can be reconciled against each other."""
+def test_ignore_self_reported_does_not_consult_artifacts(monkeypatch):
+    """--ignore-self-reported must not touch the artifacts listing at all,
+    otherwise the two paths cannot be reconciled against each other."""
     now = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
     runs = [{"id": 1, "run_started_at": now, "updated_at": now}]
     calls = []

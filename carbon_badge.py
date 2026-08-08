@@ -619,7 +619,7 @@ def estimate(args, token):
             token,
             api=args.api or "https://api.github.com",
             runner_watts=runner_watts,
-            use_artifacts=getattr(args, "source", "auto") != "jobs",
+            use_artifacts=not getattr(args, "ignore_self_reported", False),
         )
         grams = grams_co2e_kwh(usage.kwh, grid_intensity)
         level = confidence(usage)
@@ -734,15 +734,13 @@ def main(argv=None):
         ),
     )
     p.add_argument(
-        "--source",
-        choices=["auto", "jobs"],
-        default="auto",
+        "--ignore-self-reported",
+        action="store_true",
         help=(
-            "'auto' (default) uses each run's own self-reported measurement "
-            "where the jobs recorded one, and queries the API only for the runs "
-            "that did not - so partial instrumentation is exactly as accurate "
-            "and proportionally cheaper. 'jobs' ignores self-reported data and "
-            "queries the API for every run"
+            "query the API for every run, ignoring what jobs recorded about "
+            "themselves. Slower and no more accurate, so this exists for one "
+            "job: reconciling the two paths against each other to see what the "
+            "self-reported figure is missing (see docs/getting-started.md)"
         ),
     )
     p.add_argument(

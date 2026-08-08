@@ -108,29 +108,28 @@ No extra permissions are needed: `upload-artifact` authenticates with
 runner stops without reaching the step, so no marker is written.
 
 Those are disproportionately the long, expensive jobs, so the bias is
-**downward**: the badge under-reports exactly the runs that cost the most. The
-API path (`--source jobs`) has no such gap, because GitHub records the job's
-end time whatever killed it.
+**downward**: the badge under-reports exactly the runs that cost the most.
+Querying the API has no such gap, because GitHub records a job's end time
+whatever killed it.
 
-Two things limit the damage, but neither removes it:
+What limits the damage, without removing it: a run that recorded nothing simply
+isn't treated as self-reported, so it gets queried like any uninstrumented run.
+The loss is confined to *jobs* that vanished inside a run that did report —
+their siblings' markers still count, but theirs are missing. Every run's
+coverage is printed to stderr, so a drift shows up in the workflow log.
 
-- `--source auto` refuses to use self-reported data below
-  `MIN_ARTIFACT_COVERAGE` (90%) markers per run, and falls back to the API. So
-  a repo that loses a few jobs a month still publishes; one that loses many
-  reverts to the accurate path and says so in the log.
-- Every fallback and every shortfall is printed to stderr, so a drift into
-  under-reporting shows up in the workflow log rather than silently.
-
-**Before trusting the self-reported figure, reconcile it once**: run both paths
-on the same repo and compare.
+**Before trusting the self-reported figure, reconcile it once.** Run both paths
+against the same repo and compare:
 
 ```sh
-carbon-badge owner/repo --source artifacts --token "$GITHUB_TOKEN"
-carbon-badge owner/repo --source jobs      --token "$GITHUB_TOKEN"
+carbon-badge owner/repo --token "$GITHUB_TOKEN"                        # normal
+carbon-badge owner/repo --token "$GITHUB_TOKEN" --ignore-self-reported # API only
 ```
 
-A persistent gap is the cancelled/killed population. If it matters for your
-repo, keep `--source jobs` and pay the requests.
+That is the only reason `--ignore-self-reported` exists — it is slower and no
+more accurate for day-to-day use. A persistent gap between the two figures is
+the cancelled/killed population. If that matters for your repo, keep the flag
+on permanently and pay the requests.
 
 ### Telling it how big your runners are
 
