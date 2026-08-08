@@ -396,10 +396,15 @@ _ARTIFACT_RE = re.compile(r"^carbon\.v1\.(\d+)\.(\d+)\.(\d+)\.([a-z]+)\.")
 
 # Linear model for a self-reported machine, anchored on the same Eco-CI curve:
 # a 4-vCPU / 16 GiB GitHub runner at 8.18 W machine draw x PUE ~= 9.4 W.
-#   1.2 + 1.6*4 + 0.11*16 = 9.36
+#   1.2 + 1.6*4 + 0.1125*16 = 9.4 exactly
 # Crude — real draw swings 1.76-8.18 W with utilisation, which we cannot see —
 # but applied to the machine's *actual* vCPU count and memory rather than to a
 # guess scraped from a label.
+#
+# The per-GB term is tuned so a standard runner comes out at exactly
+# RUNNER_POWER_W["ubuntu"]. Without that the two paths disagreed by 0.4% for
+# the same machine, so a repo's figure stepped very slightly as it instrumented
+# — a change with no cause, which is the kind of thing that gets read as signal.
 #
 # It was previously fitted to "2 vCPU / 7 GB = 12.5 W", which was wrong twice
 # over: public repos have had 4-vCPU/16 GiB runners since Dec 2023, and 12.5 W
@@ -407,7 +412,7 @@ _ARTIFACT_RE = re.compile(r"^carbon\.v1\.(\d+)\.(\d+)\.(\d+)\.([a-z]+)\.")
 # real 4-vCPU runner at 24.3 W, about 3x too high.
 WATTS_BASE = 1.2
 WATTS_PER_VCPU = 1.6
-WATTS_PER_GB = 0.11
+WATTS_PER_GB = 0.1125  # chosen so the model lands exactly on the table value
 
 
 def watts_from_specs(vcpu, mem_mb, platform="ubuntu"):

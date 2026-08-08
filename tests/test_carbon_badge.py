@@ -292,6 +292,13 @@ def test_parse_carbon_artifact():
     assert carbon_badge.parse_carbon_artifact("") is None
 
 
+def test_the_two_pricing_paths_agree_on_a_standard_runner():
+    """A 4-vCPU/16 GiB ubuntu runner must cost the same whether it was priced
+    from its label or from its own self-report. They differed by 0.4%, so a
+    repo's figure stepped as it instrumented — a change with no cause."""
+    assert carbon_badge.watts_from_specs(4, 16384) == carbon_badge.RUNNER_POWER_W["ubuntu"]
+
+
 def test_watts_from_specs_is_platform_aware():
     """The linear model is fitted to x86 shared VMs and does not transfer.
     A Mac mini M1 reporting 3 vCPU / 7 GiB comes out at 6.8 W through it against
