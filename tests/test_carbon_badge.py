@@ -257,17 +257,31 @@ class _FakeResponse:
 
 def test_parse_carbon_artifact():
     """The artifact name is the wire format, so parsing it is load-bearing."""
-    assert carbon_badge.parse_carbon_artifact("carbon.v1.142.2.7168.build") == (
-        142.0,
-        2,
-        7168,
-    )
+    assert carbon_badge.parse_carbon_artifact(
+        "carbon.v1.142.4.16384.ubuntu.build-a1b2c3d4"
+    ) == (142.0, 4, 16384, "ubuntu")
+    # The platform is load-bearing: the same specs draw very different power on
+    # Apple silicon, so a name without one must not be accepted as v1.
+    assert carbon_badge.parse_carbon_artifact("carbon.v1.142.4.16384.build") is None
     # A repo's ordinary artifacts share the listing and must be ignored.
     assert carbon_badge.parse_carbon_artifact("gitleaks-results.sarif") is None
     assert carbon_badge.parse_carbon_artifact("github-pages") is None
     # A future format must not be silently misread as v1.
     assert carbon_badge.parse_carbon_artifact("carbon.v2.142.2.7168.build") is None
     assert carbon_badge.parse_carbon_artifact("") is None
+
+
+def test_watts_from_specs_is_platform_aware():
+    """The linear model is fitted to x86 shared VMs and does not transfer.
+    A Mac mini M1 reporting 3 vCPU / 7 GiB comes out at 6.8 W through it against
+    a measured 15.53 W — so a platform-blind self-reported path would have been
+    2.6x *worse* than the label lookup it replaces."""
+    assert carbon_badge.watts_from_specs(3, 7168, "macos") == carbon_badge.RUNNER_POWER_W["macos"]
+    # ARM scales its own baseline rather than borrowing the x86 one.
+    assert carbon_badge.watts_from_specs(4, 16384, "arm") == carbon_badge.RUNNER_POWER_W["arm"]
+    assert carbon_badge.watts_from_specs(8, 16384, "arm") == carbon_badge.RUNNER_POWER_W["arm"] * 2
+    # x86 still uses the linear model, and defaults to it.
+    assert carbon_badge.watts_from_specs(4, 16384, "ubuntu") == carbon_badge.watts_from_specs(4, 16384)
 
 
 def test_watts_from_specs_reproduces_the_known_runner():
@@ -312,9 +326,9 @@ def test_artifact_kwh_by_run_keys_by_run_and_downloads_nothing(monkeypatch):
     the answer is almost never all-or-nothing."""
     calls = []
     artifacts = [
-        _artifact("carbon.v1.3600.2.7168.build", 11),
-        _artifact("carbon.v1.1800.2.7168.test", 11),  # same run, second job
-        _artifact("carbon.v1.3600.2.7168.lint", 22),
+        _artifact("carbon.v1.3600.2.7168.ubuntu.build", 11),
+        _artifact("carbon.v1.1800.2.7168.ubuntu.test", 11),  # same run, second job
+        _artifact("carbon.v1.3600.2.7168.ubuntu.lint", 22),
         _artifact("some-build-output.zip", 33),  # not ours; ignored
     ]
     monkeypatch.setattr(carbon_badge.requests, "get", _serve(artifacts, [], calls))
@@ -333,7 +347,7 @@ def test_partial_instrumentation_tops_up_from_the_api(monkeypatch):
     instrument — rather than all-or-nothing at some threshold."""
     now = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
     runs = [{"id": i, "run_started_at": now, "updated_at": now} for i in (1, 2, 3, 4)]
-    artifacts = [_artifact("carbon.v1.3600.2.7168.a", 1), _artifact("carbon.v1.3600.2.7168.b", 2)]
+    artifacts = [_artifact("carbon.v1.3600.2.7168.ubuntu.a", 1), _artifact("carbon.v1.3600.2.7168.ubuntu.b", 2)]
     calls = []
     monkeypatch.setattr(carbon_badge.requests, "get", _serve(artifacts, runs, calls))
 
@@ -355,7 +369,7 @@ def test_full_coverage_costs_no_per_run_calls(monkeypatch):
     """Fully instrumented: zero per-run requests."""
     now = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
     runs = [{"id": i, "run_started_at": now, "updated_at": now} for i in (1, 2, 3)]
-    artifacts = [_artifact(f"carbon.v1.3600.2.7168.j{i}", i) for i in (1, 2, 3)]
+    artifacts = [_artifact(f"carbon.v1.3600.2.7168.ubuntu.j{i}", i) for i in (1, 2, 3)]
     calls = []
     monkeypatch.setattr(carbon_badge.requests, "get", _serve(artifacts, runs, calls))
 
@@ -375,7 +389,7 @@ def test_ignore_self_reported_does_not_consult_artifacts(monkeypatch):
     calls = []
     monkeypatch.setattr(
         carbon_badge.requests, "get",
-        _serve([_artifact("carbon.v1.3600.2.7168.a", 1)], runs, calls),
+        _serve([_artifact("carbon.v1.3600.2.7168.ubuntu.a", 1)], runs, calls),
     )
     carbon_badge.ci_kwh_last_30d("o/r", token=None, use_artifacts=False)
     assert not any("/artifacts" in u for u in calls)
@@ -388,9 +402,9 @@ def test_expired_and_out_of_window_markers_are_ignored(monkeypatch):
     fresh = now.isoformat().replace("+00:00", "Z")
     old = (now - timedelta(days=40)).isoformat().replace("+00:00", "Z")
     artifacts = [
-        _artifact("carbon.v1.3600.2.7168.a", 1, fresh),
-        _artifact("carbon.v1.3600.2.7168.b", 2, old),
-        _artifact("carbon.v1.3600.2.7168.c", 3, fresh, expired=True),
+        _artifact("carbon.v1.3600.2.7168.ubuntu.a", 1, fresh),
+        _artifact("carbon.v1.3600.2.7168.ubuntu.b", 2, old),
+        _artifact("carbon.v1.3600.2.7168.ubuntu.c", 3, fresh, expired=True),
     ]
     monkeypatch.setattr(carbon_badge.requests, "get", _serve(artifacts, [], []))
     by_run, jobs = carbon_badge.artifact_kwh_by_run("o/r", token=None)
@@ -401,7 +415,7 @@ def test_declared_watts_still_beat_the_model(monkeypatch):
     """Someone who knows their hardware's real draw beats a linear model."""
     monkeypatch.setattr(
         carbon_badge.requests, "get",
-        _serve([_artifact("carbon.v1.3600.2.7168.a", 1)], [], []),
+        _serve([_artifact("carbon.v1.3600.2.7168.ubuntu.a", 1)], [], []),
     )
     by_run, _ = carbon_badge.artifact_kwh_by_run(
         "o/r", token=None, runner_watts={carbon_badge.ANY_RUNNER: 200.0}

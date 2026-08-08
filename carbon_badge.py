@@ -322,13 +322,17 @@ def ci_kwh_last_30d(repo, token, api="https://api.github.com", runner_watts=None
 # its listing — so reading a month of exact per-job measurements costs one
 # request per 100 artifacts and downloads nothing.
 #
-#   carbon.v1.<seconds>.<vcpu>.<memMB>.<slug>
+#   carbon.v1.<seconds>.<vcpu>.<memMB>.<platform>.<slug>
+#
+# <platform> is one of the RUNNER_POWER_W keys, because CPU and memory alone do
+# not determine draw: the same 4 vCPU / 16 GiB reading means a very different
+# wattage on Apple silicon than on a shared x86 VM.
 #
 # Versioned because the name is the wire format. Artifact names may not contain
 # " : < > | * ? \ /, which is why the separator is a dot and the job slug is
 # sanitised at the source.
 ARTIFACT_PREFIX = "carbon.v1"
-_ARTIFACT_RE = re.compile(r"^carbon\.v1\.(\d+)\.(\d+)\.(\d+)\.")
+_ARTIFACT_RE = re.compile(r"^carbon\.v1\.(\d+)\.(\d+)\.(\d+)\.([a-z]+)\.")
 
 # Linear model for a self-reported machine, anchored on the same Eco-CI curve:
 # a 4-vCPU / 16 GiB GitHub runner at 8.18 W machine draw x PUE ~= 9.4 W.
@@ -346,13 +350,25 @@ WATTS_PER_VCPU = 1.6
 WATTS_PER_GB = 0.11
 
 
-def watts_from_specs(vcpu, mem_mb):
-    """Power draw from a machine's actual CPU count and memory."""
+def watts_from_specs(vcpu, mem_mb, platform="ubuntu"):
+    """Power draw from a machine's actual CPU count, memory and platform.
+
+    The linear model is fitted to x86 shared VMs and does not transfer. A
+    Mac mini M1 reporting 3 vCPU / 7 GiB comes out at 6.8 W through it, against
+    a measured 15.53 W — so the self-reported path would have been 2.6x *worse*
+    than the label lookup it replaces. Apple silicon is dedicated hardware whose
+    draw does not track a vCPU slice, so it uses the measured figure directly;
+    ARM scales its own baseline rather than borrowing the x86 one.
+    """
+    if platform == "macos":
+        return RUNNER_POWER_W["macos"]
+    if platform == "arm":
+        return RUNNER_POWER_W["arm"] * (vcpu / BASELINE_VCPU)
     return WATTS_BASE + WATTS_PER_VCPU * vcpu + WATTS_PER_GB * (mem_mb / 1024)
 
 
 def parse_carbon_artifact(name):
-    """"carbon.v1.142.2.7168.build" -> (142.0 seconds, 2 vcpu, 7168 MB), or None.
+    """"carbon.v1.142.4.16384.ubuntu.build" -> (142.0 s, 4 vcpu, 16384 MB, "ubuntu").
 
     None for anything that is not one of ours, so a repo's normal build
     artifacts sitting in the same listing are simply ignored.
@@ -360,8 +376,8 @@ def parse_carbon_artifact(name):
     match = _ARTIFACT_RE.match(name or "")
     if not match:
         return None
-    seconds, vcpu, mem_mb = (int(g) for g in match.groups())
-    return (float(seconds), vcpu, mem_mb)
+    seconds, vcpu, mem_mb, platform = match.groups()
+    return (float(seconds), int(vcpu), int(mem_mb), platform)
 
 
 def list_artifacts(repo, token, api="https://api.github.com"):
@@ -407,10 +423,10 @@ def artifact_kwh_by_run(repo, token, api="https://api.github.com", runner_watts=
         run_id = (artifact.get("workflow_run") or {}).get("id")
         if run_id is None:
             continue
-        seconds, vcpu, mem_mb = parsed
+        seconds, vcpu, mem_mb, platform = parsed
         # A declared figure still wins: someone who knows their hardware's real
         # draw beats a linear model of it.
-        watts = blanket if blanket else watts_from_specs(vcpu, mem_mb)
+        watts = blanket if blanket else watts_from_specs(vcpu, mem_mb, platform)
         by_run[run_id] = by_run.get(run_id, 0.0) + (seconds / 3600) * watts / 1000
         jobs += 1
     return by_run, jobs

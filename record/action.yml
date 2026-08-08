@@ -6,11 +6,6 @@ description: >-
 author: 'Fabio Cicerchia'
 
 inputs:
-  index:
-    description: >-
-      Disambiguator when one job key produces several jobs. Artifact names must
-      be unique within a run, so a matrix must pass ${{ strategy.job-index }}.
-    default: '0'
   retention-days:
     description: >-
       How long the marker survives. Must exceed the 30-day window the badge
