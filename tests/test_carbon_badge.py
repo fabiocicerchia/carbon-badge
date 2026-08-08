@@ -164,6 +164,30 @@ def _usage(kwh, measured_jobs=0, total_jobs=0, measured_kwh=0.0, guessed_kwh=0.0
     return carbon_badge.CiUsage(kwh, measured_jobs, total_jobs, measured_kwh, guessed_kwh)
 
 
+def test_pagination_cap_is_reported_not_silent(monkeypatch, capsys):
+    """A cap that silently drops runs understates the badge and reads as a
+    quiet month. Same reasoning as the closed-PR search cap."""
+    full_page = [{"id": i, "run_started_at": None, "updated_at": None} for i in range(100)]
+
+    def fake_get(url, params=None, headers=None, timeout=None):
+        return _FakeResponse({"workflow_runs": full_page, "total_count": 9999})
+
+    monkeypatch.setattr(carbon_badge.requests, "get", fake_get)
+    runs = carbon_badge._list_runs("o/r", None, "https://api.github.com", "2026-07-09")
+    err = capsys.readouterr().err
+    assert len(runs) == 100 * carbon_badge._MAX_PAGES
+    assert "undercount" in err and "9999" in err
+
+
+def test_no_warning_when_everything_was_read(monkeypatch, capsys):
+    def fake_get(url, params=None, headers=None, timeout=None):
+        return _FakeResponse({"workflow_runs": [{"id": 1}], "total_count": 1})
+
+    monkeypatch.setattr(carbon_badge.requests, "get", fake_get)
+    carbon_badge._list_runs("o/r", None, "https://api.github.com", "2026-07-09")
+    assert "undercount" not in capsys.readouterr().err
+
+
 def test_confidence_is_driven_by_energy_not_job_count():
     """One long job on an unknown runner undermines the total more than a dozen
     short known ones, so the score weighs energy."""

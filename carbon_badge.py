@@ -206,11 +206,28 @@ def run_jobs(run_id, repo, token, api="https://api.github.com"):
     return r.json().get("jobs", [])
 
 
+# Pagination backstop. Generous — a repo doing more than this in 30 days is
+# unusual — but a cap that silently drops data would read as a quiet month
+# rather than a truncated query, so hitting it is always reported.
+_MAX_PAGES = 20
+
+
+def _warn_if_truncated(kind, fetched, total):
+    """A silent cap understates the badge and looks like good news."""
+    if total is not None and fetched < total:
+        print(
+            f"carbon-badge: only read {fetched} of {total} {kind}(s) — hit the "
+            f"{_MAX_PAGES}-page cap, so the figure is an undercount. Narrow the "
+            "window or raise _MAX_PAGES.",
+            file=sys.stderr,
+        )
+
+
 def _list_runs(repo, token, api, since):
     """Every run in the window — cheap, 100 per request."""
     headers = {"Authorization": f"Bearer {token}"} if token else {}
-    runs, page = [], 1
-    while page <= 10:  # cap pagination defensively
+    runs, page, total = [], 1, None
+    while page <= _MAX_PAGES:
         r = requests.get(
             f"{api}/repos/{repo}/actions/runs",
             params={"per_page": 100, "page": page, "created": f">={since}"},
@@ -218,13 +235,16 @@ def _list_runs(repo, token, api, since):
             timeout=30,
         )
         r.raise_for_status()
-        batch = r.json().get("workflow_runs", [])
+        payload = r.json()
+        total = payload.get("total_count", total)
+        batch = payload.get("workflow_runs", [])
         runs.extend(batch)
         # A short page is the last page — stop rather than spend a request
         # confirming the next one is empty.
         if len(batch) < 100:
             break
         page += 1
+    _warn_if_truncated("run", len(runs), total)
     return runs
 
 
@@ -383,8 +403,8 @@ def parse_carbon_artifact(name):
 def list_artifacts(repo, token, api="https://api.github.com"):
     """Every non-expired artifact, 100 per request."""
     headers = {"Authorization": f"Bearer {token}"} if token else {}
-    artifacts, page = [], 1
-    while page <= 20:  # 2000 artifacts is far past any sane 30-day window
+    artifacts, page, total = [], 1, None
+    while page <= _MAX_PAGES:
         r = requests.get(
             f"{api}/repos/{repo}/actions/artifacts",
             params={"per_page": 100, "page": page},
@@ -392,11 +412,14 @@ def list_artifacts(repo, token, api="https://api.github.com"):
             timeout=30,
         )
         r.raise_for_status()
-        batch = r.json().get("artifacts", [])
+        payload = r.json()
+        total = payload.get("total_count", total)
+        batch = payload.get("artifacts", [])
         artifacts.extend(batch)
         if len(batch) < 100:  # short page = last page
             break
         page += 1
+    _warn_if_truncated("artifact", len(artifacts), total)
     return artifacts
 
 
