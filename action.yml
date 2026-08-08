@@ -37,6 +37,12 @@ inputs:
       detected, only declared. Undeclared runners are charged at the ubuntu
       baseline and warned about in the log.
     default: ''
+  eia-key:
+    description: >-
+      EIA API key, free from eia.gov/opendata, to price US regions from their
+      balancing authority's live fuel mix. European and UK regions are priced
+      live with no key at all; without this, US regions use an annual average.
+    default: ''
   minutes:
     description: 'skip the API and use this many CI minutes (testing/offline)'
     default: ''
@@ -78,6 +84,7 @@ runs:
         CB_GRID_INTENSITY: ${{ inputs.grid-intensity }}
         CB_GRID_REGION: ${{ inputs.grid-region }}
         CB_ELECTRICITYMAPS_TOKEN: ${{ inputs.electricitymaps-token }}
+        CB_EIA_KEY: ${{ inputs.eia-key }}
         CB_MINUTES: ${{ inputs.minutes }}
         CB_RUNNER_WATTS: ${{ inputs.runner-watts }}
         CB_OUTPUT: ${{ inputs.output-path }}
@@ -92,6 +99,7 @@ runs:
         [[ -n "$CB_GRID_INTENSITY" ]] && args+=(--grid-intensity "$CB_GRID_INTENSITY")
         [[ -n "$CB_GRID_REGION" ]] && args+=(--grid-region "$CB_GRID_REGION")
         [[ -n "$CB_ELECTRICITYMAPS_TOKEN" ]] && args+=(--electricitymaps-token "$CB_ELECTRICITYMAPS_TOKEN")
+        [[ -n "$CB_EIA_KEY" ]] && args+=(--eia-key "$CB_EIA_KEY")
         [[ -n "$CB_MINUTES" ]] && args+=(--minutes "$CB_MINUTES")
         carbon-badge "${args[@]}" > "$CB_OUTPUT"
         {

@@ -412,6 +412,7 @@ def ci_kwh_last_30d(
     runner_watts=None,
     use_artifacts=True,
     grid_override=None,
+    eia_key=None,
 ):
     """kWh across the last 30 days of runs: one API call per run, summing each
     job at its own runner's power draw.
@@ -431,6 +432,7 @@ def ci_kwh_last_30d(
     since = (datetime.now(timezone.utc) - timedelta(days=30)).isoformat()
     runs = _list_runs(repo, token, api, since)
     undeclared = {}
+    factor_for = region_factor_resolver(eia_key=eia_key, override=grid_override)
 
     # Runs whose jobs reported themselves are already measured — exactly, and
     # for free. Only the rest need a request each. Instrumentation therefore
@@ -439,15 +441,16 @@ def ci_kwh_last_30d(
     # answer stays correct the whole way through.
     by_run = {}
     if use_artifacts:
-        by_run, _ = artifact_kwh_by_run(repo, token, api, runner_watts, grid_override)
+        by_run, _ = artifact_kwh_by_run(repo, token, api, runner_watts, factor_for)
     # How many markers a fully instrumented run of each workflow should have.
     expected = _expected_markers(runs, by_run, repo, token, api) if by_run else {}
 
     kwh, grams, total_jobs, used_markers = 0.0, 0.0, 0, 0
     measured_kwh, guessed_kwh = 0.0, 0.0
     # A run priced from the API reports no region, so it takes the repo-level
-    # factor. A partly instrumented repo therefore mixes region-accurate and
-    # world-average pricing, which is still strictly better than all-average.
+    # factor: no region to look up means no provider to ask. A partly
+    # instrumented repo therefore mixes live-per-region and world-average
+    # pricing, which is still strictly better than all-average.
     api_factor = grid_factor_for(None, grid_override)
     for run in runs:
         entry = by_run.get(run.get("id"))
@@ -489,6 +492,193 @@ def ci_kwh_last_30d(
     # used_markers, not every marker read: markers from runs outside the window,
     # or from runs that turned out to be partial, are not part of this figure.
     return CiUsage(kwh, grams, used_markers, total_jobs, measured_kwh, guessed_kwh)
+
+
+# --------------------------------------------------------------------------
+# Live grid factors.
+#
+# The static table above is an annual average. Real grids swing several times
+# over within a day — Germany ran 146 to 634 gCO2eq/kWh in one measured day —
+# so a live figure is worth far more than any refinement to the wattages.
+#
+# Three providers, tried in order of how much they cost the user:
+#
+#   energy-charts.info   no key at all, 15-min, absolute      much of Europe
+#   carbonintensity.org.uk  no key at all, 30-min, absolute   Great Britain
+#   EIA                  free key, hourly, fuel mix           United States
+#
+# Electricity Maps is deliberately not in this chain. Its free tier is one zone
+# at 50 requests/hour and non-commercial, which cannot serve CI that lands in a
+# different region run to run; --grid-region still uses it for anyone on a paid
+# plan, and an explicit --grid-intensity still overrides everything.
+# --------------------------------------------------------------------------
+
+# Azure region -> energy-charts country code. Only regions that provider covers
+# appear; anything else falls through to the next provider or the table.
+_REGION_ENERGY_CHARTS = {
+    "germanywestcentral": "de",
+    "francecentral": "fr",
+    "francesouth": "fr",
+    "italynorth": "it",
+    "polandcentral": "pl",
+    "spaincentral": "es",
+    "westeurope": "nl",
+    "norwayeast": "no",
+    "norwaywest": "no",
+}
+_REGION_UK = {"uksouth", "ukwest"}
+
+# Azure region -> EIA balancing authority. The grid a datacentre draws from is
+# the balancing authority for its location, not the state.
+_REGION_EIA_BA = {
+    "eastus": "PJM",
+    "eastus2": "PJM",
+    "northcentralus": "PJM",  # northern Illinois is ComEd, inside PJM
+    "centralus": "MISO",  # Iowa
+    "southcentralus": "ERCO",  # Texas
+    "westus": "CISO",  # California
+    "westus2": "BPAT",  # Washington, Bonneville
+    "westus3": "AZPS",  # Arizona
+}
+
+# Lifecycle emission factors, gCO2e/kWh, IPCC AR5 Annex III medians. Lifecycle
+# rather than combustion-only, to match how Electricity Maps and the static
+# table above are expressed — mixing the two would understate renewables.
+# https://www.ipcc.ch/site/assets/uploads/2018/02/ipcc_wg3_ar5_annex-iii.pdf
+IPCC_FUEL_G_PER_KWH = {
+    "COL": 820.0,  # coal
+    "NG": 490.0,  # natural gas, combined cycle
+    "OIL": 650.0,  # not in AR5; between coal and gas, commonly cited
+    "NUC": 12.0,
+    "WAT": 24.0,  # hydro
+    "WND": 11.0,  # onshore wind
+    "SUN": 45.0,  # utility solar PV
+    "GEO": 38.0,
+    "BIO": 230.0,
+    "OTH": 490.0,  # unknown mix; gas is the least-bad neutral guess
+}
+
+
+def _energy_charts_factor(country, get=requests.get):
+    """Latest absolute gCO2eq/kWh from Fraunhofer ISE. No key, 15-minute data."""
+    r = get(
+        "https://api.energy-charts.info/co2eq",
+        params={"country": country},
+        timeout=20,
+    )
+    r.raise_for_status()
+    values = [v for v in (r.json().get("co2eq") or []) if v is not None]
+    return float(values[-1]) if values else None
+
+
+def _uk_factor(get=requests.get):
+    """Great Britain, from NESO. No key, half-hourly."""
+    r = get("https://api.carbonintensity.org.uk/intensity", timeout=20)
+    r.raise_for_status()
+    entry = (r.json().get("data") or [{}])[0].get("intensity", {})
+    value = entry.get("actual")
+    if value is None:
+        value = entry.get("forecast")  # the current half-hour is not settled yet
+    return float(value) if value is not None else None
+
+
+def _eia_factor(balancing_authority, api_key, get=requests.get):
+    """US, computed from the balancing authority's fuel mix.
+
+    EIA publishes generation by fuel type, not carbon intensity, so this is the
+    one provider where the number is ours: generation-weighted IPCC lifecycle
+    factors over the most recent hour. Documented in docs/assumptions.md,
+    because it is a model rather than a measurement.
+    """
+    r = get(
+        "https://api.eia.gov/v2/electricity/rto/fuel-type-data/data/",
+        params={
+            "api_key": api_key,
+            "frequency": "hourly",
+            "data[0]": "value",
+            "facets[respondent][]": balancing_authority,
+            "sort[0][column]": "period",
+            "sort[0][direction]": "desc",
+            "length": 40,
+        },
+        timeout=25,
+    )
+    r.raise_for_status()
+    rows = r.json().get("response", {}).get("data", [])
+    if not rows:
+        return None
+
+    # Only the newest hour present, so a partially reported hour cannot mix
+    # with the one before it.
+    newest = rows[0].get("period")
+    mwh, grams = 0.0, 0.0
+    for row in rows:
+        if row.get("period") != newest:
+            continue
+        try:
+            value = float(row.get("value") or 0)
+        except (TypeError, ValueError):
+            continue
+        if value <= 0:  # net-negative rows are storage discharge accounting
+            continue
+        factor = IPCC_FUEL_G_PER_KWH.get(row.get("fueltype"))
+        if factor is None:
+            continue
+        mwh += value
+        grams += value * factor
+    return grams / mwh if mwh else None
+
+
+def live_region_factor(region, eia_key=None, get=requests.get):
+    """A live gCO2e/kWh for an Azure region, or None if nothing covers it.
+
+    Never raises: a grid lookup failing must not fail a badge refresh. Every
+    failure is reported, because silently falling back to an annual average
+    while claiming live data would be worse than not trying.
+    """
+    if not region:
+        return None
+    try:
+        if region in _REGION_UK:
+            return _uk_factor(get=get)
+        country = _REGION_ENERGY_CHARTS.get(region)
+        if country:
+            return _energy_charts_factor(country, get=get)
+        ba = _REGION_EIA_BA.get(region)
+        if ba and eia_key:
+            return _eia_factor(ba, eia_key, get=get)
+    except Exception as exc:
+        print(
+            f"carbon-badge: live grid lookup failed for {region} ({exc}); "
+            "using the annual average for that region",
+            file=sys.stderr,
+        )
+    return None
+
+
+def region_factor_resolver(eia_key=None, override=None, get=requests.get):
+    """Memoised region -> factor, so each distinct region costs one request.
+
+    A month of runs touches a handful of regions, so this is a few calls per
+    refresh, not one per job.
+    """
+    cache = {}
+
+    def resolve(region):
+        if override is not None:
+            return override
+        if region not in cache:
+            live = live_region_factor(region, eia_key=eia_key, get=get)
+            if live is not None:
+                print(
+                    f"carbon-badge: {region} live at {live:.0f} gCO2e/kWh "
+                    f"(annual average is {grid_factor_for(region):.0f})",
+                    file=sys.stderr,
+                )
+            cache[region] = live if live is not None else grid_factor_for(region)
+        return cache[region]
+
+    return resolve
 
 
 # Jobs self-report into an artifact *name*, which the artifacts API returns in
@@ -634,7 +824,7 @@ def _expected_markers(runs, by_run, repo, token, api):
 
 
 def artifact_kwh_by_run(
-    repo, token, api="https://api.github.com", runner_watts=None, grid_override=None
+    repo, token, api="https://api.github.com", runner_watts=None, factor_for=None
 ):
     """{run_id: (kWh, grams, marker_count)} for runs whose jobs recorded themselves.
 
@@ -667,7 +857,7 @@ def artifact_kwh_by_run(
         # runners across regions whose factors differ by ~25x, so this is the
         # largest correction available and it costs nothing — the region came
         # in on the marker.
-        job_g = job_kwh * grid_factor_for(region, grid_override)
+        job_g = job_kwh * (factor_for(region) if factor_for else grid_factor_for(region))
         kwh, grams, count = by_run.get(run_id, (0.0, 0.0, 0))
         by_run[run_id] = (kwh + job_kwh, grams + job_g, count + 1)
         jobs += 1
@@ -954,6 +1144,7 @@ def estimate(args, token):
             runner_watts=runner_watts,
             use_artifacts=not getattr(args, "ignore_self_reported", False),
             grid_override=grid_intensity,
+            eia_key=getattr(args, "eia_key", None) or os.environ.get("EIA_API_KEY"),
         )
         grams = usage.grams
         level = confidence(usage)
@@ -1072,6 +1263,15 @@ def main(argv=None):
             "repeatable, is only needed if you mix runner types. The API "
             "exposes no CPU/memory for any runner, so size cannot be detected, "
             "only declared"
+        ),
+    )
+    p.add_argument(
+        "--eia-key",
+        default=None,
+        help=(
+            "EIA API key (or EIA_API_KEY env) to price US regions from their "
+            "balancing authority's live fuel mix. Free from "
+            "eia.gov/opendata. European and UK regions need no key at all"
         ),
     )
     p.add_argument(

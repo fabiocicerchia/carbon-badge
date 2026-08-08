@@ -125,6 +125,47 @@ time-of-day bias, which was the part that moved the number for no reason. If
 history is unavailable for your zone or plan, it falls back to the
 instantaneous reading and says so in the log.
 
+## Live grid factors
+
+The table above is an annual average. Real grids move several times over inside
+a day — Germany measured 146 to 634 gCO2eq/kWh across one day — so a live
+figure is worth far more than any refinement to the wattages. Where a free
+source exists for a region, it is used automatically.
+
+| provider | key | resolution | covers |
+|---|---|---|---|
+| [energy-charts.info](https://api.energy-charts.info) (Fraunhofer ISE) | **none** | 15 min | de fr it pl es nl at cz gr hu no |
+| [carbonintensity.org.uk](https://carbonintensity.org.uk) (NESO) | **none** | 30 min | Great Britain |
+| [EIA](https://www.eia.gov/opendata/) | free, register | hourly | United States |
+| Electricity Maps | paid | 5 min | everywhere |
+
+Precedence: an explicit `--grid-intensity` or `--grid-region` beats everything,
+then a live provider for the job's region, then the annual average. One request
+per distinct region per refresh, memoised — not one per job. A provider that
+fails is reported and the annual average used; a grid lookup must never fail a
+badge refresh.
+
+### The US number is a model, not a measurement
+
+EIA publishes **generation by fuel type**, not carbon intensity, so for US
+regions this tool computes it: generation-weighted
+[IPCC AR5 Annex III](https://www.ipcc.ch/site/assets/uploads/2018/02/ipcc_wg3_ar5_annex-iii.pdf)
+lifecycle medians over the most recent hour, for the region's balancing
+authority. Lifecycle rather than combustion-only, to match how the other
+sources express themselves — mixing the two would understate renewables.
+
+That makes it the one figure here derived rather than sourced. The fuel factors
+are cited and the arithmetic is a weighted mean, but the choice of factors is
+ours.
+
+### Why Electricity Maps is not in the free chain
+
+Its free tier is **one zone, 50 requests/hour, non-commercial**. GitHub places
+runners in a different region run to run, so a single zone cannot serve them,
+and most repos this measures are commercial. Their newer Carbon Intensity Level
+API is free for all zones but returns `high`/`moderate`/`low` rather than a
+number. `--grid-region` still uses Electricity Maps for anyone on a paid plan.
+
 ## Why there is no red-amber-green scale
 
 The badge reports a value and passes no verdict, and that is deliberate.
