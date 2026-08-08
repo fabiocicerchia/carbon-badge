@@ -90,9 +90,7 @@ DEFAULT_RUNNER_POWER_W = RUNNER_POWER_W["ubuntu"]
 # What a pass measured, and how much of it came from jobs that reported
 # themselves. The badge shows the ratio so a reader can tell a fully measured
 # figure from a partly inferred one.
-CiUsage = namedtuple(
-    "CiUsage", "kwh measured_jobs total_jobs measured_kwh guessed_kwh"
-)
+CiUsage = namedtuple("CiUsage", "kwh measured_jobs total_jobs measured_kwh guessed_kwh")
 
 THRESHOLDS = [  # gCO2e/month -> badge color
     (100, "brightgreen"),
@@ -178,11 +176,7 @@ def runner_power_w(labels, overrides=None):
             if key in _NO_CORE_SCALING:
                 return watts
             cores = next(
-                (
-                    int(m.group(1))
-                    for label in labels_lower
-                    if (m := _CORES_RE.search(label))
-                ),
+                (int(m.group(1)) for label in labels_lower if (m := _CORES_RE.search(label))),
                 None,
             )
             # Scaled off BASELINE_VCPU, not a hardcoded 2: the figures above
@@ -205,9 +199,23 @@ def _hours(start, end):
 def run_jobs(run_id, repo, token, api="https://api.github.com"):
     """Fetch the jobs (with per-job runner labels/timing) for one run."""
     headers = {"Authorization": f"Bearer {token}"} if token else {}
-    r = requests.get(f"{api}/repos/{repo}/actions/runs/{run_id}/jobs", headers=headers, timeout=30)
-    r.raise_for_status()
-    return r.json().get("jobs", [])
+    # per_page=100, not the API's default of 30: a matrix wider than 30 jobs
+    # was silently truncated, and this now also feeds the confidence ratio.
+    jobs, page = [], 1
+    while page <= _MAX_PAGES:
+        r = requests.get(
+            f"{api}/repos/{repo}/actions/runs/{run_id}/jobs",
+            params={"per_page": 100, "page": page},
+            headers=headers,
+            timeout=30,
+        )
+        r.raise_for_status()
+        batch = r.json().get("jobs", [])
+        jobs.extend(batch)
+        if len(batch) < 100:
+            break
+        page += 1
+    return jobs
 
 
 # Pagination backstop. Generous — a repo doing more than this in 30 days is
@@ -216,15 +224,26 @@ def run_jobs(run_id, repo, token, api="https://api.github.com"):
 _MAX_PAGES = 20
 
 
-def _warn_if_truncated(kind, fetched, total):
-    """A silent cap understates the badge and looks like good news."""
-    if total is not None and fetched < total:
-        print(
-            f"carbon-badge: only read {fetched} of {total} {kind}(s) — hit the "
-            f"{_MAX_PAGES}-page cap, so the figure is an undercount. Narrow the "
-            "window or raise _MAX_PAGES.",
-            file=sys.stderr,
-        )
+def _warn_if_truncated(kind, fetched, total, hit_page_cap):
+    """A silent shortfall understates the badge and looks like good news.
+
+    Two different ceilings can cause it and they need different advice: our own
+    page cap, which raising _MAX_PAGES fixes, and GitHub's hard 1000-result
+    limit on a listing, which it does not.
+    """
+    if total is None or fetched >= total:
+        return
+    cause = (
+        f"hit the local {_MAX_PAGES}-page cap, so raising _MAX_PAGES would help"
+        if hit_page_cap
+        else "GitHub caps this listing at 1000 results; a narrower window is the "
+        "only way to see the rest"
+    )
+    print(
+        f"carbon-badge: only read {fetched} of {total} {kind}(s) — {cause}. "
+        "The figure is an undercount.",
+        file=sys.stderr,
+    )
 
 
 def _list_runs(repo, token, api, since):
@@ -248,7 +267,7 @@ def _list_runs(repo, token, api, since):
         if len(batch) < 100:
             break
         page += 1
-    _warn_if_truncated("run", len(runs), total)
+    _warn_if_truncated("run", len(runs), total, page > _MAX_PAGES)
     return runs
 
 
@@ -285,8 +304,9 @@ def _run_kwh(run, repo, token, api, runner_watts, undeclared):
     return kwh, jobs, guessed_kwh
 
 
-def ci_kwh_last_30d(repo, token, api="https://api.github.com", runner_watts=None,
-                    use_artifacts=True):
+def ci_kwh_last_30d(
+    repo, token, api="https://api.github.com", runner_watts=None, use_artifacts=True
+):
     """kWh across the last 30 days of runs: one API call per run, summing each
     job at its own runner's power draw.
 
@@ -311,26 +331,26 @@ def ci_kwh_last_30d(repo, token, api="https://api.github.com", runner_watts=None
     # pays off from the very first workflow file rather than at some threshold:
     # every job you add removes a request from next week's refresh, and the
     # answer stays correct the whole way through.
-    by_run, measured_jobs = {}, 0
+    by_run = {}
     if use_artifacts:
-        by_run, measured_jobs = artifact_kwh_by_run(repo, token, api, runner_watts)
-        jobs = measured_jobs
-        if by_run:
-            covered = sum(1 for r in runs if r.get("id") in by_run)
-            print(
-                f"carbon-badge: {covered}/{len(runs)} run(s) self-reported "
-                f"({jobs} job marker(s)); {len(runs) - covered} still need an API "
-                "call. Instrument the remaining workflows to shrink that.",
-                file=sys.stderr,
-            )
+        by_run, _ = artifact_kwh_by_run(repo, token, api, runner_watts)
+    # How many markers a fully instrumented run of each workflow should have.
+    expected = _expected_markers(runs, by_run, repo, token, api) if by_run else {}
 
-    kwh, total_jobs = 0.0, measured_jobs
+    kwh, total_jobs, used_markers = 0.0, 0, 0
     measured_kwh, guessed_kwh = 0.0, 0.0
     for run in runs:
-        measured = by_run.get(run.get("id"))
-        if measured is not None:
-            kwh += measured
-            measured_kwh += measured
+        entry = by_run.get(run.get("id"))
+        want = expected.get(run.get("workflow_id"), 0)
+        # Trust a run only when it reported every job. A short count means
+        # instrumentation is still landing on that workflow, so the markers are
+        # discarded and the API priced for the whole run — adding them would
+        # double-count the jobs that did report.
+        if entry is not None and entry[1] >= want:
+            kwh += entry[0]
+            measured_kwh += entry[0]
+            used_markers += entry[1]
+            total_jobs += entry[1]
         else:
             run_kwh, run_jobs_seen, run_guessed = _run_kwh(
                 run, repo, token, api, runner_watts, undeclared
@@ -338,8 +358,25 @@ def ci_kwh_last_30d(repo, token, api="https://api.github.com", runner_watts=None
             kwh += run_kwh
             guessed_kwh += run_guessed
             total_jobs += run_jobs_seen
+    if by_run:
+        # Counted after the completeness check, not before: a run with a marker
+        # is not necessarily a run we could use, and saying otherwise reported
+        # full coverage on a half-instrumented workflow.
+        trusted = sum(
+            1
+            for r in runs
+            if (e := by_run.get(r.get("id"))) and e[1] >= expected.get(r.get("workflow_id"), 0)
+        )
+        print(
+            f"carbon-badge: {trusted}/{len(runs)} run(s) fully self-reported; "
+            f"{len(runs) - trusted} priced from the API. Instrument the remaining "
+            "jobs to shrink that.",
+            file=sys.stderr,
+        )
     _warn_undeclared_runners(undeclared)
-    return CiUsage(kwh, measured_jobs, total_jobs, measured_kwh, guessed_kwh)
+    # used_markers, not every marker read: markers from runs outside the window,
+    # or from runs that turned out to be partial, are not part of this figure.
+    return CiUsage(kwh, used_markers, total_jobs, measured_kwh, guessed_kwh)
 
 
 # Jobs self-report into an artifact *name*, which the artifacts API returns in
@@ -391,7 +428,7 @@ def watts_from_specs(vcpu, mem_mb, platform="ubuntu"):
 
 
 def parse_carbon_artifact(name):
-    """"carbon.v1.142.4.16384.ubuntu.build" -> (142.0 s, 4 vcpu, 16384 MB, "ubuntu").
+    """ "carbon.v1.142.4.16384.ubuntu.build" -> (142.0 s, 4 vcpu, 16384 MB, "ubuntu").
 
     None for anything that is not one of ours, so a repo's normal build
     artifacts sitting in the same listing are simply ignored.
@@ -422,12 +459,36 @@ def list_artifacts(repo, token, api="https://api.github.com"):
         if len(batch) < 100:  # short page = last page
             break
         page += 1
-    _warn_if_truncated("artifact", len(artifacts), total)
+    _warn_if_truncated("artifact", len(artifacts), total, page > _MAX_PAGES)
     return artifacts
 
 
+def _expected_markers(runs, by_run, repo, token, api):
+    """True job count per workflow, sampled from one run of each.
+
+    Needed because a marker only proves *a* job reported, not that all of them
+    did. Without a denominator, a run where one job of ten is instrumented
+    looks complete and the other nine count as zero energy. One API call per
+    instrumented workflow buys the denominator; in steady state that is a
+    handful of calls against the hundreds it saves.
+    """
+    expected, seen = {}, set()
+    for run in runs:
+        wf = run.get("workflow_id")
+        if wf in seen or run.get("id") not in by_run:
+            continue
+        seen.add(wf)
+        try:
+            expected[wf] = len(run_jobs(run["id"], repo, token, api))
+        except Exception:
+            # Unreachable sample: fall back to the most complete run observed,
+            # which is still better than trusting a single marker.
+            expected[wf] = max(n for _, n in by_run.values())
+    return expected
+
+
 def artifact_kwh_by_run(repo, token, api="https://api.github.com", runner_watts=None):
-    """{run_id: kWh} for every run whose jobs recorded themselves.
+    """{run_id: (kWh, marker_count)} for every run whose jobs recorded themselves.
 
     Keyed by run because instrumentation arrives one workflow file at a time,
     so the answer is almost never "all" or "none" — it is "these runs, not
@@ -453,7 +514,8 @@ def artifact_kwh_by_run(repo, token, api="https://api.github.com", runner_watts=
         # A declared figure still wins: someone who knows their hardware's real
         # draw beats a linear model of it.
         watts = blanket if blanket else watts_from_specs(vcpu, mem_mb, platform)
-        by_run[run_id] = by_run.get(run_id, 0.0) + (seconds / 3600) * watts / 1000
+        kwh, count = by_run.get(run_id, (0.0, 0))
+        by_run[run_id] = (kwh + (seconds / 3600) * watts / 1000, count + 1)
         jobs += 1
     return by_run, jobs
 
@@ -462,10 +524,22 @@ def _warn_undeclared_runners(undeclared):
     """Name the labels, not just a count — the label *is* the fix, since it's
     what the user passes back in --runner-watts."""
     for labels, count in sorted(undeclared.items(), key=lambda kv: -kv[1]):
+        # Only suggest a label we can actually build a flag from. The
+        # placeholders used when a job has none ("(no labels)") produced
+        # `--runner-watts '(self-managed=<watts>'`, which parse_runner_watts
+        # rejects — a fix-it message that hands over a broken command is worse
+        # than one that admits it cannot.
+        first = labels.split(",")[0]
+        usable = first and not first.startswith("(")
+        remedy = (
+            f"pass --runner-watts '{first}=<watts>' to price it"
+            if usable
+            else "give it a label, or set a blanket --runner-watts <watts>"
+        )
         print(
             f"carbon-badge: {count} job(s) on unrecognised runner "
             f"'{labels}' charged at the {DEFAULT_RUNNER_POWER_W} W baseline; "
-            f"pass --runner-watts '{labels.split(',')[0]}=<watts>' to price it",
+            f"{remedy}",
             file=sys.stderr,
         )
 
@@ -523,7 +597,10 @@ def gitlab_kwh_last_30d(project, token, api="https://gitlab.com/api/v4", runner_
             tags = list(job.get("tag_list") or [])
             if runner.get("description"):
                 tags.append(runner["description"])
-            watts = runner_power_w(tags, runner_watts) if tags else None
+            # No `if tags` guard: an untagged job is the common GitLab case,
+            # and runner_power_w([], {"*": 180}) already resolves the blanket
+            # figure. Guarding on tags skipped it entirely.
+            watts = runner_power_w(tags, runner_watts)
             guessed = watts is None
             if guessed:
                 watts = DEFAULT_RUNNER_POWER_W

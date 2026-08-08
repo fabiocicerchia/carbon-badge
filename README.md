@@ -7,10 +7,11 @@
 [![CI carbon](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/fabiocicerchia/carbon-badge/gh-pages/badge.json)](.github/workflows/carbon-badge.yml)
 [![Release](https://img.shields.io/github/v/release/fabiocicerchia/carbon-badge)](https://github.com/fabiocicerchia/carbon-badge/releases)
 
-A **Shields-style README badge for your repo's CI carbon footprint**. Reads
-30 days of GitHub Actions runs, converts runner-minutes to gCO2e with
-documented assumptions, and emits Shields.io endpoint JSON. The same pattern
-as Badge Poser — for sustainability.
+A **Shields-style README badge for your repo's CI carbon footprint**. Sums 30
+days of per-job runtime, prices each job at its runner's power draw, and emits
+Shields.io endpoint JSON — with every assumption documented and the badge
+itself saying how the figure was arrived at. The same pattern as Badge Poser —
+for sustainability.
 
 ![example](https://img.shields.io/badge/CI%20carbon-1.2%20kgCO2e%2Fmo-green)
 
@@ -68,9 +69,9 @@ Nine two-minute `ubuntu-latest` jobs plus one ten-hour job on an unrecognised
 `my-builder`:
 
 ```
-                nine short jobs        the long one              total
-guessed    0.3 h total × 12.5 W  +  10 h × 12.5 W  =  129 Wh  ->   62 gCO2e/mo  (brightgreen)
-declared   0.3 h total × 12.5 W  +  10 h × 180  W  = 1804 Wh  ->  866 gCO2e/mo  (yellow)
+                nine short jobs       the long one              total
+guessed    0.3 h total × 9.4 W  +  10 h × 9.4 W  =   97 Wh  ->   46 gCO2e/mo  (brightgreen)
+declared   0.3 h total × 9.4 W  +  10 h × 180 W  = 1803 Wh  ->  865 gCO2e/mo  (yellow)
 ```
 
 Same CI, 14× apart, **two colour bands** apart. The fallback is not a small

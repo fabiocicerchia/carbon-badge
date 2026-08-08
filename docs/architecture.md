@@ -5,14 +5,17 @@ carbon-badge is a single module (`carbon_badge.py`) with a small CLI.
 ## Overview
 
 ```
-runs (30d) → runner-minutes → kWh (12.5 W, PUE incl.) → gCO2e (grid factor) → badge JSON
+runs (30d) → per-job seconds (self-reported, else API) → kWh (per-runner W × PUE)
+  → gCO2e (grid factor) → badge JSON
 ```
 
 ## Components
 
 - **GitHub Actions client** — pages the workflow-runs API for the last 30 days
   and sums runner-minutes.
-- **Estimate model** — `KWH_PER_RUNNER_MINUTE` (12.5 W average draw incl. PUE)
+- **Estimate model** — `RUNNER_POWER_W` per runner type × `PUE`, or
+  `watts_from_specs()` for a job that reported its own CPU and memory.
+  Every figure and its source is in [assumptions.md](assumptions.md)
   times a grid-intensity factor (default 480 gCO2e/kWh, world average;
   override with `--grid-intensity`).
 - **Badge renderer** — maps the monthly gCO2e total to a color band and emits
@@ -29,7 +32,8 @@ runs (30d) → runner-minutes → kWh (12.5 W, PUE incl.) → gCO2e (grid factor
 ## How the estimate works
 
 ```
-runs (30d) → runner-minutes → kWh (12.5 W, PUE incl.) → gCO2e (grid factor)
+runs (30d) → per-job seconds (self-reported, else API) → kWh (per-runner W × PUE)
+  → gCO2e (grid factor)
 ```
 
 Defaults: world-average grid intensity (480 gCO2e/kWh); override with

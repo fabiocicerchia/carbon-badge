@@ -73,30 +73,33 @@ See all inputs/outputs in [`action.yml`](../action.yml); full example workflow
 
 ### Letting jobs measure themselves (recommended)
 
-Add two steps to a job and it records its own duration and the machine's real
-CPU and memory, so the weekly refresh reads a month of exact measurements
-without one API call per run:
+Add one step to a job and it records its own duration and the machine's real
+CPU and memory, so the refresh reads a month of exact measurements instead of
+querying every run:
 
 ```yaml
 jobs:
   build:
     steps:
-      - uses: fabiocicerchia/carbon-badge/record-start@v1
+      - uses: fabiocicerchia/carbon-badge/record@v1
       # ... the job's real steps ...
-      - uses: fabiocicerchia/carbon-badge/record-end@v1
-        if: always()
 ```
 
-`record-end` uploads a one-line artifact whose *name* carries the measurement:
+One line, at the top of the job. Its `post:` step runs when the job ends and
+uploads a one-line artifact whose *name* carries the measurement:
 
 ```
-carbon.v1.142.2.7168.build      # 142 s, 2 vCPU, 7168 MB
+carbon.v1.142.4.16384.ubuntu.build-a1b2c3d4   # 142 s, 4 vCPU, 16384 MB, x86 Linux
 ```
 
 The artifacts API returns names in its listing, 100 per request, so nothing is
-downloaded. On a repo with ~400 runs a month that is **1 request instead of
-~421** — and the numbers are measured rather than inferred, so `runner-watts`
-becomes unnecessary (a declared value still wins if you set one).
+downloaded. On a repo with ~400 runs a month that is roughly **20 requests
+instead of ~426**: the markers are themselves artifacts to page through, the
+run list is still needed, and one run per workflow is sampled to learn how many
+jobs a complete run has. Around 40% of the hourly token budget down to 2%.
+
+The numbers are also measured rather than inferred, so `runner-watts` becomes
+unnecessary — though a declared value still wins if you set one.
 
 No extra permissions are needed: `upload-artifact` authenticates with
 `ACTIONS_RUNTIME_TOKEN`, not `GITHUB_TOKEN`, so your jobs keep `contents: read`.
@@ -122,10 +125,13 @@ What is still not covered is the runner itself dying — an infrastructure
 failure that takes the VM with it before teardown. Nothing inside the job can
 survive that, and it is rare.
 
-A run that recorded nothing isn't treated as self-reported at all, so it gets
-queried like any uninstrumented run. The exposure is therefore limited to a
-*job* that vanished inside a run whose siblings did report. Every run's coverage
-is printed to stderr, so a drift shows up in the workflow log.
+A run is only trusted when it reported *every* job — the marker count is
+compared against the real job count, sampled once per workflow. A run that
+reported none, or only some, is priced from the API instead, so a half-adopted
+workflow cannot quietly drop the jobs that are not instrumented yet. The
+remaining exposure is a job that vanished inside an otherwise complete run,
+which needs the runner itself to die. Coverage is printed to stderr each run,
+so a drift shows up in the workflow log.
 
 #### Known limitation: the job's own setup time is invisible
 
@@ -184,8 +190,7 @@ you can see what to declare:
 
 ```
 carbon-badge: 42 job(s) on unrecognised runner 'self-hosted,linux,x64'
-  charged at the 12.5 W baseline; pass --runner-watts 'self-hosted=<watts>'
-  to price it
+  charged at the 9.4 W baseline; pass --runner-watts 'self-hosted=<watts>' to price it
 ```
 
 They're charged rather than skipped on purpose. Skipping scored them as zero,

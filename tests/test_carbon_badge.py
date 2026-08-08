@@ -51,7 +51,7 @@ def test_runner_power_by_type():
 
 
 def test_arm_and_gpu_are_priced_before_their_os():
-    """"ubuntu-22.04-arm" contains "ubuntu", so ordering decides this: a
+    """ "ubuntu-22.04-arm" contains "ubuntu", so ordering decides this: a
     generic-first table would charge every ARM runner the full x86 rate."""
     assert runner_power_w(["ubuntu-22.04-arm"]) == 5.6
     assert runner_power_w(["ubuntu-latest-4-cores-gpu"]) == 149.5
@@ -107,9 +107,7 @@ def test_runner_watts_overrides_price_custom_and_self_hosted_labels():
     assert runner_power_w(["ubuntu-latest"], {"ubuntu-latest": 9.0}) == 9.0
 
 
-@pytest.mark.parametrize(
-    "bad", ["no-equals", "=100", "label=", "label=abc", "label=0", "label=-5"]
-)
+@pytest.mark.parametrize("bad", ["no-equals", "=100", "label=", "label=abc", "label=0", "label=-5"])
 def test_parse_runner_watts_rejects_malformed_input(bad):
     """A typo'd override that silently did nothing would leave the badge wrong
     in exactly the case the user was trying to fix."""
@@ -195,9 +193,7 @@ def test_confidence_is_driven_by_energy_not_job_count():
     many_small = _usage(kwh=10.0, measured_jobs=9, total_jobs=10, guessed_kwh=8.0)
     assert carbon_badge.confidence(many_small) == "rough"
     # Same job ratio, but the unknown runner barely contributes.
-    same_ratio = _usage(
-        kwh=10.0, measured_jobs=9, total_jobs=10, measured_kwh=9.9, guessed_kwh=0.1
-    )
+    same_ratio = _usage(kwh=10.0, measured_jobs=9, total_jobs=10, measured_kwh=9.9, guessed_kwh=0.1)
     assert carbon_badge.confidence(same_ratio) == "measured"
 
 
@@ -243,7 +239,7 @@ def test_confidence_levels():
 
 
 def test_badge_states_its_own_confidence():
-    """"113 gCO2e/mo" from instrumented jobs and the same string from a wattage
+    """ "113 gCO2e/mo" from instrumented jobs and the same string from a wattage
     table are different claims; the badge must not render them identically."""
     assert endpoint_json(120, _usage(1.0, 24, 24, measured_kwh=1.0))["message"] == (
         "120 gCO2e/mo"  # fully measured earns an unqualified figure
@@ -252,9 +248,7 @@ def test_badge_states_its_own_confidence():
         "120 gCO2e/mo (~18/24 measured)"
     )
     assert endpoint_json(120, _usage(1.0))["message"] == "120 gCO2e/mo (estimated)"
-    assert endpoint_json(120, _usage(1.0, guessed_kwh=0.9))["message"] == (
-        "120 gCO2e/mo (rough)"
-    )
+    assert endpoint_json(120, _usage(1.0, guessed_kwh=0.9))["message"] == ("120 gCO2e/mo (rough)")
     # No provenance available at all (--minutes): stay silent rather than imply.
     assert endpoint_json(120)["message"] == "120 gCO2e/mo"
 
@@ -281,9 +275,12 @@ class _FakeResponse:
 
 def test_parse_carbon_artifact():
     """The artifact name is the wire format, so parsing it is load-bearing."""
-    assert carbon_badge.parse_carbon_artifact(
-        "carbon.v1.142.4.16384.ubuntu.build-a1b2c3d4"
-    ) == (142.0, 4, 16384, "ubuntu")
+    assert carbon_badge.parse_carbon_artifact("carbon.v1.142.4.16384.ubuntu.build-a1b2c3d4") == (
+        142.0,
+        4,
+        16384,
+        "ubuntu",
+    )
     # The platform is load-bearing: the same specs draw very different power on
     # Apple silicon, so a name without one must not be accepted as v1.
     assert carbon_badge.parse_carbon_artifact("carbon.v1.142.4.16384.build") is None
@@ -305,7 +302,9 @@ def test_watts_from_specs_is_platform_aware():
     assert carbon_badge.watts_from_specs(4, 16384, "arm") == carbon_badge.RUNNER_POWER_W["arm"]
     assert carbon_badge.watts_from_specs(8, 16384, "arm") == carbon_badge.RUNNER_POWER_W["arm"] * 2
     # x86 still uses the linear model, and defaults to it.
-    assert carbon_badge.watts_from_specs(4, 16384, "ubuntu") == carbon_badge.watts_from_specs(4, 16384)
+    assert carbon_badge.watts_from_specs(4, 16384, "ubuntu") == carbon_badge.watts_from_specs(
+        4, 16384
+    )
 
 
 def test_watts_from_specs_reproduces_the_known_runner():
@@ -329,16 +328,20 @@ def _artifact(name, run_id, created=None, expired=False):
     }
 
 
-def _serve(artifacts, runs, calls):
+def _serve(artifacts, runs, calls, jobs_per_run=1):
+    """`jobs_per_run` is what the API reports a run really had — the
+    denominator the partial-run check compares marker counts against."""
+
     def fake_get(url, params=None, headers=None, timeout=None):
         calls.append(url)
         page = params["page"] if params else 1
         if "/artifacts" in url:
             return _FakeResponse({"artifacts": artifacts if page == 1 else []})
         if "/jobs" in url:
-            run_id = int(url.split("/runs/")[1].split("/jobs")[0])
             return _FakeResponse(
-                {"jobs": [_job(["ubuntu-latest"], 60)]} if run_id else {"jobs": []}
+                {"jobs": [_job(["ubuntu-latest"], 60)] * jobs_per_run}
+                if page == 1
+                else {"jobs": []}
             )
         return _FakeResponse({"workflow_runs": runs if page == 1 else []})
 
@@ -361,7 +364,9 @@ def test_artifact_kwh_by_run_keys_by_run_and_downloads_nothing(monkeypatch):
     assert jobs == 3
     assert set(by_run) == {11, 22}
     watts = carbon_badge.watts_from_specs(2, 7168)
-    assert round(by_run[11], 9) == round(1.5 * watts / 1000, 9)  # both jobs summed
+    kwh, count = by_run[11]
+    assert round(kwh, 9) == round(1.5 * watts / 1000, 9)  # both jobs summed
+    assert count == 2  # and the denominator the partial-run check needs
     assert not any("/jobs" in u or u.endswith("/zip") for u in calls)
 
 
@@ -370,16 +375,22 @@ def test_partial_instrumentation_tops_up_from_the_api(monkeypatch):
     cost a request. Accurate throughout, and cheaper with every workflow you
     instrument — rather than all-or-nothing at some threshold."""
     now = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
-    runs = [{"id": i, "run_started_at": now, "updated_at": now} for i in (1, 2, 3, 4)]
-    artifacts = [_artifact("carbon.v1.3600.2.7168.ubuntu.a", 1), _artifact("carbon.v1.3600.2.7168.ubuntu.b", 2)]
+    runs = [
+        {"id": i, "workflow_id": 7, "run_started_at": now, "updated_at": now} for i in (1, 2, 3, 4)
+    ]
+    artifacts = [
+        _artifact("carbon.v1.3600.2.7168.ubuntu.a", 1),
+        _artifact("carbon.v1.3600.2.7168.ubuntu.b", 2),
+    ]
     calls = []
     monkeypatch.setattr(carbon_badge.requests, "get", _serve(artifacts, runs, calls))
 
     usage = carbon_badge.ci_kwh_last_30d("o/r", token=None)
     kwh = usage.kwh
 
-    # Only the two uninstrumented runs were queried.
-    assert sum(1 for u in calls if "/jobs" in u) == 2
+    # Two uninstrumented runs queried, plus one sampled to learn how many jobs
+    # a run of this workflow really has.
+    assert sum(1 for u in calls if "/jobs" in u) == 3
     # ...and the badge can state the ratio exactly: 2 markers, 2 jobs seen live.
     assert (usage.measured_jobs, usage.total_jobs) == (2, 4)
     self_reported = 2 * carbon_badge.watts_from_specs(2, 7168) / 1000  # 2 x 1h
@@ -389,19 +400,20 @@ def test_partial_instrumentation_tops_up_from_the_api(monkeypatch):
     assert round(kwh, 9) == round(self_reported + from_api, 9)
 
 
-def test_full_coverage_costs_no_per_run_calls(monkeypatch):
-    """Fully instrumented: zero per-run requests."""
+def test_full_coverage_costs_one_sample_per_workflow(monkeypatch):
+    """Fully instrumented: one sampled run per workflow to establish the job
+    count, and nothing else."""
     now = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
-    runs = [{"id": i, "run_started_at": now, "updated_at": now} for i in (1, 2, 3)]
+    runs = [
+        {"id": i, "workflow_id": 7, "run_started_at": now, "updated_at": now} for i in (1, 2, 3)
+    ]
     artifacts = [_artifact(f"carbon.v1.3600.2.7168.ubuntu.j{i}", i) for i in (1, 2, 3)]
     calls = []
     monkeypatch.setattr(carbon_badge.requests, "get", _serve(artifacts, runs, calls))
 
     usage = carbon_badge.ci_kwh_last_30d("o/r", token=None)
-    assert not any("/jobs" in u for u in calls)
-    assert round(usage.kwh, 9) == round(
-        3 * carbon_badge.watts_from_specs(2, 7168) / 1000, 9
-    )
+    assert sum(1 for u in calls if "/jobs" in u) == 1  # one workflow, one sample
+    assert round(usage.kwh, 9) == round(3 * carbon_badge.watts_from_specs(2, 7168) / 1000, 9)
     assert (usage.measured_jobs, usage.total_jobs) == (3, 3)
 
 
@@ -409,10 +421,11 @@ def test_ignore_self_reported_does_not_consult_artifacts(monkeypatch):
     """--ignore-self-reported must not touch the artifacts listing at all,
     otherwise the two paths cannot be reconciled against each other."""
     now = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
-    runs = [{"id": 1, "run_started_at": now, "updated_at": now}]
+    runs = [{"id": 1, "workflow_id": 7, "run_started_at": now, "updated_at": now}]
     calls = []
     monkeypatch.setattr(
-        carbon_badge.requests, "get",
+        carbon_badge.requests,
+        "get",
         _serve([_artifact("carbon.v1.3600.2.7168.ubuntu.a", 1)], runs, calls),
     )
     carbon_badge.ci_kwh_last_30d("o/r", token=None, use_artifacts=False)
@@ -438,13 +451,14 @@ def test_expired_and_out_of_window_markers_are_ignored(monkeypatch):
 def test_declared_watts_still_beat_the_model(monkeypatch):
     """Someone who knows their hardware's real draw beats a linear model."""
     monkeypatch.setattr(
-        carbon_badge.requests, "get",
+        carbon_badge.requests,
+        "get",
         _serve([_artifact("carbon.v1.3600.2.7168.ubuntu.a", 1)], [], []),
     )
     by_run, _ = carbon_badge.artifact_kwh_by_run(
         "o/r", token=None, runner_watts={carbon_badge.ANY_RUNNER: 200.0}
     )
-    assert round(by_run[1], 9) == round(200.0 / 1000, 9)
+    assert round(by_run[1][0], 9) == round(200.0 / 1000, 9)
 
 
 def _fake_github(runs, jobs_by_run):
@@ -566,3 +580,101 @@ def test_serve_badge_endpoint_caches_and_404s():
     finally:
         httpd.shutdown()
         thread.join(timeout=5)
+
+
+def test_a_partly_instrumented_run_does_not_lose_its_other_jobs(monkeypatch):
+    """The reviewer's case, and the incremental-adoption path this code exists
+    to serve: one run, two jobs, only the short one instrumented.
+
+    Trusting the marker alone charged 1 hour and silently dropped the 10-hour
+    sibling — an 11x undercount that still reported confidence "measured",
+    because a marker proves *a* job reported, not that all of them did.
+    """
+    now = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+    runs = [{"id": 1, "workflow_id": 7, "run_started_at": now, "updated_at": now}]
+    # The API says this run had two jobs; only one wrote a marker.
+    jobs = [_job(["ubuntu-latest"], 60), _job(["ubuntu-latest"], 600)]
+    marker = _artifact("carbon.v1.3600.4.16384.ubuntu.short", 1)
+
+    def fake_get(url, params=None, headers=None, timeout=None):
+        page = params["page"] if params else 1
+        if "/artifacts" in url:
+            return _FakeResponse({"artifacts": [marker] if page == 1 else []})
+        if "/jobs" in url:
+            return _FakeResponse({"jobs": jobs if page == 1 else []})
+        return _FakeResponse({"workflow_runs": runs if page == 1 else []})
+
+    monkeypatch.setattr(carbon_badge.requests, "get", fake_get)
+    usage = carbon_badge.ci_kwh_last_30d("o/r", token=None)
+
+    # Priced from the API for the whole run: 1 h + 10 h of ubuntu-latest.
+    expected = 11 * carbon_badge.RUNNER_POWER_W["ubuntu"] / 1000
+    assert round(usage.kwh, 9) == round(expected, 9)
+    # And it must not claim to be measured on the strength of one marker.
+    assert usage.measured_jobs == 0
+    assert carbon_badge.confidence(usage) != "measured"
+
+
+def test_markers_are_not_double_counted_when_a_run_is_topped_up(monkeypatch):
+    """Topping up must replace the partial markers, not add to them."""
+    now = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+    runs = [{"id": 1, "workflow_id": 7, "run_started_at": now, "updated_at": now}]
+    jobs = [_job(["ubuntu-latest"], 60), _job(["ubuntu-latest"], 60)]
+
+    def fake_get(url, params=None, headers=None, timeout=None):
+        page = params["page"] if params else 1
+        if "/artifacts" in url:
+            return _FakeResponse(
+                {"artifacts": [_artifact("carbon.v1.3600.4.16384.ubuntu.a", 1)]}
+                if page == 1
+                else {"artifacts": []}
+            )
+        if "/jobs" in url:
+            return _FakeResponse({"jobs": jobs if page == 1 else []})
+        return _FakeResponse({"workflow_runs": runs if page == 1 else []})
+
+    monkeypatch.setattr(carbon_badge.requests, "get", fake_get)
+    usage = carbon_badge.ci_kwh_last_30d("o/r", token=None)
+    # Exactly the API figure for two 1-hour jobs — the marker adds nothing.
+    assert round(usage.kwh, 9) == round(2 * carbon_badge.RUNNER_POWER_W["ubuntu"] / 1000, 9)
+
+
+def test_run_jobs_pages_past_thirty(monkeypatch):
+    """The API defaults to 30 per page, so a wider matrix was truncated — and
+    the confidence ratio is now derived from these counts."""
+    pages = {1: [_job(["ubuntu-latest"], 1)] * 100, 2: [_job(["ubuntu-latest"], 1)] * 5}
+
+    def fake_get(url, params=None, headers=None, timeout=None):
+        assert params["per_page"] == 100
+        return _FakeResponse({"jobs": pages.get(params["page"], [])})
+
+    monkeypatch.setattr(carbon_badge.requests, "get", fake_get)
+    assert len(carbon_badge.run_jobs(1, "o/r", token=None)) == 105
+
+
+def test_undeclared_warning_never_suggests_a_command_that_will_not_parse(capsys):
+    """The message exists to hand over the fix; a broken flag is worse than an
+    honest "cannot suggest one"."""
+    carbon_badge._warn_undeclared_runners({"(no labels)": 3, "my-builder,linux": 2})
+    err = capsys.readouterr().err
+    for line in err.strip().splitlines():
+        if "--runner-watts '" not in line:
+            continue
+        flag = line.split("--runner-watts '")[1].split("'")[0]
+        carbon_badge.parse_runner_watts([flag.replace("<watts>", "180")])
+
+
+def test_gitlab_honours_a_blanket_override_on_untagged_jobs(monkeypatch):
+    """Untagged is the common GitLab case; an `if tags` guard skipped the
+    blanket figure entirely and priced a 180 W fleet at the 9.4 W baseline."""
+    now = datetime.now(timezone.utc).isoformat()
+    jobs_page1 = [{"created_at": now, "duration": 3600, "runner": {"is_shared": True}}]
+
+    def fake_get(url, params=None, headers=None, timeout=None):
+        return _FakeResponse(jobs_page1 if params["page"] == 1 else [])
+
+    monkeypatch.setattr(carbon_badge.requests, "get", fake_get)
+    usage = carbon_badge.gitlab_kwh_last_30d(
+        "group/project", token=None, runner_watts={carbon_badge.ANY_RUNNER: 180.0}
+    )
+    assert round(usage.kwh, 6) == round(180.0 / 1000, 6)
