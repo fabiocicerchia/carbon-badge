@@ -694,12 +694,51 @@ def gitlab_kwh_last_30d(project, token, api="https://gitlab.com/api/v4", runner_
 def live_grid_intensity(
     zone, token=None, api="https://api.electricitymap.org/v3", get=requests.get
 ):
-    """Fetch a zone's current carbon intensity (gCO2eq/kWh) from Electricity Maps.
+    """A zone's recent mean carbon factor (gCO2eq/kWh) from Electricity Maps.
 
-    `get` is injectable (defaults to `requests.get`) so callers/tests can
+    The mean of the past 24 hours, not the instantaneous reading. A single
+    instant is a poor multiplier for a 30-day total: grids swing by 2-3x across
+    a day, and the refresh runs on a fixed cron — the fleet's fires at 02:17 on
+    a Monday — so `latest` would price a whole month at an overnight low, and
+    the figure would move week to week on nothing but the clock.
+
+    A day's mean is still not right. Properly, each job would be priced at the
+    factor while it actually ran, which needs 30 days of history; Electricity
+    Maps puts that behind a paid tier. The 24-hour mean removes the
+    time-of-day bias, which is the part that moved the number for no reason.
+
+    Falls back to the instantaneous reading when history is unavailable —
+    coverage varies by zone and plan — so a token that can only reach `latest`
+    still works, with the caveat above.
+
+    `get` is injectable (defaults to `requests.get`) so callers and tests can
     supply a fake without a live network call.
     """
     headers = {"auth-token": token} if token else {}
+
+    try:
+        r = get(
+            f"{api}/carbon-intensity/history",
+            params={"zone": zone},
+            headers=headers,
+            timeout=30,
+        )
+        r.raise_for_status()
+        readings = [
+            float(h["carbonIntensity"])
+            for h in r.json().get("history", [])
+            if h.get("carbonIntensity") is not None
+        ]
+        if readings:
+            return sum(readings) / len(readings)
+        raise ValueError("history returned no usable readings")
+    except Exception as exc:
+        print(
+            f"carbon-badge: 24h grid history unavailable ({exc}); using the "
+            "instantaneous reading, which prices a month at one moment",
+            file=sys.stderr,
+        )
+
     r = get(
         f"{api}/carbon-intensity/latest",
         params={"zone": zone},
@@ -786,7 +825,8 @@ def estimate(args, token):
         em_token = args.electricitymaps_token or os.environ.get("ELECTRICITYMAPS_TOKEN")
         grid_intensity = live_grid_intensity(args.grid_region, token=em_token)
         print(
-            f"carbon-badge: live grid intensity for {args.grid_region} = {grid_intensity:.0f} gCO2e/kWh",
+            f"carbon-badge: grid factor for {args.grid_region} = "
+            f"{grid_intensity:.0f} gCO2e/kWh (24h mean)",
             file=sys.stderr,
         )
     runner_watts = parse_runner_watts(getattr(args, "runner_watts", None))

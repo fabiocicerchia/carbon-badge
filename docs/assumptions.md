@@ -98,12 +98,32 @@ The label path used to scale proportionally, agreeing with the model only at
 the 4-vCPU point and drifting to 12% by 64 cores — so a repo's figure would
 have moved as it instrumented, with nothing having changed.
 
-## Grid intensity
+## Grid factor
 
-`480 gCO2e/kWh`, roughly the world average. Override with `--grid-intensity`,
-or use `--grid-region` for a live Electricity Maps figure for your datacentre's
-zone — which is the single highest-leverage correction available, since real
-grids range from under 50 to over 700 gCO2e/kWh.
+`480 gCO2e/kWh` by default, roughly the world average — and the single
+highest-leverage thing to correct, since real grids run from under 50 to over
+700. Two ways to do better:
+
+```sh
+carbon-badge OWNER/REPO --grid-intensity 56        # a fixed figure you trust
+carbon-badge OWNER/REPO --grid-region SE           # live, from Electricity Maps
+```
+
+`--grid-region` is also an action input (`grid-region`), with
+`electricitymaps-token` for the API key.
+
+**It uses the mean of the past 24 hours, not the current reading.** A single
+instant is a poor multiplier for a 30-day total: grids swing 2-3x across a day,
+and the refresh runs on a fixed cron — 02:17 on a Monday for the fleet this was
+built for — so the instantaneous value would price a whole month at an
+overnight low, and the badge would move week to week on nothing but the clock.
+
+A day's mean is still an approximation. Properly, each job would be priced at
+the factor while it actually ran; that needs 30 days of history, which
+Electricity Maps puts behind a paid tier. The 24-hour mean removes the
+time-of-day bias, which was the part that moved the number for no reason. If
+history is unavailable for your zone or plan, it falls back to the
+instantaneous reading and says so in the log.
 
 ## Why there is no red-amber-green scale
 

@@ -823,3 +823,50 @@ def test_skipped_jobs_contribute_no_energy(monkeypatch):
     usage = carbon_badge.ci_kwh_last_30d("o/r", token=None)
     assert usage.total_jobs == 1
     assert round(usage.kwh, 9) == round(carbon_badge.RUNNER_POWER_W["ubuntu"] / 1000, 9)
+
+
+def test_grid_factor_averages_a_day_not_an_instant():
+    """A single reading is a poor multiplier for a 30-day total. Grids swing
+    2-3x daily and the refresh runs on a fixed cron — 02:17 Monday for the
+    fleet — so `latest` would price a month at an overnight low and the figure
+    would move week to week on the clock alone."""
+    calls = []
+
+    def fake_get(url, params=None, headers=None, timeout=None):
+        calls.append(url)
+        return _FakeResponse({"history": [{"carbonIntensity": v} for v in (100, 200, 300, 400)]})
+
+    got = carbon_badge.live_grid_intensity("SE", get=fake_get)
+    assert got == 250.0
+    assert any("history" in c for c in calls)
+    assert not any(c.endswith("latest") for c in calls)
+
+
+def test_grid_factor_falls_back_to_the_instant_reading(capsys):
+    """History coverage varies by zone and plan; a token that can only reach
+    `latest` must still work, loudly."""
+
+    def fake_get(url, params=None, headers=None, timeout=None):
+        if "history" in url:
+            return _FakeResponse({"history": []})
+        return _FakeResponse({"carbonIntensity": 412.0})
+
+    assert carbon_badge.live_grid_intensity("SE", get=fake_get) == 412.0
+    assert "instantaneous" in capsys.readouterr().err
+
+
+def test_grid_factor_ignores_gaps_in_the_history():
+    """Electricity Maps returns nulls for hours it has no data for."""
+
+    def fake_get(url, params=None, headers=None, timeout=None):
+        return _FakeResponse(
+            {
+                "history": [
+                    {"carbonIntensity": 100},
+                    {"carbonIntensity": None},
+                    {"carbonIntensity": 300},
+                ]
+            }
+        )
+
+    assert carbon_badge.live_grid_intensity("SE", get=fake_get) == 200.0
