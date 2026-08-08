@@ -131,7 +131,7 @@ pick one — for some questions they are simply the better answer.
 | **wattage** | integrated across the load curve | the full-load figure, flat |
 | **instrumentation** | required — `start` / `get` / `display` in every job | optional; adds accuracy, not required for a number |
 | **granularity** | per step and per run | 30-day repo total |
-| **badge** | via `metrics.green-coding.io` (`send-data` defaults to true) | your own `gh-pages`, no third party |
+| **where the number goes** | pushed to `metrics.green-coding.io` by default; `send-data: false` opts out | written to a branch of your repo |
 | **CI systems** | GitHub, GitLab, Jenkins | GitHub, GitLab |
 | **platforms** | Linux and macOS (macOS needs GNU `date`) | ubuntu, windows, macos, arm, gpu, or declared |
 | **grid intensity** | Electricity Maps | Electricity Maps, or a fixed factor |
@@ -154,8 +154,24 @@ error in this tool and it is not fixable from the outside.
   It measures the thing that actually varies, and reports per step.
 - **What has this repo's CI cost over the last month, across every workflow,
   without touching any of them?** carbon-badge. It works on a repo you have not
-  instrumented, publishes to infrastructure you own, and states on the badge
-  how much of the figure was measured rather than modelled.
+  instrumented, and states on the badge how much of the figure was measured
+  rather than modelled.
+
+### Who sees your data
+
+Neither tool is self-contained, and it is worth being exact about which parts
+are not.
+
+Eco-CI **transmits** by default: energy value and duration, CPU model,
+repository name, branch, workflow and run id, commit hash, and which CI
+system — to `metrics.green-coding.io`, where it powers their dashboard.
+`send-data: false` turns it off, and the rest of the action still works.
+
+carbon-badge transmits nothing. The figure is committed to a branch of your own
+repository. But that repository is GitHub's infrastructure, and the badge image
+is rendered by **shields.io**, which fetches your `badge.json` on every view —
+this tool emits no SVG of its own. So the number is not pushed anywhere, but
+serving it still involves two parties you do not control.
 
 They also compose: nothing stops a repo running Eco-CI on the workflow it cares
 about and carbon-badge for the fleet-wide rolling number.
