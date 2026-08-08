@@ -62,7 +62,7 @@ def test_gpu_is_not_core_scaled_but_arm_is():
     """The accelerator is fixed and dominates, so scaling it by CPU cores would
     double-count it. ARM's figure is a CPU baseline, so it does scale."""
     assert runner_power_w(["ubuntu-latest-16-cores-gpu"]) == 149.5
-    assert runner_power_w(["ubuntu-24.04-arm-8-cores"]) == 5.6 * 2  # 8 of a 4-core baseline
+    assert runner_power_w(["ubuntu-24.04-arm-8-cores"]) == 10.0  # affine, not 2x5.6
 
 
 def test_arm_and_gpu_defaults_are_overridable():
@@ -75,9 +75,11 @@ def test_arm_and_gpu_defaults_are_overridable():
 def test_core_count_parsed_from_every_common_label_shape():
     """Only "-N-cores" was matched before, so "linux-x64-16core" — a real
     larger-runner name — was priced as a 2-core box, an 8x undercount."""
-    assert runner_power_w(["ubuntu-latest-16-cores"]) == 9.4 * 4
-    assert runner_power_w(["ubuntu-latest-16-core"]) == 9.4 * 4
-    assert runner_power_w(["ubuntu-24.04-8vcpu"]) == 9.4 * 2
+    # Affine: a fixed base plus a per-core term, so 16 cores is not 4x a
+    # 4-core machine. Eco-CI measures 1.76 W at idle — the base does not scale.
+    assert runner_power_w(["ubuntu-latest-16-cores"]) == 34.0
+    assert runner_power_w(["ubuntu-latest-16-core"]) == 34.0
+    assert runner_power_w(["ubuntu-24.04-8vcpu"]) == 17.6
 
 
 def test_bare_number_prices_every_runner():
@@ -292,11 +294,29 @@ def test_parse_carbon_artifact():
     assert carbon_badge.parse_carbon_artifact("") is None
 
 
-def test_the_two_pricing_paths_agree_on_a_standard_runner():
-    """A 4-vCPU/16 GiB ubuntu runner must cost the same whether it was priced
-    from its label or from its own self-report. They differed by 0.4%, so a
-    repo's figure stepped as it instrumented — a change with no cause."""
-    assert carbon_badge.watts_from_specs(4, 16384) == carbon_badge.RUNNER_POWER_W["ubuntu"]
+def test_the_two_pricing_paths_agree_at_every_size():
+    """The same machine must cost the same whether it was recognised by its
+    label or reported its own hardware — otherwise a repo's figure moves as it
+    instruments, with nothing in the world having changed.
+
+    They used to agree only at the 4-vCPU calibration point, because the label
+    path scaled the table value proportionally while the model is affine. The
+    gap reached 12% by 64 cores. Both now go through one law.
+    """
+    for cores in (4, 8, 16, 32, 64):
+        by_label = runner_power_w([f"ubuntu-latest-{cores}-cores"])
+        by_specs = carbon_badge.watts_from_specs(cores, cores * carbon_badge.MEM_PER_VCPU_MB)
+        assert by_label == by_specs, f"{cores} cores: {by_label} vs {by_specs}"
+
+
+def test_every_platform_reproduces_its_table_entry():
+    """Per-core draw is derived from each table entry rather than hardcoded, so
+    the model and the table cannot drift apart when a figure is revised."""
+    for platform in ("ubuntu", "windows", "arm", "macos"):
+        assert (
+            carbon_badge.watts_from_specs(4, 16384, platform)
+            == carbon_badge.RUNNER_POWER_W[platform]
+        )
 
 
 def test_watts_from_specs_is_platform_aware():
@@ -307,7 +327,8 @@ def test_watts_from_specs_is_platform_aware():
     assert carbon_badge.watts_from_specs(3, 7168, "macos") == carbon_badge.RUNNER_POWER_W["macos"]
     # ARM scales its own baseline rather than borrowing the x86 one.
     assert carbon_badge.watts_from_specs(4, 16384, "arm") == carbon_badge.RUNNER_POWER_W["arm"]
-    assert carbon_badge.watts_from_specs(8, 16384, "arm") == carbon_badge.RUNNER_POWER_W["arm"] * 2
+    # Doubling the cores at the standard memory ratio, affine not proportional.
+    assert carbon_badge.watts_from_specs(8, 32768, "arm") == 10.0
     # x86 still uses the linear model, and defaults to it.
     assert carbon_badge.watts_from_specs(4, 16384, "ubuntu") == carbon_badge.watts_from_specs(
         4, 16384

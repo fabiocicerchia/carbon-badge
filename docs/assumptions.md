@@ -68,17 +68,35 @@ Note the ARM figure deliberately avoids the "3–4× more efficient" claim that
 circulates. AWS's own published figure is *up to 60% less energy for equal
 work*, and independent benchmarks land nearer 1.5–2.5×.
 
-### Self-reported machines
+### One law, both routes
 
-When a job reports its own CPU and memory (see
-[`record/`](../record/)), the wattage comes from a linear model anchored on the
-same curve:
+A runner recognised by its label and a job that reported its own hardware go
+through the same function, so the same machine costs the same either way:
 
 ```
-watts = 1.2 + 1.6 × vCPU + 0.11 × GiB
+watts = 1.2 + per_vcpu × vCPU + 0.1125 × GiB
 
-  4 vCPU, 16 GiB  ->  1.2 + 6.4 + 1.76  =  9.4 W   (matches the table above)
+  per_vcpu is derived from the platform's table entry, so at the standard
+  4 vCPU / 16 GiB shape the model reproduces the table exactly:
+
+  ubuntu   1.2 + 1.6·4  + 0.1125·16 =  9.4 W
+  arm      1.2 + 0.65·4 + 0.1125·16 =  5.6 W
 ```
+
+**Affine, not proportional.** A machine has a fixed draw plus a per-core one —
+Eco-CI measures 1.76 W at idle rising to 8.18 W at load — so doubling the cores
+does not double the wattage:
+
+| runner | proportional (wrong) | affine |
+|---|---|---|
+| 4-core | 9.4 W | 9.4 W |
+| 8-core | 18.8 W | **17.6 W** |
+| 16-core | 37.6 W | **34.0 W** |
+| 64-core | 150.4 W | **132.4 W** |
+
+The label path used to scale proportionally, agreeing with the model only at
+the 4-vCPU point and drifting to 12% by 64 cores — so a repo's figure would
+have moved as it instrumented, with nothing having changed.
 
 ## Grid intensity
 

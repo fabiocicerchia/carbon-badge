@@ -179,10 +179,12 @@ def runner_power_w(labels, overrides=None):
                 (int(m.group(1)) for label in labels_lower if (m := _CORES_RE.search(label))),
                 None,
             )
-            # Scaled off BASELINE_VCPU, not a hardcoded 2: the figures above
-            # describe a 4-vCPU machine, so dividing by 2 would double every
-            # larger runner.
-            return watts * (cores / BASELINE_VCPU) if cores else watts
+            # Through the same law the self-reported path uses, assuming the
+            # standard memory-per-vCPU ratio, so the two agree for any size
+            # rather than only at the calibration point.
+            if not cores:
+                return watts
+            return watts_from_specs(cores, cores * MEM_PER_VCPU_MB, key)
     return None
 
 
@@ -427,25 +429,41 @@ _ARTIFACT_RE = re.compile(r"^carbon\.v1\.(\d+)\.(\d+)\.(\d+)\.([a-z]+)\.")
 # was itself ~1.5x the measured full-load figure. That combination priced a
 # real 4-vCPU runner at 24.3 W, about 3x too high.
 WATTS_BASE = 1.2
-WATTS_PER_VCPU = 1.6
-WATTS_PER_GB = 0.1125  # chosen so the model lands exactly on the table value
+WATTS_PER_GB = 0.1125
+# What a standard runner has, and therefore what the table entries describe.
+# Larger GitHub runners keep this ratio, so a core count implies a memory size.
+BASELINE_MEM_GB = 16
+MEM_PER_VCPU_MB = 1024 * BASELINE_MEM_GB // BASELINE_VCPU
 
 
 def watts_from_specs(vcpu, mem_mb, platform="ubuntu"):
-    """Power draw from a machine's actual CPU count, memory and platform.
+    """Power draw from a machine's CPU count, memory and platform.
 
-    The linear model is fitted to x86 shared VMs and does not transfer. A
-    Mac mini M1 reporting 3 vCPU / 7 GiB comes out at 6.8 W through it, against
-    a measured 15.53 W — so the self-reported path would have been 2.6x *worse*
-    than the label lookup it replaces. Apple silicon is dedicated hardware whose
-    draw does not track a vCPU slice, so it uses the measured figure directly;
-    ARM scales its own baseline rather than borrowing the x86 one.
+    The single pricing law. Both routes into it — a runner recognised by its
+    label, and a job that reported its own hardware — must produce the same
+    answer for the same machine, or a repo's figure moves as it instruments
+    without anything in the world changing.
+
+    Affine, not proportional: a machine has a fixed draw plus a per-core one.
+    Eco-CI measures 1.76 W at idle rising to 8.18 W at full load, so doubling
+    the cores does not double the wattage. The label path used to scale the
+    table value proportionally, which agreed with this only at the 4-vCPU
+    calibration point and drifted to 12% by 64 cores.
+
+    Per-core draw is derived from each platform's table entry rather than
+    hardcoded, so the two stay tied together by construction: at the standard
+    ratio the model reproduces the table exactly, for every platform.
+
+    macOS is the exception — dedicated Apple hardware, not a slice of a shared
+    host, so its draw does not track a vCPU count at all.
     """
     if platform == "macos":
         return RUNNER_POWER_W["macos"]
-    if platform == "arm":
-        return RUNNER_POWER_W["arm"] * (vcpu / BASELINE_VCPU)
-    return WATTS_BASE + WATTS_PER_VCPU * vcpu + WATTS_PER_GB * (mem_mb / 1024)
+    baseline_w = RUNNER_POWER_W.get(platform, DEFAULT_RUNNER_POWER_W)
+    per_vcpu = (baseline_w - WATTS_BASE - WATTS_PER_GB * BASELINE_MEM_GB) / BASELINE_VCPU
+    # Rounded so the two routes compare equal rather than differing in float
+    # noise, and so the log prints a sane number.
+    return round(WATTS_BASE + per_vcpu * vcpu + WATTS_PER_GB * (mem_mb / 1024), 2)
 
 
 def parse_carbon_artifact(name):
