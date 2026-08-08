@@ -34,3 +34,8 @@ Thumbs.db
 .idea/
 .vscode/
 *.swp
+
+# The record/ action is a JavaScript action: GitHub runs its bundle straight
+# from the repo, so dist/ there must be committed even though the root dist/
+# (python -m build output) must not be.
+!record/dist/

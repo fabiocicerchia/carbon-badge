@@ -71,15 +71,116 @@ See all inputs/outputs in [`action.yml`](../action.yml); full example workflow
 (with the cron schedule) at
 [`.github-workflow-example/carbon-badge.yml`](../.github-workflow-example/carbon-badge.yml).
 
-GitLab CI works the same way with `--provider gitlab`:
+### Letting jobs measure themselves (recommended)
+
+Add two steps to a job and it records its own duration and the machine's real
+CPU and memory, so the weekly refresh reads a month of exact measurements
+without one API call per run:
+
+```yaml
+jobs:
+  build:
+    steps:
+      - uses: fabiocicerchia/carbon-badge/record-start@v1
+      # ... the job's real steps ...
+      - uses: fabiocicerchia/carbon-badge/record-end@v1
+        if: always()
+```
+
+`record-end` uploads a one-line artifact whose *name* carries the measurement:
+
+```
+carbon.v1.142.2.7168.build      # 142 s, 2 vCPU, 7168 MB
+```
+
+The artifacts API returns names in its listing, 100 per request, so nothing is
+downloaded. On a repo with ~400 runs a month that is **1 request instead of
+~421** — and the numbers are measured rather than inferred, so `runner-watts`
+becomes unnecessary (a declared value still wins if you set one).
+
+No extra permissions are needed: `upload-artifact` authenticates with
+`ACTIONS_RUNTIME_TOKEN`, not `GITHUB_TOKEN`, so your jobs keep `contents: read`.
+
+#### Known limitation: cancelled and killed jobs
+
+`if: always()` covers a job that *fails*. It does not cover a job that is
+**cancelled, hits its `timeout-minutes`, or is killed by the OOM killer** — the
+runner stops without reaching the step, so no marker is written.
+
+Those are disproportionately the long, expensive jobs, so the bias is
+**downward**: the badge under-reports exactly the runs that cost the most. The
+API path (`--source jobs`) has no such gap, because GitHub records the job's
+end time whatever killed it.
+
+Two things limit the damage, but neither removes it:
+
+- `--source auto` refuses to use self-reported data below
+  `MIN_ARTIFACT_COVERAGE` (90%) markers per run, and falls back to the API. So
+  a repo that loses a few jobs a month still publishes; one that loses many
+  reverts to the accurate path and says so in the log.
+- Every fallback and every shortfall is printed to stderr, so a drift into
+  under-reporting shows up in the workflow log rather than silently.
+
+**Before trusting the self-reported figure, reconcile it once**: run both paths
+on the same repo and compare.
+
+```sh
+carbon-badge owner/repo --source artifacts --token "$GITHUB_TOKEN"
+carbon-badge owner/repo --source jobs      --token "$GITHUB_TOKEN"
+```
+
+A persistent gap is the cancelled/killed population. If it matters for your
+repo, keep `--source jobs` and pay the requests.
+
+### Telling it how big your runners are
+
+Standard GitHub-hosted runners are priced from a built-in table. Anything else
+— self-hosted, larger runners, GPU, custom labels — has to be declared, because
+**the API exposes no CPU or memory for any runner**. Labels are the only signal
+there is, and they're arbitrary text, so size can't be inferred reliably.
+
+Set it once, when you add the workflow:
+
+```yaml
+      - uses: fabiocicerchia/carbon-badge@main
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          runner-watts: "180"     # average draw of your runners, in watts
+```
+
+That single number covers every job and is all most repos need. Only if you
+genuinely mix runner types, give one `LABEL=WATTS` per line — a bare number can
+sit alongside them as the fallback:
+
+```yaml
+          runner-watts: |
+            180
+            gpu=320
+            macos-14-xlarge=90
+```
+
+Matching is exact label first, then substring (so `gpu=320` covers a family),
+then the bare number, then the built-in table.
+
+Undeclared runners are charged at the ubuntu baseline and named in the log, so
+you can see what to declare:
+
+```
+carbon-badge: 42 job(s) on unrecognised runner 'self-hosted,linux,x64'
+  charged at the 12.5 W baseline; pass --runner-watts 'self-hosted=<watts>'
+  to price it
+```
+
+They're charged rather than skipped on purpose. Skipping scored them as zero,
+which meant moving a build onto the biggest machine you own *improved* your
+badge. A visible undercount beats a silent free pass.
+
+GitLab CI works the same way with `--provider gitlab`, matching `runner-watts`
+against job tags and the runner description:
 
 ```sh
 carbon-badge mygroup/myproject --provider gitlab --token $GITLAB_TOKEN > badge.json
 ```
-
-Jobs on project/group (non-shared) runners are skipped either way — their
-power draw is unknown, so they'd skew the estimate; a stderr line reports
-how many were excluded.
 
 For a badge that always reflects the last 5 minutes without a refresh
 workflow, run it as a tiny local endpoint instead of a one-shot:
