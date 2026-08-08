@@ -186,6 +186,18 @@ def runner_power_w(labels, overrides=None):
     return None
 
 
+def _ran(job):
+    """Did this job actually execute, and so could it have recorded itself?
+
+    A skipped job still appears in the jobs API with both timestamps set — and
+    occasionally with completed_at *before* started_at — but none of its steps
+    run, so it can never write a marker. Counting one in the denominator means
+    a workflow with any conditional job can never reach completeness: it would
+    be priced from the API on every run, however thoroughly instrumented.
+    """
+    return job.get("conclusion") != "skipped"
+
+
 def _hours(start, end):
     """Hours between two ISO timestamps, or 0 if either is missing."""
     if not (start and end):
@@ -281,6 +293,10 @@ def _run_kwh(run, repo, token, api, runner_watts, undeclared):
     """
     kwh, jobs, guessed_kwh = 0.0, 0, 0.0
     for job in run_jobs(run["id"], repo, token, api):
+        # Skipped jobs burn nothing and cannot self-report; counting them would
+        # inflate both the denominator and the "N/M measured" ratio.
+        if not _ran(job):
+            continue
         labels = job.get("labels", [])
         start, end = job.get("started_at"), job.get("completed_at")
         # Skipped only when the job never ran (queued/in-progress). A genuine
@@ -498,7 +514,7 @@ def _expected_markers(runs, by_run, repo, token, api):
         if wf not in seen:
             seen.add(wf)
             try:
-                sampled[wf] = len(run_jobs(run["id"], repo, token, api))
+                sampled[wf] = sum(1 for j in run_jobs(run["id"], repo, token, api) if _ran(j))
             except Exception:
                 sampled[wf] = 0  # unreachable sample; the observed bound stands
     return {wf: max(observed.get(wf, 0), sampled.get(wf, 0)) for wf in observed}

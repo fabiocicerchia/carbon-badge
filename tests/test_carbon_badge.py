@@ -732,3 +732,72 @@ def test_an_unusually_small_newest_run_cannot_lower_the_bar(monkeypatch):
     # Seven jobs really ran (1 + 3 + 3), each counted exactly once.
     assert usage.total_jobs == 7
     assert round(usage.kwh, 9) == round(7 * carbon_badge.RUNNER_POWER_W["ubuntu"] / 1000, 9)
+
+
+def test_skipped_jobs_do_not_make_completeness_unreachable(monkeypatch):
+    """Real shape, from greenlint's release workflow: one job runs, two are
+    skipped by their `if:`. GitHub reports all three with both timestamps set.
+
+    Counting the skipped ones gave a denominator of 3 against a maximum of 1
+    obtainable marker, so the run could never be trusted — a fully
+    instrumented workflow still paying an API call every run, forever. That is
+    the failure mode where the whole feature stops earning its overhead.
+    """
+    now = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+    runs = [{"id": 1, "workflow_id": 9, "run_started_at": now, "updated_at": now}]
+    api_jobs = [
+        dict(_job(["ubuntu-latest"], 8), name="release-please", conclusion="success"),
+        dict(_job(["ubuntu-latest"], 0), name="build", conclusion="skipped"),
+        dict(_job(["ubuntu-latest"], 0), name="pypi", conclusion="skipped"),
+    ]
+    markers = [_artifact("carbon.v1.480.4.16384.ubuntu.release-please", 1)]
+    queried = []
+
+    def fake_get(url, params=None, headers=None, timeout=None):
+        page = params["page"] if params else 1
+        if "/artifacts" in url:
+            return _FakeResponse({"artifacts": markers if page == 1 else []})
+        if "/jobs" in url:
+            queried.append(url)
+            return _FakeResponse({"jobs": api_jobs if page == 1 else []})
+        return _FakeResponse({"workflow_runs": runs if page == 1 else []})
+
+    monkeypatch.setattr(carbon_badge.requests, "get", fake_get)
+    usage = carbon_badge.ci_kwh_last_30d("o/r", token=None)
+
+    # One marker for one job that ran: complete.
+    assert usage.measured_jobs == 1
+    assert usage.total_jobs == 1, "skipped jobs inflated the ratio"
+    assert carbon_badge.confidence(usage) == "measured"
+    # Only the denominator sample — the run itself was not re-queried.
+    assert len(queried) == 1
+
+
+def test_skipped_jobs_contribute_no_energy(monkeypatch):
+    """They also carry timestamps, sometimes with completed_at *before*
+    started_at, so they must be dropped rather than clamped to zero."""
+    now = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+    runs = [{"id": 1, "workflow_id": 9, "run_started_at": now, "updated_at": now}]
+    api_jobs = [
+        dict(_job(["ubuntu-latest"], 60), name="real", conclusion="success"),
+        {
+            "name": "skipped",
+            "labels": ["ubuntu-latest"],
+            "conclusion": "skipped",
+            "started_at": "2026-08-01T00:00:02Z",
+            "completed_at": "2026-08-01T00:00:01Z",
+        },
+    ]
+
+    def fake_get(url, params=None, headers=None, timeout=None):
+        page = params["page"] if params else 1
+        if "/artifacts" in url:
+            return _FakeResponse({"artifacts": []})
+        if "/jobs" in url:
+            return _FakeResponse({"jobs": api_jobs if page == 1 else []})
+        return _FakeResponse({"workflow_runs": runs if page == 1 else []})
+
+    monkeypatch.setattr(carbon_badge.requests, "get", fake_get)
+    usage = carbon_badge.ci_kwh_last_30d("o/r", token=None)
+    assert usage.total_jobs == 1
+    assert round(usage.kwh, 9) == round(carbon_badge.RUNNER_POWER_W["ubuntu"] / 1000, 9)
