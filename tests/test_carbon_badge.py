@@ -53,14 +53,14 @@ def test_arm_and_gpu_are_priced_before_their_os():
     """ "ubuntu-22.04-arm" contains "ubuntu", so ordering decides this: a
     generic-first table would charge every ARM runner the full x86 rate."""
     assert runner_power_w(["ubuntu-22.04-arm"]) == 5.6
-    assert runner_power_w(["ubuntu-latest-4-cores-gpu"]) == 149.5
+    assert runner_power_w(["ubuntu-latest-4-cores-gpu"]) == 89.9
     assert runner_power_w(["ubuntu-latest"]) == 9.4
 
 
 def test_gpu_is_not_core_scaled_but_arm_is():
     """The accelerator is fixed and dominates, so scaling it by CPU cores would
     double-count it. ARM's figure is a CPU baseline, so it does scale."""
-    assert runner_power_w(["ubuntu-latest-16-cores-gpu"]) == 149.5
+    assert runner_power_w(["ubuntu-latest-16-cores-gpu"]) == 89.9
     assert runner_power_w(["ubuntu-24.04-arm-8-cores"]) == 10.0  # affine, not 2x5.6
 
 

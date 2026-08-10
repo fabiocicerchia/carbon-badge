@@ -89,7 +89,7 @@ One line, at the top of the job. Its `post:` step runs when the job ends and
 uploads a one-line artifact whose *name* carries the measurement:
 
 ```
-carbon.v1.142.4.16384.ubuntu.build-a1b2c3d4   # 142 s, 4 vCPU, 16384 MB, x86 Linux
+carbon.v1.142.4.16384.ubuntu.eastus.build-a1b2c3d4   # 142 s, 4 vCPU, 16384 MB, x86 Linux, US-MIDA-PJM
 ```
 
 The artifacts API returns names in its listing, 100 per request, so nothing is

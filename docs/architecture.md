@@ -18,8 +18,8 @@ runs (30d) → per-job seconds (self-reported, else API) → kWh (per-runner W �
   Every figure and its source is in [assumptions.md](assumptions.md)
   times a grid-intensity factor (default 480 gCO2e/kWh, world average;
   override with `--grid-intensity`).
-- **Badge renderer** — maps the monthly gCO2e total to a color band and emits
-  Shields.io endpoint JSON (or an SVG).
+- **Badge renderer** — emits Shields.io endpoint JSON. One constant colour;
+  the message carries how the figure was arrived at.
 
 ## Decisions
 
@@ -43,5 +43,6 @@ Maps](https://www.electricitymaps.com/) zone; needs
 `--grid-intensity` when set. It's an *estimate* — the value is trend and
 awareness, not accounting.
 
-Color bands: <100 g bright green · <500 g green · <2 kg yellow · <10 kg
-orange · above red.
+No colour bands: the badge is always `informational`. An absolute monthly
+total mostly measures project size, so grading it would imply a verdict the
+number cannot support — see [assumptions.md](assumptions.md).

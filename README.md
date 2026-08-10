@@ -13,7 +13,7 @@ Shields.io endpoint JSON — with every assumption documented and the badge
 itself saying how the figure was arrived at. The same pattern as Badge Poser —
 for sustainability.
 
-![example](https://img.shields.io/badge/CI%20carbon-1.2%20kgCO2e%2Fmo-green)
+![example](https://img.shields.io/badge/CI%20carbon-1.2%20kgCO2e%2Fmo-informational)
 
 ## Install
 
@@ -111,7 +111,7 @@ uncertainty — it means "we measured what was measurable", not "accurate to 5%"
 | `ubuntu` / `windows` | 8.18 W × 1.15 PUE | 9.4 |
 | `macos` | 15.53 W × 1.15 | 17.9 |
 | `arm` | 8.18 W × 0.6 × 1.15 | 5.6 |
-| `gpu` | 130 W × 1.15 | 149.5 |
+| `gpu` | (8.18 + 70) W × 1.15 | 89.9 |
 
 The base figures are [Eco-CI's](https://github.com/green-coding-solutions/eco-ci-energy-estimation/tree/main/machine-power-data)
 measured power curves at full CPU, for the exact machines GitHub runs jobs on —

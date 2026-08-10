@@ -39,9 +39,20 @@ These are **machine draw**, so datacentre overhead is applied separately.
 
 ### PUE
 
-`PUE = 1.15`. Hyperscale operators publish 1.1–1.2; this is mid-range. Kept as
-its own named constant rather than folded into the wattages, so it is visible
-and can be changed on its own.
+`PUE = 1.15`. GitHub's hosted runners are Azure VMs, so the hyperscale end is
+the right one: Cloud Carbon Footprint publishes **1.125 for Azure**, 1.135 for
+AWS, 1.1 for GCP
+([methodology](https://www.cloudcarbonfootprint.org/docs/methodology/)). 1.15
+sits just above that band rather than on Azure's own figure — a 2% difference,
+far inside the error on everything it multiplies, and rounding up is the
+direction that does not flatter the badge.
+
+The *industry-wide* average is 1.56 and has been flat for five years
+([Uptime Institute, Global Data Center Survey 2024](https://uptimeinstitute.com/resources/research-and-reports/uptime-institute-global-data-center-survey-results-2024)).
+That figure does not apply here, because we know where these jobs ran.
+
+Kept as its own named constant rather than folded into the wattages, so it is
+visible and can be changed on its own.
 
 ### The resulting table
 
@@ -51,7 +62,10 @@ and can be changed on its own.
 | `windows` | 8.18 × 1.15 | **9.4** |
 | `macos` | 15.53 × 1.15 | **17.9** |
 | `arm` | 8.18 × 0.6 × 1.15 | **5.6** |
-| `gpu` | 130 × 1.15 | **149.5** |
+| `gpu` | (8.18 + 70) × 1.15 | **89.9** |
+
+The `gpu` row is a 4-vCPU host slice — the same one `ubuntu` describes — plus
+one T4-class accelerator at its 70 W board TDP.
 
 **Windows is not 2× Linux and macOS is not 10×.** GitHub bills them at those
 multipliers, but billing is a pricing decision. Windows runs on the same Azure
@@ -61,12 +75,15 @@ margin — in the macOS case, by about 4×.
 
 The two weak entries are `arm` and `gpu`: no measured curve exists for either,
 so `arm` is taken as ~40% below x86 and `gpu` as a T4-class accelerator plus
-host. If you run either seriously, declare your own with
+host. A TDP is a ceiling, not a mean, so the `gpu` row overstates anything but
+a saturated card. If you run either seriously, declare your own with
 `--runner-watts arm=… gpu=…`.
 
 Note the ARM figure deliberately avoids the "3–4× more efficient" claim that
 circulates. AWS's own published figure is *up to 60% less energy for equal
-work*, and independent benchmarks land nearer 1.5–2.5×.
+work* ([Graviton](https://aws.amazon.com/ec2/graviton/)), and independent
+benchmarks land nearer 45–50%, so 40% is the conservative end. greenlint's
+GL016 uses the same 40%.
 
 ### One law, both routes
 
@@ -82,6 +99,17 @@ watts = 1.2 + per_vcpu × vCPU + 0.1125 × GiB
   ubuntu   1.2 + 1.6·4  + 0.1125·16 =  9.4 W
   arm      1.2 + 0.65·4 + 0.1125·16 =  5.6 W
 ```
+
+**The 1.2 and the 0.1125 are not measurements.** They are the two free
+parameters of a fit whose only constraint is reproducing the Eco-CI table at
+4 vCPU / 16 GiB; `per_vcpu` is then solved for. Any pair summing to 3.0 W at
+16 GiB satisfies that constraint equally well.
+
+In particular `0.1125 W/GiB` is nothing like Cloud Carbon Footprint's
+0.392 W/GB for memory — and must not be. CCF meters memory separately from
+compute; the Eco-CI curve is whole-machine draw and already contains it.
+Raising this term to CCF's would double-count. It is a shape parameter, not a
+memory coefficient.
 
 **Affine, not proportional.** A machine has a fixed draw plus a per-core one —
 Eco-CI measures 1.76 W at idle rising to 8.18 W at load — so doubling the cores
@@ -100,9 +128,16 @@ have moved as it instrumented, with nothing having changed.
 
 ## Grid factor
 
-`480 gCO2e/kWh` by default, roughly the world average — and the single
-highest-leverage thing to correct, since real grids run from under 50 to over
-700. Two ways to do better:
+`480 gCO2e/kWh` by default. That is the world-average power-sector intensity
+for 2023: *"CO2 intensity reached a new record low of 480 gCO2/kWh, down 1.2%
+from 486 gCO2/kWh in 2022"* — Ember, Global Electricity Review 2024, in the
+["Electricity transition in 2023"](https://ember-energy.org/latest-insights/global-electricity-review-2024/electricity-transition-in-2023/)
+chapter. It drifts a few percent a year (486 in 2022, 480 in 2023, 473 in
+2024), which is far inside the error bars on the wattages it multiplies.
+greenlint pins the same figure.
+
+It is also the single highest-leverage thing to correct, since real grids run
+from under 30 to over 700. Two ways to do better:
 
 ```sh
 carbon-badge OWNER/REPO --grid-intensity 56        # a fixed figure you trust
@@ -111,6 +146,55 @@ carbon-badge OWNER/REPO --grid-region SE           # live, from Electricity Maps
 
 `--grid-region` is also an action input (`grid-region`), with
 `electricitymaps-token` for the API key.
+
+### The per-region table
+
+A job that recorded itself also records the Azure region it landed in, and
+`AZURE_REGION_GRID` prices it there instead of at the world average. That is
+the largest correction available and it costs nothing — the spread across the
+table is ~25× end to end.
+
+The country-level rows are **Ember / Energy Institute (via OWID) annual
+operational intensity**, data years 2024–2025, taken from the fleet's own
+[carbon-intensity-api](https://github.com/fabiocicerchia/carbon-intensity-api)
+dataset. That is the same Ember series the 480 comes from, so a region factor
+and the world average are the same kind of number rather than two unrelated
+guesses. Values are quoted as published, not rounded, so any row can be checked
+against the source; the approximation is *"this region is in that country"*,
+not the figure itself.
+
+**The US and Canadian rows are the exception, and the weakest here.** Both
+countries span several grids differing by ~5×, so the national average (384 and
+191) would hide exactly the variation the table exists to capture — but Ember
+publishes nothing sub-national. Those rows are hand-transcribed for the
+Electricity Maps zone named against each in the source, undated, and are the
+ones to distrust first. Check one at
+`https://app.electricitymaps.com/zone/<ZONE>`.
+
+## Reconciling with greenlint
+
+[greenlint](https://github.com/fabiocicerchia/greenlint) states its own carbon
+figures against a different anchor: **15 W for one busy physical core**. This
+table works out at ~4.7 W — 9.4 W for a 4-vCPU runner, which is two
+hyperthreaded cores. Two sibling tools disagreeing 3× on the same physical
+quantity looks like a bug, so: it is not, and neither constant belongs in the
+other tool.
+
+- **The published coefficients already differ by 1.7×.** greenlint starts from
+  Cloud Carbon Footprint's 3.5 W per vCPU at 100% CPU, a cross-fleet average.
+  This starts from Eco-CI's 8.18 W for a 4-vCPU slice — 2.05 W per vCPU —
+  modelled for the one machine GitHub actually runs jobs on.
+- **greenlint then rounds up on purpose** (7 W of silicon × PUE is 8–11 W; it
+  quotes 15) and carries the industry-average PUE of 1.56, because it is
+  linting code destined for infrastructure nobody has described. This tool
+  knows the infrastructure is Azure, so it takes the hyperscale PUE and no
+  safety margin.
+
+greenlint is the generous end of plausible for an unknown machine; this is the
+modelled figure for a known one.
+
+Everything the two tools *do* share is pinned to the same value: the 480
+gCO2e/kWh grid factor, and the 40% ARM efficiency figure (greenlint's GL016).
 
 **It uses the mean of the past 24 hours, not the current reading.** A single
 instant is a poor multiplier for a 30-day total: grids swing 2-3x across a day,
@@ -165,6 +249,27 @@ Treat the output as an order of magnitude and a trend line, not a figure to put
 in a report.
 
 ## Changelog of these assumptions
+
+**2026-08 (b)** — sourced the numbers that had no source, and reconciled
+against greenlint. Nothing about the method changed; three sets of figures
+moved:
+
+- **The region table was re-derived from Ember**, replacing values of mixed and
+  undocumented vintage. Most rows move under 20%, but a few were badly stale:
+  `francecentral` 85 → 41, `northeurope` 350 → 257, `westeurope` 330 → 254,
+  `southafricanorth` 900 → 699, `polandcentral` 700 → 589, `australiaeast`
+  600 → 525. `eastus`/`eastus2` went the other way, 350 → 390. Only repos with
+  self-reported jobs see this; an uninstrumented repo prices at 480 as before.
+- **`gpu` 149.5 W → 89.9 W.** The old figure was a flat 130 W of machine draw
+  with no working behind it, implying a ~60 W host — 7× what the same tool
+  charges a 4-vCPU slice everywhere else. It is now the `ubuntu` host slice
+  plus a 70 W T4 board TDP.
+- **PUE, 480, and the ARM factor kept their values** and gained their citations
+  (Cloud Carbon Footprint / Uptime Institute, Ember GER 2024, AWS Graviton).
+
+If you are reading a trend line across this release, that is a measurement
+change, not a reduction.
+
 
 > **Every badge drops about 25% at this release, and nothing got cleaner.**
 > The wattages were too high; correcting them moved every figure at once. If

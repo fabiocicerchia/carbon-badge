@@ -27,7 +27,13 @@ from datetime import datetime, timedelta, timezone
 import requests
 
 # --------------------------------------------------------------------------
-# Where these wattages come from. See docs/assumptions.md for the full working.
+# Where these numbers come from. See docs/assumptions.md for the full working.
+#
+# Every constant below is either published, with a link, or derived from one
+# that is — in which case the derivation is the whole of it. The sibling tool
+# greenlint holds its constants to the same standard, and where the two price
+# the same physical thing they are reconciled here rather than left to
+# disagree quietly.
 #
 # Base figures are the Cloud Energy power curves shipped by Green Coding
 # Solutions' Eco-CI, modelled from SPECpower data for the exact machines GitHub
@@ -39,10 +45,38 @@ import requests
 #
 # https://github.com/green-coding-solutions/eco-ci-energy-estimation
 #   /blob/main/machine-power-data/
+#
+# Reconciling with greenlint. greenlint's anchor is 15 W for one busy physical
+# core; the table below works out at ~4.7 W (9.4 W for a 4-vCPU runner, which
+# is two hyperthreaded cores). That 3x gap is deliberate on both sides:
+#
+#   - The published coefficients differ by 1.7x before either tool touches
+#     them. greenlint starts from Cloud Carbon Footprint's 3.5 W per vCPU at
+#     100% CPU, a cross-fleet average; this starts from Eco-CI's 8.18 W for a
+#     4-vCPU slice — 2.05 W per vCPU — modelled for the one machine GitHub
+#     actually runs jobs on.
+#   - greenlint then rounds up on purpose (7 W of silicon x PUE is 8-11 W; it
+#     quotes 15) and carries the industry-average PUE of 1.56, because it is
+#     linting code destined for infrastructure nobody has described. This tool
+#     knows the infrastructure is Azure, so it takes the hyperscale PUE and no
+#     safety margin.
+#
+# greenlint is the generous end of plausible for an unknown machine; this is
+# the modelled figure for a known one. Neither constant belongs in the other
+# tool.
 # --------------------------------------------------------------------------
 
-# Hyperscale operators publish 1.1-1.2; 1.15 is mid-range. Applied to machine
-# draw to get wall power.
+# Datacentre overhead, applied to machine draw to get wall power. GitHub's
+# hosted runners are Azure VMs, so the hyperscale end is the right one: Cloud
+# Carbon Footprint publishes 1.125 for Azure, 1.135 for AWS, 1.1 for GCP.
+# https://www.cloudcarbonfootprint.org/docs/methodology/
+# 1.15 sits just above that band rather than on Azure's own 1.125 — a 2%
+# difference, far inside the error on everything it multiplies, and rounding
+# up is the direction that does not flatter the badge. The industry-wide
+# average is 1.56 and has been flat for five years (Uptime Institute, Global
+# Data Center Survey 2024), which is what greenlint uses; it does not apply
+# here, because we know these jobs ran in a hyperscale datacentre.
+# https://uptimeinstitute.com/resources/research-and-reports/uptime-institute-global-data-center-survey-results-2024
 PUE = 1.15
 
 # Public repos have had 4-vCPU / 16 GiB standard runners since December 2023,
@@ -52,64 +86,87 @@ PUE = 1.15
 #   github-hosted-runners-double-the-power-for-open-source/
 BASELINE_VCPU = 4
 
-DEFAULT_GRID_INTENSITY = 480.0  # gCO2e/kWh, ~world average
+# Published. World-average power-sector intensity for 2023: "CO2 intensity
+# reached a new record low of 480 gCO2/kWh, down 1.2% from 486 gCO2/kWh in
+# 2022" — Ember, Global Electricity Review 2024. It is in the "Electricity
+# transition in 2023" chapter, not on the report landing page:
+# https://ember-energy.org/latest-insights/global-electricity-review-2024/electricity-transition-in-2023/
+# The figure drifts a few percent a year (486 in 2022, 480 in 2023, 473 in
+# 2024), which is far inside the error bars on the wattages it multiplies.
+# greenlint pins the same figure, and the two agreeing matters more than
+# either tracking the latest annual revision.
+DEFAULT_GRID_INTENSITY = 480.0  # gCO2e/kWh
 
-# Approximate annual-average grid carbon factor (gCO2e/kWh) for the grid each
-# Azure region sits on, used when a job reported which region it ran in.
+# Annual-average grid carbon factor (gCO2e/kWh) for the grid each Azure region
+# sits on, used when a job reported which region it ran in.
 #
-# These are country-level annual averages, rounded — not the live grid, and not
-# a sub-national grid where a country has several. `--grid-region` with an
-# Electricity Maps token is strictly better where you have one. The point of
-# this table is that it costs nothing and still beats a single world average by
-# a wide margin: the spread below is roughly 25x end to end, which dwarfs every
-# other correction in this tool.
+# The country-level rows are Ember / Energy Institute (via OWID) annual
+# operational intensity, taken from the fleet's own carbon-intensity-api
+# dataset (`src/datasets/countries.csv` there), data years 2024-2025. That is
+# the same Ember series DEFAULT_GRID_INTENSITY comes from, so a region factor
+# and the world average are the same kind of number rather than two unrelated
+# guesses. Quoted as published rather than rounded, so any row can be checked
+# against the source; the approximation is "this region is in that country",
+# not the figure itself.
+#
+# The US and Canadian rows are the exception and the weakest here. Both
+# countries span several grids differing by ~5x, so the national average (384
+# and 191 respectively) would hide exactly the variation this table exists to
+# capture — but Ember publishes nothing sub-national. Those rows are
+# hand-transcribed for the Electricity Maps zone named against each, undated,
+# and are the ones to distrust first. https://app.electricitymaps.com/zone/<ZONE>
+#
+# Not the live grid: `--grid-region` with an Electricity Maps token is strictly
+# better where you have one. The point of this table is that it costs nothing
+# and still beats a single world average by a wide margin — the spread below is
+# roughly 25x end to end, which dwarfs every other correction in this tool.
 #
 # Regions absent here fall back to DEFAULT_GRID_INTENSITY, so an unmapped or
 # newly launched region degrades rather than breaks.
 AZURE_REGION_GRID = {
     # Nordics and hydro/nuclear-heavy Europe
-    "norwayeast": 30.0,
-    "norwaywest": 30.0,
-    "swedencentral": 45.0,
-    "switzerlandnorth": 45.0,
-    "francecentral": 85.0,
-    "francesouth": 85.0,
+    "norwayeast": 28.0,  # NO
+    "norwaywest": 28.0,  # NO
+    "swedencentral": 35.0,  # SE
+    "switzerlandnorth": 39.0,  # CH
+    "francecentral": 41.0,  # FR
+    "francesouth": 41.0,  # FR
     # Rest of Europe
-    "uksouth": 240.0,
-    "ukwest": 240.0,
-    "northeurope": 350.0,  # Ireland
-    "westeurope": 330.0,  # Netherlands
-    "germanywestcentral": 380.0,
-    "italynorth": 350.0,
-    "spaincentral": 200.0,
-    "polandcentral": 700.0,
-    # North America
-    "canadaeast": 30.0,  # Quebec hydro
-    "canadacentral": 130.0,
-    "westus2": 100.0,  # Washington hydro
-    "westus": 250.0,  # California
-    "eastus": 350.0,
-    "eastus2": 350.0,
-    "southcentralus": 400.0,
-    "westus3": 400.0,
-    "centralus": 430.0,
-    "northcentralus": 430.0,
+    "uksouth": 217.0,  # GB
+    "ukwest": 217.0,  # GB
+    "northeurope": 257.0,  # IE
+    "westeurope": 254.0,  # NL
+    "germanywestcentral": 330.0,  # DE
+    "italynorth": 285.0,  # IT
+    "spaincentral": 154.0,  # ES
+    "polandcentral": 589.0,  # PL
+    # North America — sub-national, hand-transcribed; see the caveat above.
+    "canadaeast": 30.0,  # CA-QC, Quebec hydro
+    "canadacentral": 130.0,  # CA-ON, Ontario nuclear + hydro
+    "westus2": 90.0,  # US-NW-PACW, Washington hydro
+    "westus": 250.0,  # US-CAL-CISO
+    "eastus": 390.0,  # US-MIDA-PJM
+    "eastus2": 390.0,  # US-MIDA-PJM
+    "southcentralus": 400.0,  # US-TEX-ERCO
+    "westus3": 400.0,  # US-SW-AZPS
+    "centralus": 430.0,  # US-MIDW-MISO
+    "northcentralus": 430.0,  # US-MIDW-MISO
     # South America
-    "brazilsouth": 100.0,
+    "brazilsouth": 110.0,  # BR
     # Asia-Pacific
-    "japaneast": 480.0,
-    "japanwest": 480.0,
-    "koreacentral": 440.0,
-    "southeastasia": 480.0,  # Singapore
-    "eastasia": 700.0,  # Hong Kong
-    "centralindia": 700.0,
-    "southindia": 700.0,
-    "westindia": 700.0,
-    "australiaeast": 600.0,
-    "australiasoutheast": 600.0,
+    "japaneast": 477.0,  # JP
+    "japanwest": 477.0,  # JP
+    "koreacentral": 417.0,  # KR
+    "southeastasia": 497.0,  # SG
+    "eastasia": 675.0,  # HK
+    "centralindia": 670.0,  # IN
+    "southindia": 670.0,  # IN
+    "westindia": 670.0,  # IN
+    "australiaeast": 525.0,  # AU
+    "australiasoutheast": 525.0,  # AU
     # Middle East and Africa
-    "uaenorth": 450.0,
-    "southafricanorth": 900.0,
+    "uaenorth": 468.0,  # AE
+    "southafricanorth": 699.0,  # ZA
 }
 
 
@@ -125,24 +182,31 @@ def grid_factor_for(region, override=None):
     return AZURE_REGION_GRID.get(region or "", DEFAULT_GRID_INTENSITY)
 
 
-# Per-runner-type average power draw (W, incl. PUE), from published
-# GitHub-hosted runner specs. "ubuntu" is the baseline (2-core); Windows and
-# macOS hosts draw more for the same job. Larger runners (N-core labels)
-# scale roughly linearly off the 2-core baseline.
+# Per-runner-type wall power for the standard BASELINE_VCPU machine (W, incl.
+# PUE). "ubuntu" is the baseline; larger runners are not scaled from these
+# directly but pushed through watts_from_specs(), which is affine, so a 2x core
+# count is not a 2x wattage.
 # Checked in order, first substring match wins, so the specific entries must
 # come before the generic ones: "ubuntu-22.04-arm" contains "ubuntu", and a GPU
 # runner's label normally names its OS too. Every figure here is a default —
 # --runner-watts arm=... / gpu=... overrides any of them.
 RUNNER_POWER_W = {
-    # T4-class accelerator (~70 W TDP) plus its host. The weakest figure here —
-    # no measured curve exists for GitHub's GPU runners, so declare your own
-    # with --runner-watts gpu=<watts> if you use them seriously. Flat, not
-    # core-scaled: the accelerator dominates and does not grow with vCPUs.
-    "gpu": round(130.0 * PUE, 1),
+    # A 4-vCPU host slice, as for "ubuntu", plus one T4-class accelerator at its
+    # 70 W board TDP: 8.18 + 70 = 78.2 W of machine draw. The weakest figure
+    # here — no measured curve exists for GitHub's GPU runners and the TDP is a
+    # ceiling, not a mean — so declare your own with --runner-watts gpu=<watts>
+    # if you use them seriously. Flat, not core-scaled: the accelerator
+    # dominates and does not grow with vCPUs.
+    #
+    # This was a flat 130 W with no working behind it, which implied a ~60 W
+    # host — 7x what the same tool charges a 4-vCPU slice everywhere else.
+    "gpu": round((8.18 + 70.0) * PUE, 1),
     # ARM (Cobalt/Graviton class): no measured curve either, taken as ~40% below
     # the x86 baseline. Deliberately not the "3-4x more efficient" claim that
     # circulates — AWS's own published figure is up to 60% less energy for equal
-    # work, and independent benchmarks land nearer 1.5-2.5x.
+    # work (https://aws.amazon.com/ec2/graviton/) and independent benchmarks
+    # land nearer 45-50%, so 40% is the conservative end. greenlint's GL016
+    # uses the same 40%.
     "arm": round(8.18 * 0.6 * PUE, 1),
     # Mac mini M1, whole machine (dedicated hardware, not a shared VM slice).
     # Apple silicon is far more efficient than the 65 W this used to assume.
@@ -522,6 +586,19 @@ _ARTIFACT_RE = re.compile(r"^carbon\.v1\.(\d+)\.(\d+)\.(\d+)\.([a-z]+)\.([a-z0-9
 # over: public repos have had 4-vCPU/16 GiB runners since Dec 2023, and 12.5 W
 # was itself ~1.5x the measured full-load figure. That combination priced a
 # real 4-vCPU runner at 24.3 W, about 3x too high.
+#
+# Neither of the two constants below is measured or published — say so plainly,
+# because they read like coefficients and they are not. They are the two free
+# parameters of a fit whose only constraint is that the model reproduce the
+# Eco-CI table exactly at 4 vCPU / 16 GiB; per_vcpu is then solved for, which
+# is why it is derived in code rather than written down. Any (base, per-GB)
+# pair summing to 3.0 W at 16 GiB would satisfy that constraint equally well.
+#
+# In particular WATTS_PER_GB is nothing like Cloud Carbon Footprint's 0.392
+# W/GB for memory, which greenlint's numbers descend from — and must not be:
+# CCF meters memory separately from compute, whereas the Eco-CI curve is
+# whole-machine draw and already has the memory in it. Raising this term to
+# CCF's would double-count. It is a shape parameter, not a memory coefficient.
 WATTS_BASE = 1.2
 WATTS_PER_GB = 0.1125
 # What a standard runner has, and therefore what the table entries describe.
@@ -702,8 +779,14 @@ def grams_co2e(minutes, grid_intensity=DEFAULT_GRID_INTENSITY, watts=DEFAULT_RUN
     """Convert CI runner-minutes to gCO2e for the given grid intensity.
 
     `watts` honours a declared blanket --runner-watts: without it, an offline
-    --minutes estimate silently used the 12.5 W baseline however big the
-    runners were actually declared to be.
+    --minutes estimate silently used the DEFAULT_RUNNER_POWER_W baseline
+    however big the runners were actually declared to be.
+
+    Sanity anchor, the same shape as greenlint's core_seconds_per_gram: at 480
+    gCO2e/kWh a gram is 7.5 kJ, so one 9.4 W standard runner earns a gram every
+    ~13 minutes. A badge reading 100 gCO2e/mo is therefore claiming about 22
+    runner-hours a month — if that does not match the repo, the error is here
+    and not in the grid factor.
     """
     return minutes * (watts / 1000 / 60) * grid_intensity
 
