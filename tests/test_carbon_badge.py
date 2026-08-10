@@ -870,3 +870,113 @@ def test_grid_factor_ignores_gaps_in_the_history():
         )
 
     assert carbon_badge.live_grid_intensity("SE", get=fake_get) == 200.0
+
+
+# --- live grid providers ----------------------------------------------------
+
+
+def _resp(payload):
+    return _FakeResponse(payload)
+
+
+def test_energy_charts_takes_the_latest_non_null_reading():
+    """15-minute series, and the newest slot is often still null."""
+
+    def fake_get(url, params=None, headers=None, timeout=None):
+        assert "energy-charts" in url and params["country"] == "de"
+        return _resp({"co2eq": [400.0, 420.0, 411.5, None]})
+
+    assert carbon_badge._energy_charts_factor("de", get=fake_get) == 411.5
+
+
+def test_uk_falls_back_to_forecast_within_the_current_half_hour():
+    """NESO publishes `actual` only once a settlement period closes."""
+
+    def fake_get(url, params=None, headers=None, timeout=None):
+        return _resp({"data": [{"intensity": {"forecast": 127, "actual": None}}]})
+
+    assert carbon_badge._uk_factor(get=fake_get) == 127.0
+
+    def settled(url, params=None, headers=None, timeout=None):
+        return _resp({"data": [{"intensity": {"forecast": 127, "actual": 133}}]})
+
+    assert carbon_badge._uk_factor(get=settled) == 133.0
+
+
+def test_eia_weights_the_fuel_mix_of_the_newest_hour_only():
+    """EIA gives generation by fuel, not intensity, so the number is ours:
+    generation-weighted IPCC lifecycle factors. Mixing two hours would blend a
+    partially reported one into a complete one."""
+    rows = [
+        {"period": "2026-08-08T18", "fueltype": "COL", "value": "100"},
+        {"period": "2026-08-08T18", "fueltype": "WND", "value": "100"},
+        # An older hour that must not be blended in.
+        {"period": "2026-08-08T17", "fueltype": "COL", "value": "10000"},
+    ]
+
+    def fake_get(url, params=None, headers=None, timeout=None):
+        assert params["facets[respondent][]"] == "PJM"
+        return _resp({"response": {"data": rows}})
+
+    got = carbon_badge._eia_factor("PJM", "key", get=fake_get)
+    expected = (100 * 820.0 + 100 * 11.0) / 200
+    assert round(got, 6) == round(expected, 6)
+
+
+def test_eia_ignores_negative_generation():
+    """Net-negative rows are storage charging, not a fuel."""
+    rows = [
+        {"period": "p", "fueltype": "NG", "value": "100"},
+        {"period": "p", "fueltype": "OTH", "value": "-50"},
+    ]
+
+    def fake_get(url, params=None, headers=None, timeout=None):
+        return _resp({"response": {"data": rows}})
+
+    assert carbon_badge._eia_factor("PJM", "key", get=fake_get) == 490.0
+
+
+def test_us_regions_need_a_key_and_degrade_without_one():
+    """No key means no US provider — the annual average, not a crash."""
+    calls = []
+
+    def fake_get(url, params=None, headers=None, timeout=None):
+        calls.append(url)
+        return _resp({})
+
+    assert carbon_badge.live_region_factor("northcentralus", get=fake_get) is None
+    assert calls == []
+
+
+def test_a_failing_provider_never_breaks_the_refresh(capsys):
+    """A grid lookup is an optional refinement; it must not fail a badge."""
+
+    def boom(url, params=None, headers=None, timeout=None):
+        raise RuntimeError("provider down")
+
+    assert carbon_badge.live_region_factor("uksouth", get=boom) is None
+    assert "live grid lookup failed" in capsys.readouterr().err
+
+
+def test_resolver_caches_per_region_and_honours_an_explicit_figure():
+    """One request per distinct region per refresh, not one per job — and a
+    declared figure skips the providers entirely."""
+    calls = []
+
+    def fake_get(url, params=None, headers=None, timeout=None):
+        calls.append(url)
+        return _resp({"data": [{"intensity": {"actual": 100}}]})
+
+    resolve = carbon_badge.region_factor_resolver(get=fake_get)
+    assert resolve("uksouth") == 100.0
+    assert resolve("uksouth") == 100.0
+    assert len(calls) == 1, "resolver should memoise"
+
+    declared = carbon_badge.region_factor_resolver(override=333.0, get=fake_get)
+    assert declared("uksouth") == 333.0
+    assert len(calls) == 1, "an explicit figure must not consult a provider"
+
+
+def test_unknown_region_falls_back_to_the_annual_average():
+    resolve = carbon_badge.region_factor_resolver()
+    assert resolve("moonbase1") == carbon_badge.DEFAULT_GRID_INTENSITY
