@@ -5,31 +5,34 @@ carbon-badge is a single module (`carbon_badge.py`) with a small CLI.
 ## Overview
 
 ```
-runs (30d) → runner-minutes → kWh (12.5 W, PUE incl.) → gCO2e (grid factor) → badge JSON
+runs (30d) → per-job seconds (self-reported, else API) → kWh (per-runner W × PUE)
+  → gCO2e (grid factor) → badge JSON
 ```
 
 ## Components
 
 - **GitHub Actions client** — pages the workflow-runs API for the last 30 days
   and sums runner-minutes.
-- **Estimate model** — `KWH_PER_RUNNER_MINUTE` (12.5 W average draw incl. PUE)
+- **Estimate model** — `RUNNER_POWER_W` per runner type × `PUE`, or
+  `watts_from_specs()` for a job that reported its own CPU and memory.
+  Every figure and its source is in [assumptions.md](assumptions.md)
   times a grid-intensity factor (default 480 gCO2e/kWh, world average;
   override with `--grid-intensity`).
-- **Badge renderer** — maps the monthly gCO2e total to a color band and emits
-  Shields.io endpoint JSON (or an SVG).
+- **Badge renderer** — emits Shields.io endpoint JSON. One constant colour;
+  the message carries how the figure was arrived at.
 
 ## Decisions
 
 - Only runtime dependency is `requests`; everything else is stdlib.
 - The estimate is deliberately simple — the value is trend and awareness, not
   accounting. Assumptions are documented constants and overridable via flags.
-- Color bands: <100 g brightgreen · <500 g green · <2 kg yellow · <10 kg
-  orange · above red.
+- Badge colour: constant; the badge reports a value and passes no verdict
 
 ## How the estimate works
 
 ```
-runs (30d) → runner-minutes → kWh (12.5 W, PUE incl.) → gCO2e (grid factor)
+runs (30d) → per-job seconds (self-reported, else API) → kWh (per-runner W × PUE)
+  → gCO2e (grid factor)
 ```
 
 Defaults: world-average grid intensity (480 gCO2e/kWh); override with
@@ -40,5 +43,6 @@ Maps](https://www.electricitymaps.com/) zone; needs
 `--grid-intensity` when set. It's an *estimate* — the value is trend and
 awareness, not accounting.
 
-Color bands: <100 g bright green · <500 g green · <2 kg yellow · <10 kg
-orange · above red.
+No colour bands: the badge is always `informational`. An absolute monthly
+total mostly measures project size, so grading it would imply a verdict the
+number cannot support — see [assumptions.md](assumptions.md).
