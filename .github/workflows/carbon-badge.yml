@@ -38,7 +38,12 @@ jobs:
       - if: steps.gate.outputs.recent != '0' || github.event_name == 'workflow_dispatch'
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
 
+      # `./`, not `fabiocicerchia/carbon-badge@main`: the checkout above already
+      # has this action, so the local copy is what should run. It drops the one
+      # mutable action ref in the fleet — every other reference is SHA-pinned —
+      # and means the workflow tests the committed code rather than whatever
+      # `main` resolved to at the time.
       - if: steps.gate.outputs.recent != '0' || github.event_name == 'workflow_dispatch'
-        uses: fabiocicerchia/carbon-badge@main
+        uses: ./
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
