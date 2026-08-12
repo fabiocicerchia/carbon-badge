@@ -57,9 +57,18 @@ jobs:
       contents: read
       security-events: write
       actions: read
+    strategy:
+      fail-fast: false
+      matrix:
+        language: [python, javascript-typescript]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
       - uses: github/codeql-action/init@5595ccaf912efad79be6eef63a5619ff05969be3  # v4.37.6
         with:
-          languages: python
+          languages: ${{ matrix.language }}
+          # record/dist is committed ncc output; scanning a minified bundle
+          # reports on generated code nobody edits.
+          config: |
+            paths-ignore:
+              - record/dist
       - uses: github/codeql-action/analyze@5595ccaf912efad79be6eef63a5619ff05969be3  # v4.37.6
