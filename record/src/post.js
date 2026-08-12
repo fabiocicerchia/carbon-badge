@@ -7,13 +7,13 @@
 // costs one request and downloads nothing.
 //
 //   carbon.v1.<seconds>.<vcpu>.<memMB>.<platform>.<region>.<slug>
-const crypto = require('node:crypto');
-const fs = require('node:fs');
-const http = require('node:http');
-const os = require('node:os');
-const path = require('node:path');
-const core = require('@actions/core');
-const { DefaultArtifactClient } = require('@actions/artifact');
+import crypto from 'node:crypto';
+import fs from 'node:fs';
+import http from 'node:http';
+import os from 'node:os';
+import path from 'node:path';
+import * as core from '@actions/core';
+import { DefaultArtifactClient } from '@actions/artifact';
 
 // CPU and memory alone do not determine draw: the same 4 vCPU / 16 GiB reading
 // means a very different wattage on Apple silicon than on a shared x86 VM, so
