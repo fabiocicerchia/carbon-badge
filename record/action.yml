@@ -38,8 +38,8 @@ inputs:
 # in this directory after changing anything in src/.
 runs:
   using: 'node24'
-  main: 'dist/main/index.js'
-  post: 'dist/post/index.js'
+  main: 'dist/main/index.mjs'
+  post: 'dist/post/index.mjs'
   # Explicit, though it is also the default — the whole point is that a
   # cancelled or failed job still reports.
   post-if: 'always()'

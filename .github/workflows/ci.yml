@@ -21,7 +21,7 @@ jobs:
         with:
           python-version: "3.12"
       - name: Install ruff
-        run: pip install ruff
+        run: pip install --require-hashes -r requirements-dev.txt
       - name: Ruff
         run: ruff check .
 
@@ -37,7 +37,9 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
       - name: Install package with dev dependencies
-        run: pip install -e ".[dev]"
+        run: |
+          pip install --require-hashes -r requirements-dev.txt
+          pip install -e . --no-deps
       - name: Pytest
         run: pytest -q
 
@@ -49,6 +51,8 @@ jobs:
         with:
           python-version: "3.12"
       - name: Build sdist and wheel
-        run: pip install build && python -m build
+        run: |
+          pip install --require-hashes -r requirements-release.txt
+          python -m build
       - name: Check metadata
-        run: pip install twine && twine check dist/*
+        run: twine check dist/*  # installed from the hashed lock above

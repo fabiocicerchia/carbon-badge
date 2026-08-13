@@ -15,8 +15,7 @@ on:
     branches: [main]
 
 permissions:
-  contents: write # create tags & releases
-  pull-requests: write # open/update the release PR
+  contents: read
 
 jobs:
   release-please:
@@ -24,6 +23,9 @@ jobs:
     outputs:
       release_created: ${{ steps.release.outputs.release_created }}
       tag_name: ${{ steps.release.outputs.tag_name }}
+    permissions:
+      contents: write # create tags & releases
+      pull-requests: write # open/update the release PR
     steps:
       - uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7  # v5.0.0
         id: release
@@ -41,9 +43,11 @@ jobs:
         with:
           python-version: "3.12"
       - name: Build sdist and wheel
-        run: pip install build && python -m build
+        run: |
+          pip install --require-hashes -r requirements-release.txt
+          python -m build
       - name: Check metadata
-        run: pip install twine && twine check dist/*
+        run: twine check dist/*  # installed from the hashed lock above
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
         with:
           name: dist

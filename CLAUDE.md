@@ -28,12 +28,6 @@ make build   # Build sdist and wheel
 
 ## Tooling
 
-Shared config — the GitHub workflows, `.pre-commit-config.yaml`,
-`.editorconfig`, `.hadolint.yaml`, `SECURITY.md` — comes from
-[repo-skeleton](https://github.com/fabiocicerchia/repo-skeleton). Edit it
-there, not here; a local edit is drift and the next sync overwrites it.
-`check-drift.sh` in that repo reports what has diverged.
-
 - `make setup` installs the pre-commit hook, and that is the whole of it.
   Don't add a `.githooks/` directory: `core.hooksPath` replaces `.git/hooks/`
   wholesale, so setting it silently stops every pre-commit hook from running.
