@@ -220,6 +220,7 @@ source exists for a region, it is used automatically.
 |---|---|---|---|
 | [energy-charts.info](https://api.energy-charts.info) (Fraunhofer ISE) | **none** | 15 min | de fr it pl es nl at cz gr hu no |
 | [carbonintensity.org.uk](https://carbonintensity.org.uk) (NESO) | **none** | 30 min | Great Britain |
+| [ci-api](https://ci-api.fabiocicerchia.it) | **none** | hourly | every region in the table above except Canada |
 | [EIA](https://www.eia.gov/opendata/) | free, register | hourly | United States |
 | Electricity Maps | paid | 5 min | everywhere |
 
@@ -228,6 +229,40 @@ then a live provider for the job's region, then the annual average. One request
 per distinct region per refresh, memoised — not one per job. A provider that
 fails is reported and the annual average used; a grid lookup must never fail a
 badge refresh.
+
+### ci-api: one request for the whole world
+
+Two properties of that API decide how it is used here, and getting either wrong
+would be a silent bug rather than a visible failure.
+
+**It allows 1 request per 10s per IP**, enforced as a CDN rule that answers
+`429`. A refresh resolves several regions, so a per-region lookup would fail on
+everything after the first — and fail *quietly*, since a failed grid lookup
+degrades to the annual average by design. So this reads `/v1/latest.json`
+instead: every country and zone in one object, fetched once per refresh and
+memoised, which costs one request no matter how many regions a month of runs
+touched.
+
+**It publishes no freshness flag.** Its responses are static objects served
+with nothing in the request path, so nothing evaluates staleness when you ask —
+the client has to. A snapshot whose `generated_at` is over 65 minutes old (the
+hourly pipeline having missed a run) is refused, and so is any reading whose
+`basis` is not `measured`. That second check is the one that matters: an
+`annual-average` reading is the API's fallback for a grid with no live feed,
+which is *the same kind of number the table above already holds*. Accepting it
+would log "live at 513" for a figure no more live than the table's.
+
+Readings are taken as **`consumption_lifecycle`** — upstream emissions plus the
+trade adjustment, the most complete of the four figures published and the one
+the API tells clients to use. Its zone readings carry no consumption figures at
+all, since the import adjustment is a national number that does not describe a
+single bidding zone, so those fall back to `lifecycle` — still the same
+lifecycle scope as the IPCC factors below and the annual table.
+
+US regions map to their EIA balancing authority (`US/ERCO`, `US/CISO`) rather
+than to `US`, for the reason the table already gives: a national average blurs
+grids that differ by ~5x. Canada is left out — the API has no live Canadian
+feed, so it would only ever return the annual average the table already has.
 
 ### The US number is a model, not a measurement
 

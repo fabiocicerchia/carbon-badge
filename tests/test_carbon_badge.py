@@ -980,3 +980,98 @@ def test_resolver_caches_per_region_and_honours_an_explicit_figure():
 def test_unknown_region_falls_back_to_the_annual_average():
     resolve = carbon_badge.region_factor_resolver()
     assert resolve("moonbase1") == carbon_badge.DEFAULT_GRID_INTENSITY
+
+
+# --- ci-api -----------------------------------------------------------------
+
+
+def _dt(stamp):
+    return datetime.fromisoformat(stamp.replace("Z", "+00:00"))
+
+
+def _now_z():
+    return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+
+
+def _ci_snapshot(generated_at="2026-08-08T18:00:00Z"):
+    return {
+        "generated_at": generated_at,
+        "countries": {
+            "JP": {
+                "basis": "measured",
+                "direct": 477,
+                "lifecycle": 522,
+                "consumption_lifecycle": 567,
+            },
+            "AE": {"basis": "annual-average", "direct": 468, "lifecycle": 513},
+        },
+        # Zones carry neither consumption figure: the import adjustment is a
+        # national number and does not describe one bidding zone.
+        "zones": {
+            "US/ERCO": {"basis": "measured", "direct": 380, "lifecycle": 425},
+        },
+    }
+
+
+def test_ci_api_reports_consumption_lifecycle_for_a_country():
+    got = carbon_badge._ci_api_factor(
+        "JP", _ci_snapshot(), now=_dt("2026-08-08T18:10:00Z")
+    )
+    # Not 477 (direct) and not 522 (lifecycle): the reported figure carries both
+    # the upstream scope and the trade adjustment.
+    assert got == 567.0
+
+
+def test_ci_api_zone_falls_back_to_lifecycle():
+    got = carbon_badge._ci_api_factor(
+        "US/ERCO", _ci_snapshot(), now=_dt("2026-08-08T18:10:00Z")
+    )
+    assert got == 425.0
+
+
+def test_ci_api_refuses_an_annual_average():
+    """The API's fallback for a grid with no live feed is a yearly constant —
+    which is what AZURE_REGION_GRID already holds. Taking it would print "live
+    at 513" for a figure no more live than the table's."""
+    got = carbon_badge._ci_api_factor(
+        "AE", _ci_snapshot(), now=_dt("2026-08-08T18:10:00Z")
+    )
+    assert got is None
+
+
+def test_ci_api_refuses_a_missed_pipeline_run():
+    """Nothing in the response says it is stale — the objects are static and
+    served with no application in the request path — so a missed hourly run
+    only shows up as an old generated_at."""
+    fresh = _dt("2026-08-08T19:00:00Z")  # exactly 60 minutes on, inside the 65
+    assert carbon_badge._ci_api_factor("JP", _ci_snapshot(), now=fresh) == 567.0
+
+    late = _dt("2026-08-08T19:10:00Z")  # 70 minutes on from generated_at
+    assert carbon_badge._ci_api_factor("JP", _ci_snapshot(), now=late) is None
+
+
+def test_ci_api_snapshot_is_fetched_once_for_many_regions():
+    """The API allows 1 request per 10s per IP. Resolving several regions with
+    a lookup each would 429 on the second; /v1/latest.json is the whole world
+    in one object, so N regions stay at one request."""
+    calls = []
+
+    def fake_get(url, params=None, headers=None, timeout=None):
+        calls.append(url)
+        return _resp(_ci_snapshot(generated_at=_now_z()))
+
+    resolve = carbon_badge.region_factor_resolver(get=fake_get)
+    assert resolve("japaneast") == 567.0
+    assert resolve("japanwest") == 567.0
+    assert resolve("southcentralus") == 425.0
+    assert len(calls) == 1, calls
+    assert calls[0].endswith("/v1/latest.json")
+
+
+def test_ci_api_failure_leaves_the_annual_average_standing(capsys):
+    def boom(url, params=None, headers=None, timeout=None):
+        raise RuntimeError("ci-api down")
+
+    resolve = carbon_badge.region_factor_resolver(get=boom)
+    assert resolve("japaneast") == carbon_badge.AZURE_REGION_GRID["japaneast"]
+    assert "ci-api snapshot failed" in capsys.readouterr().err
