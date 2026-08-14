@@ -7,10 +7,15 @@ repos:
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: 3e8a8703264a2f4a69428a0aa4dcb512790b2c8c  # v6.0.0
     hooks:
-      # Whitespace and line endings.
+      # Whitespace and line endings. record/dist/ is the committed ncc bundle
+      # for the JavaScript action — rewriting its bytes here would make it stop
+      # matching what the bundler produced.
       - id: trailing-whitespace
+        exclude: ^record/dist/
       - id: end-of-file-fixer
+        exclude: ^record/dist/
       - id: mixed-line-ending
+        exclude: ^record/dist/
       # A UTF-8 BOM makes a shebang unreadable and a JSON parser choke, and it
       # is invisible in every diff view — strip it rather than debug it.
       - id: fix-byte-order-marker
