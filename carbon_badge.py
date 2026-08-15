@@ -601,11 +601,9 @@ _REGION_UK = {"uksouth", "ukwest"}
 # country, or "<COUNTRY>/<ZONE>" for a grid its operator publishes below
 # national level. The US rows use the EIA balancing authority rather than the
 # country, for the same reason _REGION_EIA_BA does: a national average blurs
-# CAISO and ERCOT together, and those are different grids.
-#
-# Canada is deliberately absent — the API has no live Canadian feed, so it
-# would only ever answer with an annual average, which is what the static table
-# above already provides at no cost.
+# CAISO and ERCOT together, and those are different grids. Canada is CA/ON for
+# the same reason: Ontario is the province with a live feed, and the one the
+# central Canadian region draws from.
 _REGION_CI_API = {
     "norwayeast": "NO",
     "norwaywest": "NO",
@@ -629,6 +627,7 @@ _REGION_CI_API = {
     "westus": "US/CISO",
     "westus2": "US/BPAT",
     "westus3": "US/AZPS",
+    "canadacentral": "CA/ON",
     "brazilsouth": "BR",
     "japaneast": "JP",
     "japanwest": "JP",

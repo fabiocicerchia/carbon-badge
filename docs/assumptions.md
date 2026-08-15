@@ -220,7 +220,7 @@ source exists for a region, it is used automatically.
 |---|---|---|---|
 | [energy-charts.info](https://api.energy-charts.info) (Fraunhofer ISE) | **none** | 15 min | de fr it pl es nl at cz gr hu no |
 | [carbonintensity.org.uk](https://carbonintensity.org.uk) (NESO) | **none** | 30 min | Great Britain |
-| [ci-api](https://ci-api.fabiocicerchia.it) | **none** | hourly | every region in the table above except Canada |
+| [ci-api](https://ci-api.fabiocicerchia.it) | **none** | hourly | Europe, US balancing authorities, AU and CA zones — the rest fall back |
 | [EIA](https://www.eia.gov/opendata/) | free, register | hourly | United States |
 | Electricity Maps | paid | 5 min | everywhere |
 
@@ -261,8 +261,9 @@ lifecycle scope as the IPCC factors below and the annual table.
 
 US regions map to their EIA balancing authority (`US/ERCO`, `US/CISO`) rather
 than to `US`, for the reason the table already gives: a national average blurs
-grids that differ by ~5x. Canada is left out — the API has no live Canadian
-feed, so it would only ever return the annual average the table already has.
+grids that differ by ~5x. Canada maps to `CA/ON` for the same reason — Ontario
+is the province with a live feed, and it is the one Azure's central Canadian
+region draws from.
 
 ### The US number is a model, not a measurement
 
