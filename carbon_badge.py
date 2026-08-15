@@ -310,18 +310,18 @@ def runner_power_w(labels, overrides=None):
     overrides = overrides or {}
     for label in labels_lower:
         if label in overrides:
-            return overrides[label]
+            return apply_load_factor(overrides[label])
     for key, watts in overrides.items():
         if key != ANY_RUNNER and any(key in label for label in labels_lower):
-            return watts
+            return apply_load_factor(watts)
     # A declared blanket figure beats the built-in guess table — the developer
     # knows what their runners are and the API does not.
     if ANY_RUNNER in overrides:
-        return overrides[ANY_RUNNER]
+        return apply_load_factor(overrides[ANY_RUNNER])
     for key, watts in RUNNER_POWER_W.items():
         if any(key in label for label in labels_lower):
             if key in _NO_CORE_SCALING:
-                return watts
+                return apply_load_factor(watts)
             cores = next(
                 (int(m.group(1)) for label in labels_lower if (m := _CORES_RE.search(label))),
                 None,
@@ -330,7 +330,7 @@ def runner_power_w(labels, overrides=None):
             # standard memory-per-vCPU ratio, so the two agree for any size
             # rather than only at the calibration point.
             if not cores:
-                return watts
+                return apply_load_factor(watts)
             return watts_from_specs(cores, cores * MEM_PER_VCPU_MB, key)
     return None
 
@@ -797,6 +797,40 @@ BASELINE_MEM_GB = 16
 MEM_PER_VCPU_MB = 1024 * BASELINE_MEM_GB // BASELINE_VCPU
 
 
+# Eco-CI measures the same 4-vCPU slice at 1.76 W idle and 8.18 W at full
+# load, so 21.5% of the full-load figure is drawn whatever the job is doing and
+# the remaining 78.5% scales with CPU utilisation.
+#
+# The API exposes no utilisation, so the default remains the full-load figure —
+# the honest reading of "we do not know" for a tool whose output should not
+# flatter the caller. --load-factor lets someone who *does* know say so: an
+# I/O-bound job that averages 25% CPU is overstated by roughly 3x at the
+# default, which is the single largest error left in the model.
+IDLE_FRACTION = 1.76 / 8.18
+
+# Set once from --load-factor. Module state rather than a parameter threaded
+# through six call sites: this scales the last step of a calculation every
+# route already shares, and the alternative was a wider diff for no more
+# correctness.
+LOAD_FACTOR = 1.0
+
+
+def apply_load_factor(watts, load_factor=None):
+    """Scale a full-load wattage to a stated average CPU utilisation.
+
+    Only the variable part scales: a machine at 0% CPU still draws its idle
+    power, so a load factor of 0 is not zero watts. That is why this is not a
+    plain multiply, which would have made `--load-factor 0.25` understate by
+    about the same margin the default overstates.
+    """
+    if load_factor is None:
+        load_factor = LOAD_FACTOR
+    if load_factor >= 1:
+        return watts
+    load_factor = max(0.0, float(load_factor))
+    return round(watts * (IDLE_FRACTION + (1 - IDLE_FRACTION) * load_factor), 2)
+
+
 def watts_from_specs(vcpu, mem_mb, platform="ubuntu"):
     """Power draw from a machine's CPU count, memory and platform.
 
@@ -819,12 +853,14 @@ def watts_from_specs(vcpu, mem_mb, platform="ubuntu"):
     host, so its draw does not track a vCPU count at all.
     """
     if platform == "macos":
-        return RUNNER_POWER_W["macos"]
+        return apply_load_factor(RUNNER_POWER_W["macos"])
     baseline_w = RUNNER_POWER_W.get(platform, DEFAULT_RUNNER_POWER_W)
     per_vcpu = (baseline_w - WATTS_BASE - WATTS_PER_GB * BASELINE_MEM_GB) / BASELINE_VCPU
     # Rounded so the two routes compare equal rather than differing in float
     # noise, and so the log prints a sane number.
-    return round(WATTS_BASE + per_vcpu * vcpu + WATTS_PER_GB * (mem_mb / 1024), 2)
+    return apply_load_factor(
+        round(WATTS_BASE + per_vcpu * vcpu + WATTS_PER_GB * (mem_mb / 1024), 2)
+    )
 
 
 def parse_carbon_artifact(name):
@@ -1358,6 +1394,19 @@ def main(argv=None):
         ),
     )
     p.add_argument(
+        "--load-factor",
+        type=float,
+        default=1.0,
+        metavar="F",
+        help=(
+            "average CPU utilisation of these jobs, 0-1. The API exposes no "
+            "utilisation, so the default (1.0) prices every job at full load — "
+            "which overstates an I/O-bound job by up to ~3x. Only the variable "
+            "part of the draw scales: at 0 a machine still draws its idle "
+            "power. See docs/assumptions.md"
+        ),
+    )
+    p.add_argument(
         "--ignore-self-reported",
         action="store_true",
         help=(
@@ -1381,6 +1430,11 @@ def main(argv=None):
         help="serve /badge.json on this port instead of printing once and exiting",
     )
     args = p.parse_args(argv)
+
+    if not 0 <= args.load_factor <= 1:
+        p.error("--load-factor must be between 0 and 1")
+    global LOAD_FACTOR
+    LOAD_FACTOR = args.load_factor
 
     # Validated up front so a typo fails the command rather than surfacing as a
     # traceback from inside estimate() — or, under --serve, on every request.

@@ -980,3 +980,61 @@ def test_resolver_caches_per_region_and_honours_an_explicit_figure():
 def test_unknown_region_falls_back_to_the_annual_average():
     resolve = carbon_badge.region_factor_resolver()
     assert resolve("moonbase1") == carbon_badge.DEFAULT_GRID_INTENSITY
+
+
+class TestLoadFactor:
+    """--load-factor: what to do about a flat wattage on an I/O-bound job."""
+
+    def setup_method(self):
+        carbon_badge.LOAD_FACTOR = 1.0
+
+    def teardown_method(self):
+        carbon_badge.LOAD_FACTOR = 1.0
+
+    def test_default_is_unchanged_behaviour(self):
+        # The API exposes no utilisation, so full load stays the default: the
+        # honest reading of "we do not know" for a number that should not
+        # flatter the caller.
+        assert carbon_badge.watts_from_specs(4, 16 * 1024) == 9.4
+        assert carbon_badge.runner_power_w(["ubuntu-latest"]) == 9.4
+
+    def test_only_the_variable_part_scales(self):
+        # A machine at 0% CPU still draws its idle power, so a load factor of
+        # zero is not zero watts. A plain multiply would have understated by
+        # about the margin the default overstates.
+        carbon_badge.LOAD_FACTOR = 0.0
+        idle = carbon_badge.watts_from_specs(4, 16 * 1024)
+        assert idle == pytest.approx(9.4 * carbon_badge.IDLE_FRACTION, abs=0.01)
+        assert idle > 0
+
+    def test_a_quarter_load_is_not_a_quarter_of_the_power(self):
+        carbon_badge.LOAD_FACTOR = 0.25
+        watts = carbon_badge.watts_from_specs(4, 16 * 1024)
+        assert watts == pytest.approx(3.87, abs=0.01)
+        assert watts > 9.4 * 0.25  # idle floor keeps it above the naive figure
+
+    def test_both_routes_agree_under_a_load_factor(self):
+        # The invariant the whole power model is built around: the label path
+        # and the self-reported path must price the same machine identically,
+        # or a repo's figure moves as it instruments.
+        carbon_badge.LOAD_FACTOR = 0.4
+        assert carbon_badge.runner_power_w(["ubuntu-latest"]) == carbon_badge.watts_from_specs(
+            carbon_badge.BASELINE_VCPU, carbon_badge.BASELINE_MEM_GB * 1024
+        )
+
+    def test_macos_scales_too(self):
+        carbon_badge.LOAD_FACTOR = 0.5
+        assert carbon_badge.watts_from_specs(8, 16 * 1024, "macos") < carbon_badge.RUNNER_POWER_W["macos"]
+
+    def test_declared_runner_watts_scale_as_well(self):
+        # A declared figure is a full-load figure like any other, so it must
+        # scale — otherwise --runner-watts and --load-factor would contradict.
+        carbon_badge.LOAD_FACTOR = 0.5
+        got = carbon_badge.runner_power_w(["self-hosted"], {"self-hosted": 100.0})
+        assert got == pytest.approx(100 * (carbon_badge.IDLE_FRACTION + 0.5 * (1 - carbon_badge.IDLE_FRACTION)), abs=0.01)
+
+    def test_out_of_range_is_refused(self):
+        with pytest.raises(SystemExit):
+            carbon_badge.main(["owner/repo", "--load-factor", "1.5"])
+        with pytest.raises(SystemExit):
+            carbon_badge.main(["owner/repo", "--load-factor", "-0.1"])
