@@ -273,6 +273,36 @@ reaches the same conclusion — its badge reports a value with no colour banding
 What remains is the confidence marker, which describes how the figure was
 obtained rather than whether it is good. That is a claim this tool can defend.
 
+## What the recorder counts as the job
+
+The recorder starts its clock when its own step runs. That is after runner
+provisioning, "Set up job", and the download of the action itself — time the VM
+spends booted and drawing power, and which nothing inside the job can see. On a
+first live trial (six jobs) it was 53 s recorded against 87 s real: a **39% gap**
+on ten-second jobs, ~1% on a ten-minute build. It pushes the self-reported figure
+*below* the API figure, the same direction as the cancelled-job gap, so the two
+compound.
+
+**A GitHub-hosted runner is a fresh VM per job, so its uptime is the job's whole
+billable life** — and that is now what gets recorded. A self-hosted runner is
+long-lived and its uptime says nothing about this job (it could be weeks), so
+there the wall clock is kept. The two paths are chosen by `RUNNER_ENVIRONMENT`,
+which the runner sets; when it is absent, self-hosted is assumed, because that
+leaves the previous behaviour in place.
+
+This is a choice between two errors rather than a free win:
+
+- Counting boot time attributes energy to the job that GitHub may have spent
+  before assigning the VM to it. The VM was drawing power regardless, and it was
+  booted *for* this job, so the attribution is defensible.
+- Not counting it undercounts every job by a near-constant few seconds, which is
+  a systematic bias that gets worse the shorter the job.
+
+The overcount is bounded and the undercount was not, which is what decided it.
+A pre-step interval above ten minutes is treated as a reading that is not
+measuring this job — a warm image, a mislabelled runner, a clock jump — and the
+wall clock is used instead.
+
 ## Known limits
 
 - **A flat wattage cannot be right.** Real draw swings 1.76–8.18 W with CPU
