@@ -95,3 +95,17 @@ jobs:
           path: dist/
       - name: Publish to PyPI (trusted publishing)
         uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33  # v1.14.2
+
+  # Building the image has to hang off this job rather than off the release
+  # event: the release release-please publishes carries GITHUB_TOKEN, and
+  # GitHub does not start workflows from GITHUB_TOKEN events. Called in the
+  # same run, it just works — no PAT to mint, rotate, or leak.
+  publish:
+    needs: release-please
+    if: needs.release-please.outputs.release_created == 'true'
+    permissions:
+      contents: read
+      packages: write
+    uses: ./.github/workflows/publish.yml
+    with:
+      tag: ${{ needs.release-please.outputs.tag_name }}
