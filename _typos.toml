@@ -1,0 +1,16 @@
+[files]
+# record/ is a JavaScript action; record/dist/ is its committed ncc bundle
+# (.gitignore force-includes it). Minified identifiers are not prose.
+extend-exclude = ["record/dist/"]
+
+[default]
+# release-please writes CHANGELOG entries as markdown links whose label is the
+# abbreviated commit SHA — "([ba2dccd](https://github.com/...))". typos reads
+# those hex strings as words. Ignore SHA-shaped link labels rather than
+# skipping CHANGELOG.md, so its prose is still checked.
+extend-ignore-re = ["\\[[0-9a-f]{7,40}\\]"]
+
+[default.extend-words]
+# "BA" is an EIA Balancing Authority code, not a misspelling of "by"/"be".
+ba = "ba"
+BA = "BA"

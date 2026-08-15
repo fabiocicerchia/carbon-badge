@@ -711,7 +711,7 @@ def live_region_factor(region, eia_key=None, get=requests.get):
         ba = _REGION_EIA_BA.get(region)
         if ba and eia_key:
             return _eia_factor(ba, eia_key, get=get)
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001 — injected `get`, any failure must fall back
         print(
             f"carbon-badge: live grid lookup failed for {region} ({exc}); "
             "using the annual average for that region",
@@ -895,7 +895,7 @@ def _expected_markers(runs, by_run, repo, token, api):
             seen.add(wf)
             try:
                 sampled[wf] = sum(1 for j in run_jobs(run["id"], repo, token, api) if _ran(j))
-            except Exception:
+            except Exception:  # noqa: BLE001 — injected `get`, any failure must fall back
                 sampled[wf] = 0  # unreachable sample; the observed bound stands
     return {wf: max(observed.get(wf, 0), sampled.get(wf, 0)) for wf in observed}
 
@@ -1103,7 +1103,7 @@ def live_grid_intensity(
         if readings:
             return sum(readings) / len(readings)
         raise ValueError("history returned no usable readings")
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001 — injected `get`, any failure must fall back
         print(
             f"carbon-badge: 24h grid history unavailable ({exc}); using the "
             "instantaneous reading, which prices a month at one moment",
