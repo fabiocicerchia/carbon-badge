@@ -87,6 +87,6 @@ repos:
   # unpinned full-fat base images, missing k8s resource limits, ...). Gating in
   # CI too: code-quality.yml runs this file via pre-commit/action.
   - repo: https://github.com/fabiocicerchia/greenlint
-    rev: 8b9620dc04ac195e1ae724f0cbaa0229130ae384  # v0.1.2
+    rev: bf9c8c90d1935deb2e69df44d6ee134bf4b1733e  # v0.1.5
     hooks:
       - id: greenlint
