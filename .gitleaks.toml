@@ -1,0 +1,18 @@
+title = "carbon-badge"
+
+# The default rules, plus one exemption.
+[extend]
+useDefault = true
+
+# `record/dist/` is bundler output — the recorder's own source with its npm
+# dependencies inlined and minified. Minified vendor code trips
+# generic-api-key on ordinary constants (an Azure SDK version string, a
+# fast-xml-parser literal), and there is no way to annotate a line that is
+# regenerated on every build.
+#
+# Nothing is lost by skipping it: everything that ends up in the bundle comes
+# from `record/src/`, which is still scanned, so a secret committed to this
+# repo is still caught at its source.
+[allowlist]
+description = "generated bundles"
+paths = ['''record/dist/''']
