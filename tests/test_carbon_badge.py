@@ -1014,18 +1014,14 @@ def _ci_snapshot(generated_at="2026-08-08T18:00:00Z"):
 
 
 def test_ci_api_reports_consumption_lifecycle_for_a_country():
-    got = carbon_badge._ci_api_factor(
-        "JP", _ci_snapshot(), now=_dt("2026-08-08T18:10:00Z")
-    )
+    got = carbon_badge._ci_api_factor("JP", _ci_snapshot(), now=_dt("2026-08-08T18:10:00Z"))
     # Not 477 (direct) and not 522 (lifecycle): the reported figure carries both
     # the upstream scope and the trade adjustment.
     assert got == 567.0
 
 
 def test_ci_api_zone_falls_back_to_lifecycle():
-    got = carbon_badge._ci_api_factor(
-        "US/ERCO", _ci_snapshot(), now=_dt("2026-08-08T18:10:00Z")
-    )
+    got = carbon_badge._ci_api_factor("US/ERCO", _ci_snapshot(), now=_dt("2026-08-08T18:10:00Z"))
     assert got == 425.0
 
 
@@ -1033,9 +1029,7 @@ def test_ci_api_refuses_an_annual_average():
     """The API's fallback for a grid with no live feed is a yearly constant —
     which is what AZURE_REGION_GRID already holds. Taking it would print "live
     at 513" for a figure no more live than the table's."""
-    got = carbon_badge._ci_api_factor(
-        "AE", _ci_snapshot(), now=_dt("2026-08-08T18:10:00Z")
-    )
+    got = carbon_badge._ci_api_factor("AE", _ci_snapshot(), now=_dt("2026-08-08T18:10:00Z"))
     assert got is None
 
 

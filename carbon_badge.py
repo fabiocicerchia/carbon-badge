@@ -705,6 +705,18 @@ def _uk_factor(get=requests.get):
     return float(value) if value is not None else None
 
 
+def _to_float(value):
+    """A number from a JSON field, or 0.0 when the field is not one.
+
+    EIA sends its figures as JSON strings and occasionally as null; a row that
+    does not parse is dropped rather than failing the whole hour.
+    """
+    try:
+        return float(value or 0)
+    except (TypeError, ValueError):
+        return 0.0
+
+
 def _eia_factor(balancing_authority, api_key, get=requests.get):
     """US, computed from the balancing authority's fuel mix.
 
@@ -738,10 +750,7 @@ def _eia_factor(balancing_authority, api_key, get=requests.get):
     for row in rows:
         if row.get("period") != newest:
             continue
-        try:
-            value = float(row.get("value") or 0)
-        except (TypeError, ValueError):
-            continue
+        value = _to_float(row.get("value"))
         if value <= 0:  # net-negative rows are storage discharge accounting
             continue
         factor = IPCC_FUEL_G_PER_KWH.get(row.get("fueltype"))
@@ -854,7 +863,7 @@ def region_factor_resolver(eia_key=None, override=None, get=requests.get):
         if not snapshot:
             try:
                 snapshot.append(_ci_api_snapshot(get=get))
-            except Exception as exc:
+            except Exception as exc:  # noqa: BLE001 - a failed snapshot must not fail the refresh
                 print(f"carbon-badge: ci-api snapshot failed ({exc})", file=sys.stderr)
                 snapshot.append(None)
         return snapshot[0]
