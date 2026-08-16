@@ -1024,14 +1024,19 @@ class TestLoadFactor:
 
     def test_macos_scales_too(self):
         carbon_badge.LOAD_FACTOR = 0.5
-        assert carbon_badge.watts_from_specs(8, 16 * 1024, "macos") < carbon_badge.RUNNER_POWER_W["macos"]
+        assert (
+            carbon_badge.watts_from_specs(8, 16 * 1024, "macos")
+            < carbon_badge.RUNNER_POWER_W["macos"]
+        )
 
     def test_declared_runner_watts_scale_as_well(self):
         # A declared figure is a full-load figure like any other, so it must
         # scale — otherwise --runner-watts and --load-factor would contradict.
         carbon_badge.LOAD_FACTOR = 0.5
         got = carbon_badge.runner_power_w(["self-hosted"], {"self-hosted": 100.0})
-        assert got == pytest.approx(100 * (carbon_badge.IDLE_FRACTION + 0.5 * (1 - carbon_badge.IDLE_FRACTION)), abs=0.01)
+        assert got == pytest.approx(
+            100 * (carbon_badge.IDLE_FRACTION + 0.5 * (1 - carbon_badge.IDLE_FRACTION)), abs=0.01
+        )
 
     def test_out_of_range_is_refused(self):
         with pytest.raises(SystemExit):
