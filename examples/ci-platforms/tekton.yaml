@@ -1,0 +1,88 @@
+# Tekton — refresh the badge on a schedule.
+# kubectl apply -f tekton.yaml. Tekton has no cron of its own; the CronJob at
+# the bottom is what fires the TaskRun (Tekton Triggers is the other way).
+apiVersion: tekton.dev/v1
+kind: Task
+metadata:
+  name: carbon-badge
+spec:
+  description: >-
+    Estimates a repo's CI carbon footprint and emits Shields.io endpoint JSON.
+  params:
+    - name: repo
+      description: owner/repo (GitHub) or group/project (GitLab)
+      type: string
+    - name: provider
+      type: string
+      default: github
+    - name: grid-intensity
+      description: gCO2e/kWh; omit to price each job on its own region's grid
+      type: string
+      default: "56"
+  workspaces:
+    - name: out
+      description: Where badge.json is written
+  steps:
+    - name: badge
+      image: ghcr.io/fabiocicerchia/carbon-badge:0.2.1
+      # The image's entrypoint is carbon-badge; a shell is only needed to
+      # redirect stdout into the workspace.
+      command: [sh, -c]
+      args:
+        - >-
+          carbon-badge "$(params.repo)" --provider "$(params.provider)"
+          --grid-intensity "$(params.grid-intensity)"
+          > "$(workspaces.out.path)/badge.json"
+      env:
+        # A PAT with actions:read (GitHub) or read_api (GitLab).
+        - name: GITHUB_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: carbon-badge
+              key: token
+      computeResources:
+        requests: {cpu: 100m, memory: 128Mi}
+        limits: {cpu: 200m, memory: 256Mi}
+---
+# Fires the Task nightly. Tekton has no cron of its own, so a plain Kubernetes
+# CronJob creates the TaskRun. The RBAC is the part worth reviewing: the
+# service account needs `create` on `taskruns` in this namespace and nothing
+# else. Tekton Triggers is the other way to do this.
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: carbon-badge-nightly
+spec:
+  schedule: "17 2 * * *"
+  concurrencyPolicy: Forbid
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          serviceAccountName: carbon-badge-runner
+          restartPolicy: OnFailure
+          containers:
+            - name: trigger
+              image: bitnami/kubectl:1.31
+              command: [sh, -c]
+              args:
+                - |
+                  cat <<'MANIFEST' | kubectl create -f -
+                  apiVersion: tekton.dev/v1
+                  kind: TaskRun
+                  metadata:
+                    generateName: carbon-badge-
+                  spec:
+                    taskRef:
+                      name: carbon-badge
+                    params:
+                      - name: repo
+                        value: OWNER/REPO
+                    workspaces:
+                      - name: out
+                        persistentVolumeClaim:
+                          claimName: carbon-badge-out
+                  MANIFEST
+              resources:
+                requests: {cpu: 50m, memory: 64Mi}
+                limits: {cpu: 100m, memory: 128Mi}

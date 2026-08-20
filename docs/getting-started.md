@@ -236,3 +236,37 @@ carbon-badge fabiocicerchia/nginx-lua --token $GITHUB_TOKEN --serve 8080
 
 Put a reverse proxy (or an SSH tunnel) in front of it for anything public —
 this is a bare `http.server`, not a hardened production service.
+
+## Other CI systems
+
+The action wrapper is GitHub-specific; the CLI is not. Anything that can run
+Python 3.10+ and hold a token can refresh the badge:
+
+```sh
+pip install "git+https://github.com/fabiocicerchia/carbon-badge@v0.2.1"
+carbon-badge OWNER/REPO --token "$GITHUB_TOKEN" --grid-intensity 56 > badge.json
+```
+
+Two things to keep separate. **Where the badge is computed** can be any CI
+system. **What it measures** is whatever `--provider` points at — GitHub
+Actions or GitLab CI. A Jenkins job refreshing the badge for a GitHub repo is
+measuring that repo's Actions, not the Jenkins build that ran the command.
+
+Off GitHub Actions there is no built-in `GITHUB_TOKEN`, so a PAT with
+`actions:read` (or a GitLab token with `read_api`) is the one credential the
+job needs. And the JSON has to end up somewhere shields.io can fetch over
+public HTTPS — GitLab Pages, an S3/GCS bucket, or a `gh-pages` branch. A build
+artifact is not a public URL.
+
+Drop-in files for GitLab CI, CircleCI, Travis, Azure DevOps, AWS CodePipeline,
+Devtron, Northflank, Spacelift, Jenkins, Bitbucket Pipelines, Google Cloud
+Build, Tekton, Argo Workflows, Harness, Buildkite and Drone/Woodpecker are in
+[`examples/ci-platforms/`](../examples/ci-platforms/README.md), along with a
+table of where each platform keeps its cron.
+
+GitLab is the one platform there that can measure itself:
+
+```sh
+carbon-badge "$CI_PROJECT_PATH" --provider gitlab --api "$CI_API_V4_URL" \
+  --token "$GITLAB_TOKEN" > public/badge.json
+```

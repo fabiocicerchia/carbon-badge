@@ -1,0 +1,26 @@
+# Spacelift — refresh the badge after each apply.
+# Copy into .spacelift/config.yml at the root of the stack's repository.
+#
+# after_apply is the honest hook for this one: the badge is a report, not a
+# gate, and nothing about it should be able to fail a run — hence the trailing
+# `|| true`. For a nightly refresh independent of applies, use a Spacelift
+# scheduled task on the stack running the same two commands.
+version: "1"
+
+stack_defaults:
+  # The default runner image has no Python.
+  runner_image: python:3.13-slim
+  environment:
+    TARGET_REPO: OWNER/REPO
+    # GITHUB_TOKEN belongs in a Spacelift context as a secret environment
+    # variable, not here — a PAT with actions:read.
+
+stacks:
+  # Replace with your stack's ID (the slug in its Spacelift URL).
+  infrastructure:
+    after_apply:
+      - pip install --no-cache-dir --quiet "git+https://github.com/fabiocicerchia/carbon-badge@v0.2.1" || true
+      - carbon-badge "$TARGET_REPO" --grid-intensity 56 > badge.json || true
+      # Spacelift keeps nothing between runs, so ship it somewhere public —
+      # shields.io fetches this URL on every view of your README.
+      - aws s3 cp badge.json "s3://my-public-badges/badge.json" || true

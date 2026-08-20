@@ -1,0 +1,22 @@
+# Travis CI — refresh the badge on a cron build.
+# Copy into .travis.yml. Enable the cron under
+# Settings -> Cron Jobs (daily/weekly) for the branch you keep this on.
+language: python
+python: "3.13"
+os: linux
+dist: jammy
+
+install:
+  - pip install --no-cache-dir "git+https://github.com/fabiocicerchia/carbon-badge@v0.2.1"
+
+script:
+  # Only the cron build refreshes the badge; ordinary pushes skip it.
+  - if [ "$TRAVIS_EVENT_TYPE" != "cron" ]; then echo "not a cron build; skipping"; exit 0; fi
+  # GITHUB_TOKEN: a PAT with actions:read, set as an encrypted repository
+  # variable (Settings -> Environment Variables, display value OFF).
+  - carbon-badge "$TARGET_REPO" --grid-intensity 56 > badge.json
+  - cat badge.json
+
+# Travis keeps no artifacts of its own — publish badge.json where shields.io can
+# reach it, e.g. `aws s3 cp badge.json s3://BUCKET/badge.json --acl public-read`
+# in a deploy stage.

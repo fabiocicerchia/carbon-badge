@@ -1,0 +1,37 @@
+# AWS CodePipeline / CodeBuild — refresh the badge nightly, publish it to S3.
+# Copy into buildspec.yml (or point the CodeBuild project at this path).
+#
+# Scheduling: an EventBridge rule on a cron expression, targeting either
+# codepipeline:StartPipelineExecution or the CodeBuild project directly.
+# CodePipeline itself has no schedule of its own.
+version: 0.2
+
+env:
+  variables:
+    TARGET_REPO: OWNER/REPO
+    BADGE_BUCKET: my-public-badges
+  secrets-manager:
+    # A PAT with actions:read on the target repo. Off GitHub there is no
+    # built-in token, so this is the one credential the job needs.
+    GITHUB_TOKEN: "carbon-badge/github:token"
+
+phases:
+  install:
+    runtime-versions:
+      python: 3.13
+    commands:
+      - pip install --no-cache-dir "git+https://github.com/fabiocicerchia/carbon-badge@v0.2.1"
+  build:
+    commands:
+      - carbon-badge "$TARGET_REPO" --grid-intensity 56 > badge.json
+      - cat badge.json
+  post_build:
+    commands:
+      # shields.io fetches this on every view, so it has to be publicly
+      # readable. A bucket policy is the better way to do that than an ACL.
+      - aws s3 cp badge.json "s3://$BADGE_BUCKET/badge.json"
+        --content-type application/json --cache-control max-age=3600
+
+artifacts:
+  files:
+    - badge.json

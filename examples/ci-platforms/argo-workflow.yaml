@@ -1,0 +1,49 @@
+# Argo Workflows — refresh the badge nightly.
+# kubectl apply -f argo-workflow.yaml. A CronWorkflow is the native fit here:
+# the badge is a scheduled report, not a gate on anything.
+apiVersion: argoproj.io/v1alpha1
+kind: CronWorkflow
+metadata:
+  name: carbon-badge
+spec:
+  schedule: "17 2 * * *"
+  timezone: UTC
+  concurrencyPolicy: Forbid
+  workflowSpec:
+    entrypoint: badge
+    arguments:
+      parameters:
+        - name: repo
+          value: OWNER/REPO
+        - name: grid-intensity # 56 = eu-north-1; omit for per-region pricing
+          value: "56"
+    templates:
+      - name: badge
+        container:
+          image: ghcr.io/fabiocicerchia/carbon-badge:0.2.1
+          # The image's entrypoint is carbon-badge; a shell is only needed to
+          # redirect stdout somewhere shields.io can eventually read.
+          command: [sh, -c]
+          args:
+            - >-
+              carbon-badge "{{workflow.parameters.repo}}"
+              --grid-intensity "{{workflow.parameters.grid-intensity}}"
+              | tee /tmp/badge.json
+          env:
+            # A PAT with actions:read on the target repo.
+            - name: GITHUB_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: carbon-badge
+                  key: token
+          resources:
+            requests: {cpu: 100m, memory: 128Mi}
+            limits: {cpu: 200m, memory: 256Mi}
+        outputs:
+          artifacts:
+            - name: badge
+              path: /tmp/badge.json
+              # Point this at the bucket shields.io will fetch from; without an
+              # `s3:`/`gcs:` block it lands in the default artifact repository.
+              archive:
+                none: {}

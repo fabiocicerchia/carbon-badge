@@ -1,0 +1,28 @@
+# Drone — refresh the badge nightly.
+# Copy into .drone.yml at the repo root, then add a cron job for this repo in
+# the Drone UI (Settings -> Cron Jobs) named `nightly`.
+#
+# Woodpecker CI runs the same steps: drop the `kind`/`type`/`name` header, keep
+# `steps:` as-is, and save it as .woodpecker.yml.
+kind: pipeline
+type: docker
+name: carbon-badge
+
+steps:
+  - name: badge
+    image: ghcr.io/fabiocicerchia/carbon-badge:0.2.1
+    # The image's entrypoint is carbon-badge; commands need a shell, so the
+    # entrypoint is overridden here.
+    entrypoint: [sh, -c]
+    environment:
+      TARGET_REPO: OWNER/REPO
+      GITHUB_TOKEN: # a PAT with actions:read, added as a repository secret
+        from_secret: carbon_badge_token
+    command:
+      - carbon-badge "$TARGET_REPO" --grid-intensity 56 > badge.json && cat badge.json
+
+trigger:
+  event:
+    - cron
+  cron:
+    - nightly

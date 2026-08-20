@@ -1,0 +1,35 @@
+# GitLab CI — refresh the badge nightly and publish it on GitLab Pages.
+# Copy into .gitlab-ci.yml (or `include:` it from one).
+#
+# GitLab is a first-class provider here, not a host to run the tool on:
+# `--provider gitlab` reads this project's own CI jobs, so the badge measures
+# the pipelines you are looking at. Add the schedule under
+# Build -> Pipeline schedules; nothing else triggers this.
+stages:
+  - deploy
+
+pages:
+  stage: deploy
+  image: python:3.13-slim
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "schedule"
+    - if: $CI_PIPELINE_SOURCE == "web" # so it can be run by hand once
+  before_script:
+    - pip install --no-cache-dir "git+https://github.com/fabiocicerchia/carbon-badge@v0.2.1"
+  script:
+    - mkdir -p public
+    # GITLAB_TOKEN: a project access token with `read_api`, set as a masked
+    # CI/CD variable. $CI_JOB_TOKEN cannot read the jobs API.
+    - carbon-badge "$CI_PROJECT_PATH"
+      --provider gitlab
+      --api "$CI_API_V4_URL"
+      --token "$GITLAB_TOKEN"
+      --grid-intensity 56
+      > public/badge.json
+  artifacts:
+    paths:
+      - public
+
+# Then point a README at it — the Pages site has to be public for shields.io
+# to fetch it:
+#   ![CI carbon](https://img.shields.io/endpoint?url=https://GROUP.gitlab.io/PROJECT/badge.json)

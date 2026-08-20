@@ -1,0 +1,28 @@
+{
+  "name": "carbon-badge",
+  "description": "Serves /badge.json for shields.io, recomputed on a TTL",
+  "billing": {
+    "deploymentPlan": "nf-compute-10"
+  },
+  "deployment": {
+    "instances": 1,
+    "external": {
+      "imagePath": "ghcr.io/fabiocicerchia/carbon-badge:0.2.1"
+    },
+    "docker": {
+      "configType": "customCommand",
+      "customCommand": "OWNER/REPO --serve 8080 --grid-intensity 56"
+    }
+  },
+  "ports": [
+    {
+      "name": "http",
+      "internalPort": 8080,
+      "public": true,
+      "protocol": "HTTP"
+    }
+  ],
+  "runtimeEnvironment": {
+    "GITHUB_TOKEN": "set-me-from-a-secret-group"
+  }
+}
