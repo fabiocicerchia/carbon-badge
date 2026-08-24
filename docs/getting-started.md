@@ -243,9 +243,13 @@ The action wrapper is GitHub-specific; the CLI is not. Anything that can run
 Python 3.10+ and hold a token can refresh the badge:
 
 ```sh
-pip install "git+https://github.com/fabiocicerchia/carbon-badge@v0.2.1"
-carbon-badge OWNER/REPO --token "$GITHUB_TOKEN" --grid-intensity 56 > badge.json
+docker run --rm -e GITHUB_TOKEN ghcr.io/fabiocicerchia/carbon-badge:0.2.1 \
+  OWNER/REPO --grid-intensity 56 > badge.json
 ```
+
+The image's entrypoint is the CLI, so the repo is just an argument. Every
+example in `examples/ci-platforms/` pulls it rather than installing from
+source; `pipx install` remains the right answer on a workstation.
 
 Two things to keep separate. **Where the badge is computed** can be any CI
 system. **What it measures** is whatever `--provider` points at — GitHub
