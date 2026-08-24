@@ -17,13 +17,31 @@ the one platform here that can measure itself, and
 [`gitlab-ci.yml`](gitlab-ci.yml) does exactly that.
 
 ```sh
-pip install "git+https://github.com/fabiocicerchia/carbon-badge@v0.2.1"
-carbon-badge OWNER/REPO --token "$GITHUB_TOKEN" --grid-intensity 56 > badge.json
+docker run --rm -e GITHUB_TOKEN ghcr.io/fabiocicerchia/carbon-badge:0.2.1 \
+  OWNER/REPO --grid-intensity 56 > badge.json
 ```
 
-Pin the tag (`v0.2.1` above), not `main`. There's also an image whose
-entrypoint is the CLI, `ghcr.io/fabiocicerchia/carbon-badge:0.2.1`, which the
-container-native files use.
+Every file here uses the **published image**, `ghcr.io/fabiocicerchia/carbon-badge`,
+rather than installing from source — nothing clones the repository or pip-installs
+at run time. The image's entrypoint *is* `carbon-badge`, so the repo is just an
+argument. Pin the tag (`0.2.1` above), not `latest`.
+
+Two consequences worth knowing before reading the files:
+
+- **The entrypoint has to be cleared** wherever the platform wants to run its
+  own shell in the container (`entrypoint: [""]` on GitLab, `entrypoint:
+  /bin/sh` on CircleCI and the Buildkite docker plugin, `--entrypoint=` on
+  Jenkins). Where the platform supplies its own shell anyway — Harness `Run`
+  steps, Cloud Build, Tekton, Argo — it does not.
+- **The image runs as uid 10001**, so anything writing into a runner-owned
+  checkout needs the container as root (`docker: {user: root}`,
+  `user: root`, `run-as-user: 0`) or a `/tmp` path instead.
+
+> [!NOTE]
+> The image is published by the release pipeline, so a tag exists only once
+> that release has run. If a pinned tag 404s, either publish it — the **Publish
+> Image** workflow takes a tag via `workflow_dispatch` — or pin to the newest
+> tag the registry actually has.
 
 ## Files
 
@@ -140,27 +158,41 @@ named `pages`, so its `public/` artifact is published by GitLab Pages.
 **CircleCI** — `when: {equal: [scheduled_pipeline, << pipeline.trigger_source >>]}`
 is what keeps the workflow off every push.
 
-**Travis CI** — cron builds run the same script as pushes, so the script exits
-early unless `$TRAVIS_EVENT_TYPE` is `cron`.
+**Travis CI** — runs jobs on a VM rather than an image you pick, so the image
+is pulled and run rather than installed into. Cron builds run the same script
+as pushes, so it exits early unless `$TRAVIS_EVENT_TYPE` is `cron`.
 
 **Azure DevOps** — `always: true` matters: without it a scheduled run is skipped
-when the branch hasn't changed, and the badge goes stale on quiet repos.
+when the branch hasn't changed, and the badge goes stale on quiet repos. The
+image is run with `docker run` rather than as a `container:` job, so the tasks
+keep the Node runtime that container jobs require.
 
 **AWS CodePipeline** — CodePipeline has no schedule; EventBridge provides it.
-The token comes from Secrets Manager via `env/secrets-manager`.
+The token comes from Secrets Manager via `env/secrets-manager`. `docker run`
+keeps the managed image's AWS CLI available for the S3 upload, at the cost of
+the project's **privileged mode** being on; setting the project's own image to
+`carbon-badge` instead drops the buildspec to two lines but takes the CLI with
+it.
 
 **Devtron** — a Job with a cron trigger is the closer fit than a deployment
-stage, since nothing here gates a release. The same script works as a
-Post-Deployment task if you'd rather refresh per release.
+stage, since nothing here gates a release. A Container-image task pointed at
+the published image needs no script at all: the entrypoint is the CLI, so the
+arguments go in the task's Args. The shell script in this folder is the
+fallback for a node with Docker but no per-task image.
 
-**Spacelift** — the hook refreshes the badge after an apply and swallows its own
-errors (`|| true`): a badge is a report, and a report must never fail a run.
+**Spacelift** — the one platform here where the published image cannot be the
+job image: hooks run inside the stack's *runner* image, which already has to
+carry your IaC tooling. Layer the CLI into a runner image built once (the file
+shows the Dockerfile) rather than installing on every run. The hook also
+swallows its own errors (`|| true`): a badge is a report, and a report must
+never fail a run.
 
 **Jenkins** — `cron('H 2 * * *')`: the `H` spreads load across the hour instead
 of every job on the controller firing at :00.
 
 **Bitbucket Pipelines** — schedules attach to `custom:` pipelines, which never
-run on a push. That is why the step lives under `custom:`.
+run on a push. That is why the step lives under `custom:`. `run-as-user: 0`
+because the image's uid does not own the clone.
 
 **Google Cloud Build** — the image's entrypoint is overridden with `sh` only
 because a step cannot redirect stdout to a file on its own.
