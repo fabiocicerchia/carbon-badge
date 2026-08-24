@@ -1,5 +1,9 @@
-#!/bin/sh
+# shellcheck shell=sh
 # Devtron — refresh the CI carbon badge on a schedule.
+#
+# Not a standalone script: it is the body of a Devtron task, and Devtron
+# supplies the interpreter — hence the shellcheck directive instead of a
+# shebang.
 #
 # Run it as a task of type "Container image" with
 # ghcr.io/fabiocicerchia/carbon-badge:0.2.1 — the image's entrypoint is the CLI
