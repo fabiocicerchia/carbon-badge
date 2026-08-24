@@ -1,25 +1,27 @@
 #!/bin/sh
 # Devtron — refresh the CI carbon badge on a schedule.
 #
-# Two places this fits, both running this same script as an "Execute custom
-# script" / Shell task:
-#   - a Devtron Job with a cron trigger, if you want the badge refreshed
-#     nightly regardless of deploys (what the GitHub Actions version does);
-#   - a Post-Deployment task, if you would rather it refresh after each
-#     release.
+# Run it as a task of type "Container image" with
+# ghcr.io/fabiocicerchia/carbon-badge:0.2.1 — the image's entrypoint is the CLI
+# itself, so the task needs no script at all: put the arguments in the task's
+# Command/Args and the token in an Input Variable.
 #
-# Declare TARGET_REPO and the token as Input Variables on the task; the token
-# is a PAT with actions:read (GitHub) or read_api (GitLab).
+#   Command: (leave empty — the entrypoint is carbon-badge)
+#   Args:    OWNER/REPO --grid-intensity 56
+#
+# This script is the Shell-task equivalent, for a node that has Docker but no
+# per-task image. Two places it fits: a Devtron Job with a cron trigger, or a
+# Post-Deployment task if you would rather refresh after each release.
 set -eu
 
 TARGET_REPO="${TARGET_REPO:?owner/repo (GitHub) or group/project (GitLab)}"
 PROVIDER="${PROVIDER:-github}"
 GRID_INTENSITY="${GRID_INTENSITY:-480}" # world average; 56 = eu-north-1
 BADGE_OUT="${BADGE_OUT:-/tmp/badge.json}"
+CARBON_BADGE_IMAGE="${CARBON_BADGE_IMAGE:-ghcr.io/fabiocicerchia/carbon-badge:0.2.1}"
 
-pip install --no-cache-dir --quiet "git+https://github.com/fabiocicerchia/carbon-badge@v0.2.1"
-
-carbon-badge "$TARGET_REPO" \
+docker run --rm -e GITHUB_TOKEN -e GITLAB_TOKEN "$CARBON_BADGE_IMAGE" \
+  "$TARGET_REPO" \
   --provider "$PROVIDER" \
   --grid-intensity "$GRID_INTENSITY" \
   > "$BADGE_OUT"
