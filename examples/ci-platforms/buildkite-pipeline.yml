@@ -9,7 +9,10 @@ steps:
     key: carbon-badge
     plugins:
       - docker#v5.11.0:
-          image: python:3.13-slim
+          image: ghcr.io/fabiocicerchia/carbon-badge:0.2.1
+          # The image's entrypoint is the CLI itself; the plugin needs a shell
+          # to run the commands below, so it is overridden here.
+          entrypoint: /bin/sh
           propagate-environment: true
           environment:
             # TARGET_REPO is plain config; GITHUB_TOKEN (a PAT with
@@ -18,7 +21,6 @@ steps:
             - TARGET_REPO=OWNER/REPO
             - GITHUB_TOKEN
     command:
-      - pip install --no-cache-dir "git+https://github.com/fabiocicerchia/carbon-badge@v0.2.1"
       - carbon-badge "$$TARGET_REPO" --grid-intensity 56 > badge.json
       - cat badge.json
     artifact_paths:

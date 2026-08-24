@@ -1,8 +1,13 @@
 // Jenkins — refresh the badge nightly.
 // Copy into a Jenkinsfile at the repo root (Multibranch Pipeline picks it up).
 pipeline {
+  // The published image as the build container. Its entrypoint is the CLI, so
+  // Jenkins is told to run a shell instead and the CLI is invoked by name.
   agent {
-    docker { image 'python:3.13-slim' }
+    docker {
+      image 'ghcr.io/fabiocicerchia/carbon-badge:0.2.1'
+      args '--entrypoint='
+    }
   }
 
   triggers {
@@ -22,7 +27,6 @@ pipeline {
         withCredentials([string(credentialsId: 'carbon-badge-token', variable: 'GITHUB_TOKEN')]) {
           sh '''
             set -eu
-            pip install --no-cache-dir "git+https://github.com/fabiocicerchia/carbon-badge@v0.2.1"
             carbon-badge "$TARGET_REPO" --grid-intensity "$GRID_INTENSITY" > badge.json
             cat badge.json
           '''

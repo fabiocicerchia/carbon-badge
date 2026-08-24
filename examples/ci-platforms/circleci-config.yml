@@ -8,15 +8,16 @@ version: 2.1
 jobs:
   carbon-badge:
     docker:
-      - image: cimg/python:3.13
+      - image: ghcr.io/fabiocicerchia/carbon-badge:0.2.1
+        # The image's entrypoint is carbon-badge itself; steps need a shell.
+        entrypoint: ["/bin/sh"]
+        user: root
     steps:
-      - run:
-          name: Install
-          command: pip install --no-cache-dir "git+https://github.com/fabiocicerchia/carbon-badge@v0.2.1"
       - run:
           name: Refresh the badge
           # GITHUB_TOKEN: a PAT with actions:read on the target repo, set as a
           # project environment variable. Off GitHub there is no built-in token.
+          # No checkout step: the tool reads the API, not the repository.
           command: |
             mkdir -p /tmp/badge
             carbon-badge "$TARGET_REPO" --grid-intensity 56 > /tmp/badge/badge.json

@@ -28,13 +28,14 @@ pipeline:
                   identifier: carbon_badge
                   spec:
                     shell: Sh
-                    image: python:3.13-slim
+                    # The published image; a Run step supplies its own shell,
+                    # so the CLI is invoked by name rather than as an entrypoint.
+                    image: ghcr.io/fabiocicerchia/carbon-badge:0.2.1
                     envVariables:
                       TARGET_REPO: OWNER/REPO
                       # A PAT with actions:read, from a Harness secret.
                       GITHUB_TOKEN: <+secrets.getValue("carbon_badge_token")>
                     command: |-
                       set -eu
-                      pip install --no-cache-dir "git+https://github.com/fabiocicerchia/carbon-badge@v0.2.1"
                       carbon-badge "$TARGET_REPO" --grid-intensity 56 > badge.json
                       cat badge.json

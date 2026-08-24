@@ -10,12 +10,19 @@ stages:
 
 pages:
   stage: deploy
-  image: python:3.13-slim
+  image:
+    name: ghcr.io/fabiocicerchia/carbon-badge:0.2.1
+    # The image's entrypoint *is* carbon-badge, so it has to be cleared for
+    # GitLab to run the script's shell in the container.
+    entrypoint: [""]
+    docker:
+      # The image runs as uid 10001; the runner clones as root, and `public/`
+      # has to be written into that checkout. On an older runner, set
+      # `user = "root"` in its config.toml instead.
+      user: root
   rules:
     - if: $CI_PIPELINE_SOURCE == "schedule"
     - if: $CI_PIPELINE_SOURCE == "web" # so it can be run by hand once
-  before_script:
-    - pip install --no-cache-dir "git+https://github.com/fabiocicerchia/carbon-badge@v0.2.1"
   script:
     - mkdir -p public
     # GITLAB_TOKEN: a project access token with `read_api`, set as a masked

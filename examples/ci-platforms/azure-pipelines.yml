@@ -1,5 +1,9 @@
 # Azure Pipelines — refresh the badge nightly and publish it to Blob Storage.
 # Copy into azure-pipelines.yml.
+#
+# The published image is run with `docker run` rather than as a `container:`
+# job: Microsoft-hosted agents have Docker, and keeping the tasks on the host
+# means they still have the Node runtime that container jobs require.
 trigger: none
 pr: none
 
@@ -15,21 +19,18 @@ pool:
 
 variables:
   TARGET_REPO: OWNER/REPO
+  CARBON_BADGE_IMAGE: ghcr.io/fabiocicerchia/carbon-badge:0.2.1
 
 steps:
-  - task: UsePythonVersion@0
-    inputs:
-      versionSpec: "3.13"
-
-  - script: pip install --no-cache-dir "git+https://github.com/fabiocicerchia/carbon-badge@v0.2.1"
-    displayName: Install
+  - checkout: none # the tool reads the API, not the repository
 
   # GITHUB_TOKEN: a PAT with actions:read, stored as a secret variable or in a
   # variable group backed by Key Vault, and mapped in explicitly — secret
   # variables are not exported to the environment on their own.
   - script: |
       set -euo pipefail
-      carbon-badge "$TARGET_REPO" --grid-intensity 56 \
+      docker run --rm -e GITHUB_TOKEN "$CARBON_BADGE_IMAGE" \
+        "$TARGET_REPO" --grid-intensity 56 \
         > "$(Build.ArtifactStagingDirectory)/badge.json"
       cat "$(Build.ArtifactStagingDirectory)/badge.json"
     displayName: Refresh the badge

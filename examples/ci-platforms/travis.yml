@@ -1,22 +1,33 @@
 # Travis CI — refresh the badge on a cron build.
 # Copy into .travis.yml. Enable the cron under
 # Settings -> Cron Jobs (daily/weekly) for the branch you keep this on.
-language: python
-python: "3.13"
+#
+# Travis runs the job on a VM rather than an image you choose, so the published
+# image is used the other way round: pulled and run, rather than installed into.
+language: minimal
 os: linux
 dist: jammy
 
+# The scalar form, not a list: `services:` with a list of names is what a
+# docker-compose file looks like to a linter.
+services: docker
+
+env:
+  global:
+    - CARBON_BADGE_IMAGE=ghcr.io/fabiocicerchia/carbon-badge:0.2.1
+
 install:
-  - pip install --no-cache-dir "git+https://github.com/fabiocicerchia/carbon-badge@v0.2.1"
+  - docker pull "$CARBON_BADGE_IMAGE"
 
 script:
   # Only the cron build refreshes the badge; ordinary pushes skip it.
   - if [ "$TRAVIS_EVENT_TYPE" != "cron" ]; then echo "not a cron build; skipping"; exit 0; fi
   # GITHUB_TOKEN: a PAT with actions:read, set as an encrypted repository
-  # variable (Settings -> Environment Variables, display value OFF).
-  - carbon-badge "$TARGET_REPO" --grid-intensity 56 > badge.json
+  # variable (Settings -> Environment Variables, display value OFF). The
+  # image's entrypoint is carbon-badge, so the repo is just an argument.
+  - docker run --rm -e GITHUB_TOKEN "$CARBON_BADGE_IMAGE"
+    "$TARGET_REPO" --grid-intensity 56 > badge.json
   - cat badge.json
 
 # Travis keeps no artifacts of its own — publish badge.json where shields.io can
-# reach it, e.g. `aws s3 cp badge.json s3://BUCKET/badge.json --acl public-read`
-# in a deploy stage.
+# reach it, e.g. `aws s3 cp badge.json s3://BUCKET/badge.json` in a deploy stage.
