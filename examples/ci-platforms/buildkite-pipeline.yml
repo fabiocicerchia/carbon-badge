@@ -1,0 +1,27 @@
+# Buildkite — refresh the badge nightly.
+# Copy into .buildkite/pipeline.yml, then add a scheduled build under
+# Pipeline Settings -> Schedules.
+#
+# Buildkite interpolates `$VAR` when the pipeline is *uploaded*. Anything the
+# shell must expand at *run* time is written `$$VAR`.
+steps:
+  - label: ":deciduous_tree: carbon badge"
+    key: carbon-badge
+    plugins:
+      - docker#v5.11.0:
+          image: ghcr.io/fabiocicerchia/carbon-badge:0.2.1
+          # The image's entrypoint is the CLI itself; the plugin needs a shell
+          # to run the commands below, so it is overridden here.
+          entrypoint: /bin/sh
+          propagate-environment: true
+          environment:
+            # TARGET_REPO is plain config; GITHUB_TOKEN (a PAT with
+            # actions:read) belongs in the agent's environment or a secrets
+            # hook, never in this file.
+            - TARGET_REPO=OWNER/REPO
+            - GITHUB_TOKEN
+    command:
+      - carbon-badge "$$TARGET_REPO" --grid-intensity 56 > badge.json
+      - cat badge.json
+    artifact_paths:
+      - badge.json

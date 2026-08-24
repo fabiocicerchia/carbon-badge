@@ -1,0 +1,26 @@
+# Bitbucket Pipelines — refresh the badge nightly.
+# Copy into bitbucket-pipelines.yml at the repo root, then add a schedule under
+# Repository settings -> Pipelines -> Schedules pointing at the `carbon-badge`
+# custom pipeline. Custom pipelines never run on a push, which is what makes
+# them the schedulable ones.
+image:
+  name: ghcr.io/fabiocicerchia/carbon-badge:0.2.1
+  # The image runs as uid 10001; Bitbucket's clone is not owned by it.
+  run-as-user: 0
+
+pipelines:
+  custom:
+    carbon-badge:
+      - step:
+          name: Refresh the CI carbon badge
+          script:
+            # TARGET_REPO and GITHUB_TOKEN (a PAT with actions:read) are
+            # repository variables; mark the token secured.
+            - carbon-badge "$TARGET_REPO" --grid-intensity 56 > badge.json
+            - cat badge.json
+          artifacts:
+            - badge.json
+
+# Bitbucket artifacts expire and are not public. For the README badge, upload
+# badge.json to a public bucket in the same step:
+#   pipe: atlassian/aws-s3-deploy:1.6.1

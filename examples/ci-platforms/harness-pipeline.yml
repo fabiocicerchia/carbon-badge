@@ -1,0 +1,41 @@
+# Harness — refresh the badge on a schedule.
+# Paste into the pipeline's YAML editor (Pipeline Studio -> YAML). The cron
+# itself is a separate resource: add a Scheduled trigger on this pipeline.
+pipeline:
+  name: carbon-badge
+  identifier: carbon_badge
+  projectIdentifier: YOUR_PROJECT_ID
+  orgIdentifier: default
+  tags: {}
+  stages:
+    - stage:
+        name: Refresh the badge
+        identifier: Refresh_the_badge
+        type: CI
+        spec:
+          cloneCodebase: false # nothing is read from the repo
+          platform:
+            os: Linux
+            arch: Amd64
+          runtime:
+            type: Cloud
+            spec: {}
+          execution:
+            steps:
+              - step:
+                  type: Run
+                  name: carbon-badge
+                  identifier: carbon_badge
+                  spec:
+                    shell: Sh
+                    # The published image; a Run step supplies its own shell,
+                    # so the CLI is invoked by name rather than as an entrypoint.
+                    image: ghcr.io/fabiocicerchia/carbon-badge:0.2.1
+                    envVariables:
+                      TARGET_REPO: OWNER/REPO
+                      # A PAT with actions:read, from a Harness secret.
+                      GITHUB_TOKEN: <+secrets.getValue("carbon_badge_token")>
+                    command: |-
+                      set -eu
+                      carbon-badge "$TARGET_REPO" --grid-intensity 56 > badge.json
+                      cat badge.json
