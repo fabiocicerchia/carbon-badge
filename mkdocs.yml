@@ -13,7 +13,7 @@ docs_dir: docs
 
 # docs/index.html is the standalone GitHub Pages splash, not a docs page. Keep
 # it out of the MkDocs render so the site home (README.md) maps to index.html
-# without a collision. GitHub Pages still serves the raw file; RTD serves this.
+# without a collision. GitHub Pages serves the raw file at the site root.
 exclude_docs: |
   index.html
   requirements.txt
@@ -21,7 +21,7 @@ exclude_docs: |
 theme:
   name: material
   # No web fonts: these docs avoid external requests (privacy, offline docs,
-  # reproducible RTD builds). A system font stack is set in extra.css instead.
+  # reproducible builds). A system font stack is set in extra.css instead.
   font: false
   language: en
   palette:
@@ -77,21 +77,21 @@ extra:
     - icon: fontawesome/brands/github
       link: https://github.com/fabiocicerchia/carbon-badge
 
-# Only the search plugin ships with MkDocs itself, so RTD needs nothing beyond
-# docs/requirements.txt. Anything else (social cards, minify, git-revision-date)
-# is a pip add — wire it into requirements.txt too or the RTD build breaks.
+# Only the search plugin ships with MkDocs itself. Anything else (social cards,
+# minify, git-revision-date) is a pip add — wire it into docs/requirements.txt
+# too, or `mkdocs build --strict` aborts on the missing plugin.
 plugins:
   - search
   - git-revision-date-localized:
       enable_creation_date: true
-      # RTD's clone can be shallow; fall back to the build date instead of
-      # failing when a file's history isn't present.
+      # Fall back to the build date rather than failing when a file has no
+      # history yet — a new page, or a clone the workflow shallowed.
       fallback_to_build_date: true
       type: date
   # Note: Material's `social` plugin is deliberately NOT enabled — it downloads
   # a font from fonts.google.com at build time, which breaks this repo's
-  # no-external-requests / reproducible-build stance (and every RTD build that
-  # inherits this template). Add Open Graph images by hand if you want them.
+  # no-external-requests / reproducible-build stance. Add Open Graph images by
+  # hand if you want them.
 
 markdown_extensions:
   - abbr

@@ -1,27 +1,30 @@
 /*
- * PROJECT_NAME — premium documentation theme for MkDocs Material.
+ * carbon-badge — premium documentation theme for MkDocs Material.
  * System typography, gradient accents, soft depth, icon-driven feature cards.
  * Nothing here loads over the network: no CDN, no web font, no analytics.
  *
  * ── The one thing you change ──────────────────────────────────────────────
- * The accent below. Pick the colour of the cluster the project belongs to so
- * the docs, the landing page (docs/index.html) and the GitHub description read
- * as one family — don't pick from taste. Set --accent and --accent-2 to match
- * the pair you used in docs/index.html:
+ * The accent pair below, and nothing else. It is the only copy of the palette:
+ * docs/index.html links this file, so the splash and the rendered docs cannot
+ * drift apart. Pick the colour of the cluster the project belongs to so they
+ * read as one family — don't pick from taste:
  *
  *   platform / Kubernetes    #38bdf8  #3b82f6   (blue)
  *   security / supply chain  #fb923c  #ef4444   (orange-red)
  *   CLI utilities            #22d3ee  #6366f1   (cyan-indigo)   ← default
  *   GreenOps                 #34d399  #059669   (green)
+ *
+ * A project may take its own pair when the colour carries meaning (gandalf is
+ * purple, dark-canary amber, offline teal).
  */
 
 :root {
-  /* Keep --accent / --accent-2 identical to docs/index.html so the splash and
-     the docs site never drift. Roles below map them for legibility: indigo
-     carries chrome/links (contrast on white), cyan is the interactive accent;
-     the hero and buttons blend both. */
-  --accent: #22d3ee;
-  --accent-2: #6366f1;
+  /* The palette, read by both the docs and the splash. The roles below split
+     them for legibility: --accent-2 carries chrome and links, where the
+     contrast is against white, --accent is the interactive one, and the hero
+     and buttons blend the two. */
+  --accent: #34d399;
+  --accent-2: #059669;
 
   --md-primary-fg-color: var(--accent-2);
   --md-primary-fg-color--light: var(--accent-2);
@@ -224,4 +227,14 @@
 
 html {
   scroll-behavior: smooth;
+}
+
+/* === Logo ================================================================ */
+/* Material substitutes a generic book icon when `theme.logo` is unset. This
+   repo has no logo, so hide the stand-in rather than ship someone else's glyph
+   as the brand. Delete this block when a real logo lands in mkdocs.yml. */
+
+.md-header__button.md-logo,
+.md-nav__title .md-nav__button.md-logo {
+  display: none;
 }
