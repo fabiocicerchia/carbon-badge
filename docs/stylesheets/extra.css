@@ -1,0 +1,227 @@
+/*
+ * PROJECT_NAME — premium documentation theme for MkDocs Material.
+ * System typography, gradient accents, soft depth, icon-driven feature cards.
+ * Nothing here loads over the network: no CDN, no web font, no analytics.
+ *
+ * ── The one thing you change ──────────────────────────────────────────────
+ * The accent below. Pick the colour of the cluster the project belongs to so
+ * the docs, the landing page (docs/index.html) and the GitHub description read
+ * as one family — don't pick from taste. Set --accent and --accent-2 to match
+ * the pair you used in docs/index.html:
+ *
+ *   platform / Kubernetes    #38bdf8  #3b82f6   (blue)
+ *   security / supply chain  #fb923c  #ef4444   (orange-red)
+ *   CLI utilities            #22d3ee  #6366f1   (cyan-indigo)   ← default
+ *   GreenOps                 #34d399  #059669   (green)
+ */
+
+:root {
+  /* Keep --accent / --accent-2 identical to docs/index.html so the splash and
+     the docs site never drift. Roles below map them for legibility: indigo
+     carries chrome/links (contrast on white), cyan is the interactive accent;
+     the hero and buttons blend both. */
+  --accent: #22d3ee;
+  --accent-2: #6366f1;
+
+  --md-primary-fg-color: var(--accent-2);
+  --md-primary-fg-color--light: var(--accent-2);
+  --md-primary-fg-color--dark: var(--accent-2);
+  --md-accent-fg-color: var(--accent);
+
+  /* System stack — matches docs/index.html and needs no download. */
+  --md-text-font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+    Helvetica, Arial, sans-serif;
+  --md-code-font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Monaco,
+    Consolas, "Liberation Mono", monospace;
+}
+
+/* Keep the header/links legible on the custom primary in both schemes. */
+[data-md-color-primary="custom"] {
+  --md-primary-bg-color: #ffffff;
+  --md-typeset-a-color: var(--accent-2); /* indigo — readable on white */
+}
+[data-md-color-scheme="slate"] {
+  --md-typeset-a-color: var(--accent); /* cyan — readable on the dark ground */
+  --md-default-bg-color: #0b0f1a;
+  --md-default-bg-color--light: #0d1220;
+}
+[data-md-color-scheme="slate"] .md-header,
+[data-md-color-scheme="slate"] .md-tabs {
+  background-color: #0b0f1a;
+}
+
+/* === Header: translucent, blurred, hairline divider ====================== */
+
+.md-header {
+  background-color: var(--md-default-bg-color);
+  color: var(--md-default-fg-color);
+  box-shadow: none;
+  border-bottom: 1px solid var(--md-default-fg-color--lightest);
+  backdrop-filter: saturate(180%) blur(20px);
+  -webkit-backdrop-filter: saturate(180%) blur(20px);
+}
+.md-header[data-md-state="shadow"],
+.md-header--shadow {
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.06);
+}
+.md-header__title {
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+.md-tabs {
+  background-color: var(--md-default-bg-color);
+  color: var(--md-default-fg-color);
+  border-bottom: 1px solid var(--md-default-fg-color--lightest);
+}
+.md-tabs__link {
+  opacity: 0.72;
+  font-weight: 500;
+}
+.md-tabs__link:hover,
+.md-tabs__link--active {
+  opacity: 1;
+}
+
+/* === Typography ========================================================== */
+
+.md-typeset {
+  font-feature-settings: "kern", "liga";
+}
+.md-typeset h1 {
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  line-height: 1.15;
+}
+.md-typeset h2 {
+  font-weight: 650;
+  letter-spacing: -0.02em;
+  margin-top: 2.4em;
+}
+.md-typeset h3 {
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+/* Rounded, bordered code blocks — softer than the default flush edges. */
+.md-typeset pre > code,
+.md-typeset .highlight > pre {
+  border-radius: 10px;
+}
+.md-typeset .highlight {
+  border-radius: 10px;
+  border: 1px solid var(--md-default-fg-color--lightest);
+}
+
+/* Tables read as cards and scroll on narrow screens instead of clipping. */
+.md-typeset table:not([class]) {
+  border-radius: 10px;
+  border: 1px solid var(--md-default-fg-color--lightest);
+  overflow: hidden;
+  font-size: 0.78rem;
+}
+.md-typeset table:not([class]) th {
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  font-size: 0.68rem;
+}
+
+/* === Buttons ============================================================= */
+
+.md-typeset .md-button {
+  border-radius: 980px;
+  font-weight: 600;
+  padding: 0.5em 1.4em;
+  transition: transform 0.25s cubic-bezier(0.25, 0.1, 0.25, 1),
+    box-shadow 0.25s ease;
+}
+.md-typeset .md-button--primary {
+  background: linear-gradient(135deg, var(--accent), var(--accent-2));
+  border: none;
+  color: #fff;
+}
+.md-typeset .md-button:hover {
+  transform: translateY(-1px) scale(1.02);
+  box-shadow: 0 6px 24px rgba(99, 102, 241, 0.3);
+}
+
+/* === Home hero =========================================================== */
+/* Rendered from a <div class="hero"> block in docs/README.md. */
+
+.md-typeset .hero {
+  text-align: center;
+  padding: 3.5rem 1rem 1rem;
+}
+.md-typeset .hero h1 {
+  font-size: 3rem;
+  margin: 0 0 0.4rem;
+  background: linear-gradient(135deg, var(--accent), var(--accent-2));
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  color: transparent;
+}
+.md-typeset .hero .hero-tagline {
+  font-size: 1.3rem;
+  font-weight: 500;
+  color: var(--md-default-fg-color--light);
+  max-width: 42rem;
+  margin: 0 auto 1.6rem;
+  line-height: 1.4;
+}
+.md-typeset .hero .md-button + .md-button {
+  margin-left: 0.5rem;
+}
+
+/* === Feature cards ======================================================= */
+/* Material's `<div class="grid cards">` list syntax, given depth + hover. */
+
+.md-typeset .grid.cards > ul > li,
+.md-typeset .grid > .card {
+  border-radius: 16px;
+  border: 1px solid var(--md-default-fg-color--lightest);
+  padding: 1.4rem;
+  transition: transform 0.3s cubic-bezier(0.25, 0.1, 0.25, 1),
+    box-shadow 0.3s ease, border-color 0.3s ease;
+}
+.md-typeset .grid.cards > ul > li:hover,
+.md-typeset .grid > .card:hover {
+  transform: translateY(-3px);
+  border-color: color-mix(in srgb, var(--accent) 40%, transparent);
+  box-shadow: 0 10px 34px rgba(0, 0, 0, 0.08);
+}
+[data-md-color-scheme="slate"] .md-typeset .grid.cards > ul > li:hover {
+  box-shadow: 0 10px 34px rgba(0, 0, 0, 0.5);
+}
+.md-typeset .grid.cards > ul > li > hr {
+  margin: 0.8rem 0;
+}
+.md-typeset .grid.cards .twemoji,
+.md-typeset .grid.cards svg {
+  color: var(--accent);
+}
+
+/* === Sidebar / nav ======================================================= */
+
+.md-nav__title {
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+.md-nav__link--active {
+  font-weight: 600;
+}
+
+/* === Footer ============================================================== */
+
+.md-footer-meta {
+  background-color: var(--md-default-bg-color);
+  border-top: 1px solid var(--md-default-fg-color--lightest);
+}
+.md-footer-meta .md-footer-copyright,
+.md-footer-meta .md-footer__link {
+  color: var(--md-default-fg-color--light);
+}
+
+html {
+  scroll-behavior: smooth;
+}

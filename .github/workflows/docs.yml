@@ -1,0 +1,83 @@
+name: docs
+
+# Builds the MkDocs site and publishes it to GitHub Pages.
+#
+# Layout: the standalone splash (docs/index.html) stays at the site root, where
+# every README badge and repo homepage already points, and the rendered docs go
+# to /docs/. That is why mkdocs.yml keeps index.html out of the render — the
+# splash is copied into the artifact verbatim instead of being rebuilt.
+#
+# Pages must be sourced from GitHub Actions rather than from the main/docs
+# branch folder: `configure-pages` sets that on the first run, and
+# apply-settings.sh expects `workflow` too, so the two do not fight.
+#
+# `mkdocs build --strict` is the gate — a broken link, a nav entry with no file
+# behind it, or a missing plugin fails the run rather than publishing a half
+# site.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - docs/**
+      - mkdocs.yml
+      - .github/workflows/docs.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# A queued deploy waits for the running one: cancelling mid-deploy can leave the
+# site half-published.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          # git-revision-date-localized reads each file's history for the
+          # "last updated" dates; a shallow clone has none.
+          fetch-depth: 0
+
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97  # v7.0.0
+        with:
+          python-version: "3.12"
+
+      - name: Install the pinned docs toolchain
+        run: pip install -r docs/requirements.txt
+
+      - name: Build the docs site
+        run: mkdocs build --strict -d site/docs
+
+      - name: Keep the splash at the site root
+        run: |
+          if [ -f docs/index.html ]; then
+            cp docs/index.html site/index.html
+          fi
+
+      - uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9  # v5.0.0
+        with:
+          path: site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write # publish the artifact
+      id-token: write # deploy-pages authenticates with OIDC
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      # `enablement: true` flips Pages to the Actions source on the first run,
+      # so no one has to click through Settings -> Pages per repo.
+      - uses: actions/configure-pages@45bfe0192ca1faeb007ade9deae92b16b8254a0d  # v6.0.0
+        with:
+          enablement: true
+
+      - id: deployment
+        uses: actions/deploy-pages@cd2ce8fcbc39b97be8ca5fce6e763baed58fa128  # v5.0.0

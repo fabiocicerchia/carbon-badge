@@ -27,7 +27,7 @@ repos:
         # templates rather than YAML — the parser cannot read either as-is. The
         # exclude is path-relative so it catches chart/ and charts/<name>/ alike.
         args: [--allow-multiple-documents]
-        exclude: (^|/)templates/
+        exclude: (^|/)templates/|^mkdocs\.yml$
       - id: check-json
       - id: check-toml
       # Python only (types: [python]) — a no-op in a repo with no .py files, so

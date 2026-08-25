@@ -1,21 +1,130 @@
+# carbon-badge docs — MkDocs Material, styled to feel like a product site
+# (premium hero, feature cards, nav tabs, dark/light, local search, edit links)
+# while staying on the portfolio's standard tooling. See docs/stylesheets/extra.css
+# for the look; the accent palette lives there and is the only thing you swap.
 site_name: carbon-badge
 site_description: One-line description.
+site_url: https://fabiocicerchia.github.io/carbon-badge/docs/
 repo_url: https://github.com/fabiocicerchia/carbon-badge
+repo_name: fabiocicerchia/carbon-badge
+edit_uri: edit/main/docs/
+copyright: Copyright &copy; 2026 Fabio Cicerchia
 docs_dir: docs
+
+# docs/index.html is the standalone GitHub Pages splash, not a docs page. Keep
+# it out of the MkDocs render so the site home (README.md) maps to index.html
+# without a collision. GitHub Pages still serves the raw file; RTD serves this.
+exclude_docs: |
+  index.html
+  requirements.txt
 
 theme:
   name: material
+  # No web fonts: these docs avoid external requests (privacy, offline docs,
+  # reproducible RTD builds). A system font stack is set in extra.css instead.
+  font: false
+  language: en
   palette:
-    - scheme: default
-      toggle: { icon: material/weather-night, name: Dark mode }
-    - scheme: slate
-      toggle: { icon: material/weather-sunny, name: Light mode }
+    # Follows the OS by default, with a manual toggle. `primary`/`accent: custom`
+    # hand the colours to extra.css so both schemes share one palette.
+    - media: "(prefers-color-scheme)"
+      primary: custom
+      accent: custom
+      toggle:
+        icon: material/brightness-auto
+        name: Switch to light mode
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: custom
+      accent: custom
+      toggle:
+        icon: material/weather-night
+        name: Switch to dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: custom
+      accent: custom
+      toggle:
+        icon: material/weather-sunny
+        name: Switch to system preference
+  features:
+    - navigation.tabs
+    - navigation.tabs.sticky
+    - navigation.sections
+    - navigation.top
+    - navigation.tracking
+    - navigation.indexes
+    - toc.follow
+    - search.suggest
+    - search.highlight
+    - search.share
+    - content.code.copy
+    - content.code.annotate
+    - content.action.edit
+    - content.tooltips
+  icon:
+    repo: fontawesome/brands/github
+    edit: material/pencil
 
+extra_css:
+  - stylesheets/extra.css
+
+extra:
+  # `generator: false` drops the "Made with Material for MkDocs" line; keep it
+  # if you'd rather credit the theme.
+  generator: false
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/fabiocicerchia/carbon-badge
+
+# Only the search plugin ships with MkDocs itself, so RTD needs nothing beyond
+# docs/requirements.txt. Anything else (social cards, minify, git-revision-date)
+# is a pip add — wire it into requirements.txt too or the RTD build breaks.
+plugins:
+  - search
+  - git-revision-date-localized:
+      enable_creation_date: true
+      # RTD's clone can be shallow; fall back to the build date instead of
+      # failing when a file's history isn't present.
+      fallback_to_build_date: true
+      type: date
+  # Note: Material's `social` plugin is deliberately NOT enabled — it downloads
+  # a font from fonts.google.com at build time, which breaks this repo's
+  # no-external-requests / reproducible-build stance (and every RTD build that
+  # inherits this template). Add Open Graph images by hand if you want them.
+
+markdown_extensions:
+  - abbr
+  - admonition
+  - attr_list
+  - def_list
+  - footnotes
+  - md_in_html
+  - tables
+  - toc:
+      permalink: true
+  - pymdownx.details
+  - pymdownx.superfences
+  - pymdownx.highlight:
+      anchor_linenums: true
+      line_spans: __span
+      pygments_lang_class: true
+  - pymdownx.inlinehilite
+  - pymdownx.snippets:
+      # `.` is the repo root (where mkdocs runs), so docs/changelog.md can embed
+      # the root CHANGELOG.md with `--8<-- "CHANGELOG.md"`.
+      base_path: ["."]
+      check_paths: true
+  - pymdownx.tabbed:
+      alternate_style: true
+  - pymdownx.tasklist:
+      custom_checkbox: true
+  - pymdownx.emoji:
+      emoji_index: !!python/name:material.extensions.emoji.twemoji
+      emoji_generator: !!python/name:material.extensions.emoji.to_svg
+
+# Top-level entries become tabs (theme feature navigation.tabs).
 nav:
   - Home: README.md
   - Architecture: architecture.md
   - Getting Started: getting-started.md
-
-markdown_extensions:
-  - admonition
-  - pymdownx.superfences
