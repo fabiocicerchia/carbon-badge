@@ -319,7 +319,7 @@ obtained rather than whether it is good. That is a claim this tool can defend.
   it.
 - **`measured` is not `accurate`.** Even fully instrumented, the watts model and
   the grid factor carry their own error. The confidence score in the
-  [README](../README.md#how-a-number-is-arrived-at) describes how the *inputs*
+  [README](README.md#how-a-number-is-arrived-at) describes how the *inputs*
   were obtained, not how close the answer is.
 
 Treat the output as an order of magnitude and a trend line, not a figure to put

@@ -31,7 +31,7 @@ carbon-badge OWNER/REPO --grid-intensity 56 > badge.json
 ```
 
 To refresh the badge nightly in CI, copy
-[`.github-workflow-example/carbon-badge.yml`](../.github-workflow-example/carbon-badge.yml)
+[`.github-workflow-example/carbon-badge.yml`](https://github.com/fabiocicerchia/carbon-badge/blob/main/.github-workflow-example/carbon-badge.yml)
 into the target repo.
 
 ## Development
@@ -67,9 +67,9 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
 ```
 
-See all inputs/outputs in [`action.yml`](../action.yml); full example workflow
+See all inputs/outputs in [`action.yml`](https://github.com/fabiocicerchia/carbon-badge/blob/main/action.yml); full example workflow
 (with the cron schedule) at
-[`.github-workflow-example/carbon-badge.yml`](../.github-workflow-example/carbon-badge.yml).
+[`.github-workflow-example/carbon-badge.yml`](https://github.com/fabiocicerchia/carbon-badge/blob/main/.github-workflow-example/carbon-badge.yml).
 
 ### Letting jobs measure themselves (recommended)
 
@@ -265,7 +265,7 @@ artifact is not a public URL.
 Drop-in files for GitLab CI, CircleCI, Travis, Azure DevOps, AWS CodePipeline,
 Devtron, Northflank, Spacelift, Jenkins, Bitbucket Pipelines, Google Cloud
 Build, Tekton, Argo Workflows, Harness, Buildkite and Drone/Woodpecker are in
-[`examples/ci-platforms/`](../examples/ci-platforms/README.md), along with a
+[`examples/ci-platforms/`](https://github.com/fabiocicerchia/carbon-badge/blob/main/examples/ci-platforms/README.md), along with a
 table of where each platform keeps its cron.
 
 GitLab is the one platform there that can measure itself:
