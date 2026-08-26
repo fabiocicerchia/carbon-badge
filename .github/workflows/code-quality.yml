@@ -28,7 +28,7 @@ jobs:
 
       # Catch common typos in code and docs.
       - name: typos
-        uses: crate-ci/typos@5e38bf262baaf477ca9f241b3a7cd3d277fd7df8  # master
+        uses: crate-ci/typos@1a51d4b5a03bb97576af186c813af67e9137ba7c  # master
 
       # pre-commit runs the language-specific hooks defined in
       # .pre-commit-config.yaml. It no-ops gracefully if none apply.
