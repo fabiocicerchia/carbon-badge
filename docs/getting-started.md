@@ -237,6 +237,17 @@ carbon-badge fabiocicerchia/nginx-lua --token $GITHUB_TOKEN --serve 8080
 Put a reverse proxy (or an SSH tunnel) in front of it for anything public —
 this is a bare `http.server`, not a hardened production service.
 
+It binds every interface by default, because the container deployment below
+needs that and `127.0.0.1` inside a container is unreachable from outside it.
+Running it directly on a machine other people can reach, narrow it:
+
+```sh
+carbon-badge fabiocicerchia/nginx-lua --token $GITHUB_TOKEN --serve 8080 --bind 127.0.0.1
+```
+
+The endpoint is unauthenticated and the process is holding your CI token, so on
+a shared host that is worth doing.
+
 ## Other CI systems
 
 The action wrapper is GitHub-specific; the CLI is not. Anything that can run
