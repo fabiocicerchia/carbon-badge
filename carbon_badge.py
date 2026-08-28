@@ -1417,7 +1417,7 @@ def badge_handler(compute, ttl=300):
 # inside one is unreachable from outside it. That does mean a process holding a
 # CI token is listening on every interface of whatever host runs it, so --bind
 # exists for anyone running it directly on a machine that has others.
-DEFAULT_BIND = "0.0.0.0"  # noqa: S104 — see above
+DEFAULT_BIND = "0.0.0.0"  # nosec B104 — deliberate, see above
 
 
 def serve(port, args, token, ttl=300, bind=DEFAULT_BIND):
