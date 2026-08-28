@@ -6,7 +6,10 @@
 FROM python:3.14-slim@sha256:ce40764625a4ff50df3548277632e7f96c4e77fe75fa848aae9885476e7df5a4 AS build
 WORKDIR /src
 COPY . .
-RUN pip install --no-cache-dir build && python -m build --wheel
+# --require-hashes, not `build==<version>`: Scorecard's pinned-dependencies
+# check treats any bare package argument as unpinned, whatever its version.
+RUN pip install --no-cache-dir --require-hashes -r requirements-build.txt \
+    && python -m build --wheel
 
 # --- runtime stage ---
 FROM python:3.14-slim@sha256:ce40764625a4ff50df3548277632e7f96c4e77fe75fa848aae9885476e7df5a4
