@@ -1412,12 +1412,24 @@ def badge_handler(compute, ttl=300):
     return Handler
 
 
-def serve(port, args, token, ttl=300):
-    """Serve the badge JSON at /badge.json on localhost:port.
+# The default has to be every interface: the documented --serve deployment is a
+# container with a published port (see examples/ci-platforms/), and 127.0.0.1
+# inside one is unreachable from outside it. That does mean a process holding a
+# CI token is listening on every interface of whatever host runs it, so --bind
+# exists for anyone running it directly on a machine that has others.
+DEFAULT_BIND = "0.0.0.0"  # nosec B104 — deliberate, see above
+
+
+def serve(port, args, token, ttl=300, bind=DEFAULT_BIND):
+    """Serve the badge JSON at /badge.json on bind:port.
 
     Recomputes at most once every `ttl` seconds (default 5 min) so repeated
     hits (Shields refreshes the endpoint on every badge view) don't hammer
     the CI/grid APIs.
+
+    Binds every interface by default so the container deployment works; pass
+    `bind` (--bind) to narrow it. The endpoint is unauthenticated and the
+    process holds a CI token, so on a shared host that is worth doing.
     """
 
     def compute():
@@ -1425,8 +1437,8 @@ def serve(port, args, token, ttl=300):
         print(f"carbon-badge: {detail} ≈ {data['message']}", file=sys.stderr)
         return data
 
-    print(f"carbon-badge: serving /badge.json on :{port} (ttl {ttl}s)", file=sys.stderr)
-    http.server.HTTPServer(("0.0.0.0", port), badge_handler(compute, ttl)).serve_forever()
+    print(f"carbon-badge: serving /badge.json on {bind}:{port} (ttl {ttl}s)", file=sys.stderr)
+    http.server.HTTPServer((bind, port), badge_handler(compute, ttl)).serve_forever()
 
 
 def main(argv=None):
@@ -1520,6 +1532,15 @@ def main(argv=None):
         metavar="PORT",
         help="serve /badge.json on this port instead of printing once and exiting",
     )
+    p.add_argument(
+        "--bind",
+        default=DEFAULT_BIND,
+        metavar="ADDR",
+        help=(
+            f"interface for --serve (default: {DEFAULT_BIND}, which a container needs; "
+            "use 127.0.0.1 on a shared host)"
+        ),
+    )
     args = p.parse_args(argv)
 
     # Validated up front so a typo fails the command rather than surfacing as a
@@ -1533,7 +1554,7 @@ def main(argv=None):
     token = args.token or os.environ.get(env_var)
 
     if args.serve:
-        serve(args.serve, args, token)
+        serve(args.serve, args, token, bind=args.bind)
         return 0
 
     data, detail = estimate(args, token)
