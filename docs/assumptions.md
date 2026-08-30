@@ -309,11 +309,48 @@ reaches the same conclusion — its badge reports a value with no colour banding
 What remains is the confidence marker, which describes how the figure was
 obtained rather than whether it is good. That is a claim this tool can defend.
 
+## The flat wattage, and what to do about it
+
+Real draw swings 1.76–8.18 W with CPU load on the same 4-vCPU slice. The
+Actions API exposes no utilisation, so the wattage has to come from somewhere
+else. Three options were on the table:
+
+1. **Keep full load and state the bias.** Simple and honest, but the bias is
+   large: a job that averages 25% CPU is overstated by roughly 3x, and a
+   CI suite that is mostly `npm install` and network waiting is exactly that
+   job.
+2. **A job-class heuristic** — guess utilisation from the workflow name, the
+   step names, the duration. Cheap to implement and impossible to defend: it
+   would produce a different number for the same machine doing the same work
+   depending on what someone called the file.
+3. **An explicit `--load-factor`.** The caller states the average utilisation
+   they know or have measured; the default changes nothing.
+
+**Option 3, with option 1 as the default.** The number is only as good as the
+utilisation figure behind it, and the tool does not have one — so it prices at
+full load, says so, and gives anyone who *does* have one a way to say it:
+
+```sh
+carbon-badge OWNER/REPO --load-factor 0.25   # measured average CPU utilisation
+```
+
+Only the variable part scales. Eco-CI's 1.76 W at idle against 8.18 W at full
+load means **21.5% of the draw is there whatever the job does**, so
+`--load-factor 0` is 2.02 W, not zero, and `--load-factor 0.25` is 3.87 W
+rather than the 2.35 W a plain multiply would give. A flat multiply would have
+replaced an overstatement with an understatement of about the same size.
+
+**The remaining error, stated plainly:** at the default the figure is a
+*ceiling*. For a CPU-bound build it is close to right; for an I/O-bound or
+mostly-waiting job it is high by up to about 3x. It is never low on this axis.
+That direction is deliberate — a carbon figure that flatters the caller is
+worth less than one that does not.
+
 ## Known limits
 
-- **A flat wattage cannot be right.** Real draw swings 1.76–8.18 W with CPU
-  load, and the API does not expose utilisation. The table uses the full-load
-  figure, so an I/O-bound job is overstated.
+- **A flat wattage cannot be right.** The default prices at full load and so
+  overstates an I/O-bound job; `--load-factor` is the lever, and the section
+  above is the reasoning.
 - **Shared hardware is an attribution, not a measurement.** A 4-vCPU slice of a
   many-core host has no single true wattage; the Cloud Energy model apportions
   it.
