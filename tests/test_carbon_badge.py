@@ -1132,3 +1132,70 @@ def test_ci_api_failure_leaves_the_annual_average_standing(capsys):
     resolve = carbon_badge.region_factor_resolver(get=boom)
     assert resolve("japaneast") == carbon_badge.AZURE_REGION_GRID["japaneast"]
     assert "ci-api snapshot failed" in capsys.readouterr().err
+
+
+# --- estimates are labelled as estimates ------------------------------------
+
+
+def test_the_classes_with_no_measured_curve_are_named_as_such():
+    """The x86 and macOS rows come from Eco-CI's machine-power-data. `arm` and
+    `gpu` do not exist there, so they are composed here — and a reader cannot
+    tell 9.4 W from 89.9 W apart by looking."""
+    assert set(carbon_badge.RUNNER_POWER_ESTIMATED) == {"arm", "gpu"}
+    for key in ("ubuntu", "windows", "macos"):
+        assert key not in carbon_badge.RUNNER_POWER_ESTIMATED
+
+
+def test_pricing_a_job_on_an_estimated_class_says_so_and_names_the_flag():
+    carbon_badge._ESTIMATED_USED.clear()
+    runner_power_w(["ubuntu-22.04-arm"])
+    runner_power_w(["ubuntu-latest-4-cores-gpu"])
+    runner_power_w(["ubuntu-latest"])
+    assert carbon_badge._ESTIMATED_USED == {"arm": 1, "gpu": 1}
+
+
+def test_the_warning_names_the_class_the_figure_and_the_replacement(capsys):
+    carbon_badge._ESTIMATED_USED.clear()
+    runner_power_w(["ubuntu-24.04-arm"])
+    carbon_badge._warn_estimated_classes()
+    err = capsys.readouterr().err
+    assert "'arm'" in err
+    assert "5.6 W" in err
+    # The flag is the fix, so it has to be in the message people actually see.
+    assert "--runner-watts arm=<watts>" in err
+    assert "estimate" in err
+
+
+def test_a_declared_figure_is_not_reported_as_an_estimate(capsys):
+    """Someone who passed --runner-watts has replaced the estimate; telling
+    them their own measurement is a guess would train them to ignore the line."""
+    carbon_badge._ESTIMATED_USED.clear()
+    overrides = carbon_badge.parse_runner_watts(["arm=6", "gpu=400"])
+    runner_power_w(["ubuntu-22.04-arm"], overrides)
+    runner_power_w(["ubuntu-latest-gpu"], overrides)
+    assert carbon_badge._ESTIMATED_USED == {}
+    carbon_badge._warn_estimated_classes()
+    assert capsys.readouterr().err == ""
+
+
+def test_the_self_reported_route_admits_to_the_same_estimate():
+    """Both routes price the same machine the same way, so both have to make
+    the same admission — a self-reported arm job is no better founded."""
+    carbon_badge._ESTIMATED_USED.clear()
+    carbon_badge.watts_from_specs(4, 16 * 1024, "arm")
+    carbon_badge.watts_from_specs(4, 16 * 1024, "ubuntu")
+    assert carbon_badge._ESTIMATED_USED == {"arm": 1}
+
+
+def test_the_gpu_row_is_the_t4_board_limit_on_top_of_a_host_slice():
+    """GitHub's GPU runner is `gpu-t4-4-core`: 4 vCPU plus one Tesla T4, whose
+    70 W board limit is why the card needs no supplemental power connector."""
+    assert carbon_badge.RUNNER_POWER_W["gpu"] == round((8.18 + 70.0) * carbon_badge.PUE, 1)
+
+
+def test_pue_is_applied_once_and_stays_its_own_constant():
+    """Cloud Energy estimates "the power draw of the whole machine", and
+    SPECpower measures at the server's AC inlet — the denominator of PUE — so
+    the overhead is not already in the curve. It stays visible and separate."""
+    assert carbon_badge.PUE == 1.15
+    assert carbon_badge.RUNNER_POWER_W["ubuntu"] == round(8.18 * carbon_badge.PUE, 1)
