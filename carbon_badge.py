@@ -328,7 +328,11 @@ def runner_power_w(labels, overrides=None):
             if key in _NO_CORE_SCALING:
                 return apply_load_factor(watts)
             cores = next(
-                (int(m.group(1)) for label in labels_lower if (m := _CORES_RE.search(label))),
+                (
+                    int(match.group(1))
+                    for label in labels_lower
+                    if (match := _CORES_RE.search(label))
+                ),
                 None,
             )
             # Through the same law the self-reported path uses, assuming the
@@ -386,14 +390,14 @@ def _get_pages(url, token, key, params=None):
     headers = {"Authorization": f"Bearer {token}"} if token else {}
     items, page, total = [], 1, None
     while page <= _MAX_PAGES:
-        r = requests.get(
+        response = requests.get(
             url,
             params={**(params or {}), "per_page": _PAGE_SIZE, "page": page},
             headers=headers,
             timeout=30,
         )
-        r.raise_for_status()
-        payload = r.json()
+        response.raise_for_status()
+        payload = response.json()
         total = payload.get("total_count", total)
         batch = payload.get(key, [])
         items.extend(batch)
@@ -556,8 +560,9 @@ def ci_kwh_last_30d(
         # full coverage on a half-instrumented workflow.
         trusted = sum(
             1
-            for r in runs
-            if (e := by_run.get(r.get("id"))) and e[2] >= expected.get(r.get("workflow_id"), 0)
+            for run in runs
+            if (entry := by_run.get(run.get("id")))
+            and entry[2] >= expected.get(run.get("workflow_id"), 0)
         )
         print(
             f"carbon-badge: {trusted}/{len(runs)} run(s) fully self-reported; "
@@ -697,21 +702,21 @@ IPCC_FUEL_G_PER_KWH = {
 
 def _energy_charts_factor(country, get=requests.get):
     """Latest absolute gCO2eq/kWh from Fraunhofer ISE. No key, 15-minute data."""
-    r = get(
+    response = get(
         "https://api.energy-charts.info/co2eq",
         params={"country": country},
         timeout=20,
     )
-    r.raise_for_status()
-    values = [v for v in (r.json().get("co2eq") or []) if v is not None]
+    response.raise_for_status()
+    values = [v for v in (response.json().get("co2eq") or []) if v is not None]
     return float(values[-1]) if values else None
 
 
 def _uk_factor(get=requests.get):
     """Great Britain, from NESO. No key, half-hourly."""
-    r = get("https://api.carbonintensity.org.uk/intensity", timeout=20)
-    r.raise_for_status()
-    entry = (r.json().get("data") or [{}])[0].get("intensity", {})
+    response = get("https://api.carbonintensity.org.uk/intensity", timeout=20)
+    response.raise_for_status()
+    entry = (response.json().get("data") or [{}])[0].get("intensity", {})
     value = entry.get("actual")
     if value is None:
         value = entry.get("forecast")  # the current half-hour is not settled yet
@@ -738,7 +743,7 @@ def _eia_factor(balancing_authority, api_key, get=requests.get):
     factors over the most recent hour. Documented in docs/assumptions.md,
     because it is a model rather than a measurement.
     """
-    r = get(
+    response = get(
         "https://api.eia.gov/v2/electricity/rto/fuel-type-data/data/",
         params={
             "api_key": api_key,
@@ -751,8 +756,8 @@ def _eia_factor(balancing_authority, api_key, get=requests.get):
         },
         timeout=25,
     )
-    r.raise_for_status()
-    rows = r.json().get("response", {}).get("data", [])
+    response.raise_for_status()
+    rows = response.json().get("response", {}).get("data", [])
     if not rows:
         return None
 
@@ -784,9 +789,9 @@ def _ci_api_snapshot(get=requests.get):
     country and every zone in a single object, which makes N regions cost one
     request no matter how many N is.
     """
-    r = get(f"{CI_API_BASE}/v1/latest.json", timeout=25)
-    r.raise_for_status()
-    return r.json()
+    response = get(f"{CI_API_BASE}/v1/latest.json", timeout=25)
+    response.raise_for_status()
+    return response.json()
 
 
 def _ci_api_factor(key, snapshot, now=None):
@@ -1056,19 +1061,24 @@ def _expected_markers(runs, by_run, repo, token, api):
     """
     observed, sampled, seen = {}, {}, set()
     for run in runs:
-        wf = run.get("workflow_id")
+        workflow_id = run.get("workflow_id")
         entry = by_run.get(run.get("id"))
         if entry is None:
             continue
         # entry is (kwh, grams, marker_count) — the count, not the energy.
-        observed[wf] = max(observed.get(wf, 0), entry[2])
-        if wf not in seen:
-            seen.add(wf)
+        observed[workflow_id] = max(observed.get(workflow_id, 0), entry[2])
+        if workflow_id not in seen:
+            seen.add(workflow_id)
             try:
-                sampled[wf] = sum(1 for j in run_jobs(run["id"], repo, token, api) if _ran(j))
+                sampled[workflow_id] = sum(
+                    1 for j in run_jobs(run["id"], repo, token, api) if _ran(j)
+                )
             except Exception:  # noqa: BLE001 — injected `get`, any failure must fall back
-                sampled[wf] = 0  # unreachable sample; the observed bound stands
-    return {wf: max(observed.get(wf, 0), sampled.get(wf, 0)) for wf in observed}
+                sampled[workflow_id] = 0  # unreachable sample; the observed bound stands
+    return {
+        workflow_id: max(observed.get(workflow_id, 0), sampled.get(workflow_id, 0))
+        for workflow_id in observed
+    }
 
 
 def artifact_kwh_by_run(
@@ -1178,14 +1188,14 @@ def gitlab_kwh_last_30d(
     kwh, undeclared, page = 0.0, {}, 1
     guessed_kwh, total_jobs = 0.0, 0
     while page <= _MAX_PAGES:
-        r = requests.get(
+        response = requests.get(
             f"{api}/projects/{project_path}/jobs",
             params={"per_page": _PAGE_SIZE, "page": page},
             headers=headers,
             timeout=30,
         )
-        r.raise_for_status()
-        jobs = r.json()
+        response.raise_for_status()
+        jobs = response.json()
         if not jobs:
             break
         for job in jobs:
@@ -1259,16 +1269,16 @@ def live_grid_intensity(
     headers = {"auth-token": token} if token else {}
 
     try:
-        r = get(
+        response = get(
             f"{api}/carbon-intensity/history",
             params={"zone": zone},
             headers=headers,
             timeout=30,
         )
-        r.raise_for_status()
+        response.raise_for_status()
         readings = [
             float(h["carbonIntensity"])
-            for h in r.json().get("history", [])
+            for h in response.json().get("history", [])
             if h.get("carbonIntensity") is not None
         ]
         if readings:
@@ -1281,14 +1291,14 @@ def live_grid_intensity(
             file=sys.stderr,
         )
 
-    r = get(
+    response = get(
         f"{api}/carbon-intensity/latest",
         params={"zone": zone},
         headers=headers,
         timeout=30,
     )
-    r.raise_for_status()
-    return float(r.json()["carbonIntensity"])
+    response.raise_for_status()
+    return float(response.json()["carbonIntensity"])
 
 
 def format_grams(grams):
@@ -1437,7 +1447,7 @@ def badge_handler(compute, ttl=300):
             self.end_headers()
             self.wfile.write(cache["body"])
 
-        def log_message(self, *a):
+        def log_message(self, *args):
             pass
 
     return Handler
@@ -1464,9 +1474,9 @@ def serve(port, args, token, ttl=300, bind=DEFAULT_BIND):
     """
 
     def compute():
-        data, detail = estimate(args, token)
-        print(f"carbon-badge: {detail} ≈ {data['message']}", file=sys.stderr)
-        return data
+        badge, detail = estimate(args, token)
+        print(f"carbon-badge: {detail} ≈ {badge['message']}", file=sys.stderr)
+        return badge
 
     print(f"carbon-badge: serving /badge.json on {bind}:{port} (ttl {ttl}s)", file=sys.stderr)
     http.server.HTTPServer((bind, port), badge_handler(compute, ttl)).serve_forever()
@@ -1474,29 +1484,29 @@ def serve(port, args, token, ttl=300, bind=DEFAULT_BIND):
 
 def main(argv=None):
     """CLI entry point: parse args, estimate emissions, emit badge JSON."""
-    p = argparse.ArgumentParser(
+    parser = argparse.ArgumentParser(
         prog="carbon-badge",
         description=__doc__,
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
-    p.add_argument("repo", help="owner/repo (GitHub) or group/project (GitLab)")
-    p.add_argument(
+    parser.add_argument("repo", help="owner/repo (GitHub) or group/project (GitLab)")
+    parser.add_argument(
         "--provider",
         choices=["github", "gitlab"],
         default="github",
         help="CI provider to query (default %(default)s)",
     )
-    p.add_argument(
+    parser.add_argument(
         "--api",
         default=None,
         help="override API base URL (GitHub Enterprise / self-hosted GitLab)",
     )
-    p.add_argument(
+    parser.add_argument(
         "--token",
         default=None,
         help="API token (or GITHUB_TOKEN / GITLAB_TOKEN env, matching --provider)",
     )
-    p.add_argument(
+    parser.add_argument(
         "--grid-intensity",
         type=float,
         default=None,
@@ -1508,18 +1518,18 @@ def main(argv=None):
             "--grid-region is set"
         ),
     )
-    p.add_argument(
+    parser.add_argument(
         "--grid-region",
         default=None,
         metavar="ZONE",
         help="Electricity Maps zone (e.g. SE, US-CAL-CISO) for live grid intensity",
     )
-    p.add_argument(
+    parser.add_argument(
         "--electricitymaps-token",
         default=None,
         help="Electricity Maps API token (or ELECTRICITYMAPS_TOKEN env)",
     )
-    p.add_argument(
+    parser.add_argument(
         "--runner-watts",
         action="append",
         metavar="WATTS|LABEL=WATTS",
@@ -1531,7 +1541,7 @@ def main(argv=None):
             "only declared"
         ),
     )
-    p.add_argument(
+    parser.add_argument(
         "--eia-key",
         default=None,
         help=(
@@ -1540,7 +1550,7 @@ def main(argv=None):
             "eia.gov/opendata. European and UK regions need no key at all"
         ),
     )
-    p.add_argument(
+    parser.add_argument(
         "--load-factor",
         type=float,
         default=1.0,
@@ -1553,7 +1563,7 @@ def main(argv=None):
             "power. See docs/assumptions.md"
         ),
     )
-    p.add_argument(
+    parser.add_argument(
         "--ignore-self-reported",
         action="store_true",
         help=(
@@ -1563,20 +1573,20 @@ def main(argv=None):
             "self-reported figure is missing (see docs/getting-started.md)"
         ),
     )
-    p.add_argument(
+    parser.add_argument(
         "--minutes",
         type=float,
         default=None,
         help="skip the API and use this many CI minutes (testing/offline)",
     )
-    p.add_argument(
+    parser.add_argument(
         "--serve",
         type=int,
         default=None,
         metavar="PORT",
         help="serve /badge.json on this port instead of printing once and exiting",
     )
-    p.add_argument(
+    parser.add_argument(
         "--bind",
         default=DEFAULT_BIND,
         metavar="ADDR",
@@ -1585,10 +1595,10 @@ def main(argv=None):
             "use 127.0.0.1 on a shared host)"
         ),
     )
-    args = p.parse_args(argv)
+    args = parser.parse_args(argv)
 
     if not 0 <= args.load_factor <= 1:
-        p.error("--load-factor must be between 0 and 1")
+        parser.error("--load-factor must be between 0 and 1")
     global LOAD_FACTOR
     LOAD_FACTOR = args.load_factor
 
@@ -1597,7 +1607,7 @@ def main(argv=None):
     try:
         parse_runner_watts(args.runner_watts)
     except ValueError as exc:
-        p.error(f"--runner-watts: {exc}")
+        parser.error(f"--runner-watts: {exc}")
 
     env_var = "GITLAB_TOKEN" if args.provider == "gitlab" else "GITHUB_TOKEN"
     token = args.token or os.environ.get(env_var)
@@ -1606,10 +1616,10 @@ def main(argv=None):
         serve(args.serve, args, token, bind=args.bind)
         return 0
 
-    data, detail = estimate(args, token)
-    json.dump(data, sys.stdout, indent=2)
+    badge, detail = estimate(args, token)
+    json.dump(badge, sys.stdout, indent=2)
     print(file=sys.stderr)
-    print(f"carbon-badge: {detail} ≈ {data['message']}", file=sys.stderr)
+    print(f"carbon-badge: {detail} ≈ {badge['message']}", file=sys.stderr)
     return 0
 
 
