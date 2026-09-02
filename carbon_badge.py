@@ -299,6 +299,46 @@ def parse_runner_watts(pairs):
     return table
 
 
+def _declared_watts(labels_lower, overrides):
+    """A --runner-watts figure for these labels, or None if none was declared.
+
+    Exact label first, then a substring one (so `gpu=320` prices a family), then
+    the blanket entry: a declared blanket figure beats the built-in guess table,
+    because the developer knows what their runners are and the API does not.
+    """
+    for label in labels_lower:
+        if label in overrides:
+            return overrides[label]
+    for key, watts in overrides.items():
+        if key != ANY_RUNNER and any(key in label for label in labels_lower):
+            return watts
+    return overrides.get(ANY_RUNNER)
+
+
+def _table_watts(labels_lower):
+    """The built-in GitHub-hosted figure for these labels, or None.
+
+    Checked in RUNNER_POWER_W's own order, first substring match wins, and
+    scaled by any core count the label carries.
+    """
+    for key, watts in RUNNER_POWER_W.items():
+        if not any(key in label for label in labels_lower):
+            continue
+        if key in _NO_CORE_SCALING:
+            return apply_load_factor(watts)
+        cores = next(
+            (int(match.group(1)) for label in labels_lower if (match := _CORES_RE.search(label))),
+            None,
+        )
+        if not cores:
+            return apply_load_factor(watts)
+        # Through the same law the self-reported path uses, assuming the
+        # standard memory-per-vCPU ratio, so the two agree for any size
+        # rather than only at the calibration point.
+        return watts_from_specs(cores, cores * MEM_PER_VCPU_MB, key)
+    return None
+
+
 def runner_power_w(labels, overrides=None):
     """Map job labels (e.g. ["windows-latest"]) to a W draw, or None if unknown.
 
@@ -313,36 +353,10 @@ def runner_power_w(labels, overrides=None):
     the caller needs to be able to tell that apart from a known runner to warn.
     """
     labels_lower = [label.lower() for label in labels]
-    overrides = overrides or {}
-    for label in labels_lower:
-        if label in overrides:
-            return apply_load_factor(overrides[label])
-    for key, watts in overrides.items():
-        if key != ANY_RUNNER and any(key in label for label in labels_lower):
-            return apply_load_factor(watts)
-    # A declared blanket figure beats the built-in guess table — the developer
-    # knows what their runners are and the API does not.
-    if ANY_RUNNER in overrides:
-        return apply_load_factor(overrides[ANY_RUNNER])
-    for key, watts in RUNNER_POWER_W.items():
-        if any(key in label for label in labels_lower):
-            if key in _NO_CORE_SCALING:
-                return apply_load_factor(watts)
-            cores = next(
-                (
-                    int(match.group(1))
-                    for label in labels_lower
-                    if (match := _CORES_RE.search(label))
-                ),
-                None,
-            )
-            # Through the same law the self-reported path uses, assuming the
-            # standard memory-per-vCPU ratio, so the two agree for any size
-            # rather than only at the calibration point.
-            if not cores:
-                return apply_load_factor(watts)
-            return watts_from_specs(cores, cores * MEM_PER_VCPU_MB, key)
-    return None
+    declared = _declared_watts(labels_lower, overrides or {})
+    if declared is not None:
+        return apply_load_factor(declared)
+    return _table_watts(labels_lower)
 
 
 def _ran(job):
@@ -795,6 +809,32 @@ def _ci_api_snapshot(get=requests.get):
     return response.json()
 
 
+def _measured_reading(key, snapshot, now=None):
+    """The `_REGION_CI_API` reading for `key`, or None if it cannot be trusted.
+
+    Three ways it cannot: the snapshot is not an object, it is older than
+    CI_API_MAX_AGE_S (the pipeline runs hourly, so a stale one describes an
+    hour that has passed), or the reading is not a measurement. A zone key
+    ("<COUNTRY>/<ZONE>") is published under `zones`, a country under
+    `countries`.
+    """
+    if not isinstance(snapshot, dict):
+        return None
+    stamp = snapshot.get("generated_at")
+    try:
+        generated = datetime.fromisoformat(str(stamp).replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    now = now or datetime.now(timezone.utc)
+    if (now - generated).total_seconds() > CI_API_MAX_AGE_S:
+        return None
+    bucket = "zones" if "/" in key else "countries"
+    reading = (snapshot.get(bucket) or {}).get(key)
+    if not isinstance(reading, dict) or reading.get("basis") != "measured":
+        return None
+    return reading
+
+
 def _ci_api_factor(key, snapshot, now=None):
     """gCO2e/kWh for a `_REGION_CI_API` key, or None if the snapshot can't say.
 
@@ -811,25 +851,9 @@ def _ci_api_factor(key, snapshot, now=None):
     holds. Taking it here would print "live at 477" for a figure no more live
     than the table's, which is the one failure mode worth refusing outright.
     """
-    if not isinstance(snapshot, dict):
+    reading = _measured_reading(key, snapshot, now)
+    if reading is None:
         return None
-
-    stamp = snapshot.get("generated_at")
-    try:
-        generated = datetime.fromisoformat(str(stamp).replace("Z", "+00:00"))
-    except ValueError:
-        return None
-    now = now or datetime.now(timezone.utc)
-    if (now - generated).total_seconds() > CI_API_MAX_AGE_S:
-        return None
-
-    if "/" in key:
-        reading = (snapshot.get("zones") or {}).get(key)
-    else:
-        reading = (snapshot.get("countries") or {}).get(key)
-    if not isinstance(reading, dict) or reading.get("basis") != "measured":
-        return None
-
     for name in ("consumption_lifecycle", "lifecycle", "direct"):
         value = reading.get(name)
         if isinstance(value, (int, float)) and not isinstance(value, bool):
@@ -1378,6 +1402,45 @@ def endpoint_json(grams, usage=None):
     }
 
 
+def _gitlab_estimate(args, token, runner_watts, grid_intensity):
+    """The GitLab branch of estimate() -> (usage, grams, detail)."""
+    usage = gitlab_kwh_last_30d(
+        args.repo,
+        token,
+        api=args.api or "https://gitlab.com/api/v4",
+        runner_watts=runner_watts,
+        grid_override=grid_intensity,
+    )
+    return usage, usage.grams, f"{usage.kwh:.3f} kWh/30d, confidence: {confidence(usage)}"
+
+
+def _github_estimate(args, token, runner_watts, grid_intensity):
+    """The GitHub branch of estimate() -> (usage, grams, detail).
+
+    The detail line carries more than GitLab's because only GitHub has the
+    two things worth reporting: what share of the energy self-reported, and
+    what share rests on a runner nobody declared.
+    """
+    usage = ci_kwh_last_30d(
+        args.repo,
+        token,
+        api=args.api or "https://api.github.com",
+        runner_watts=runner_watts,
+        use_artifacts=not getattr(args, "ignore_self_reported", False),
+        grid_override=grid_intensity,
+        eia_key=getattr(args, "eia_key", None) or os.environ.get("EIA_API_KEY"),
+    )
+    guessed_pct = 100 * usage.guessed_kwh / usage.kwh if usage.kwh else 0
+    effective = usage.grams / usage.kwh if usage.kwh else 0
+    detail = (
+        f"{usage.kwh:.3f} kWh/30d at {effective:.0f} gCO2e/kWh effective, "
+        f"confidence: {confidence(usage)} "
+        f"({usage.measured_jobs}/{usage.total_jobs} job(s) self-reported, "
+        f"{guessed_pct:.0f}% of energy on unrecognised runners)"
+    )
+    return usage, usage.grams, detail
+
+
 def estimate(args, token):
     """Run one carbon estimate for the parsed CLI args. Returns (endpoint_json, detail)."""
     # None means "nothing declared, use each job's own region where it reported
@@ -1399,35 +1462,9 @@ def estimate(args, token):
         grams = grams_co2e(args.minutes, grid_factor_for(None, grid_intensity), watts)
         detail = f"{args.minutes:.0f} CI min/30d at {watts:g} W"
     elif args.provider == "gitlab":
-        usage = gitlab_kwh_last_30d(
-            args.repo,
-            token,
-            api=args.api or "https://gitlab.com/api/v4",
-            runner_watts=runner_watts,
-            grid_override=grid_intensity,
-        )
-        grams = usage.grams
-        detail = f"{usage.kwh:.3f} kWh/30d, confidence: {confidence(usage)}"
+        usage, grams, detail = _gitlab_estimate(args, token, runner_watts, grid_intensity)
     else:
-        usage = ci_kwh_last_30d(
-            args.repo,
-            token,
-            api=args.api or "https://api.github.com",
-            runner_watts=runner_watts,
-            use_artifacts=not getattr(args, "ignore_self_reported", False),
-            grid_override=grid_intensity,
-            eia_key=getattr(args, "eia_key", None) or os.environ.get("EIA_API_KEY"),
-        )
-        grams = usage.grams
-        level = confidence(usage)
-        guessed_pct = 100 * usage.guessed_kwh / usage.kwh if usage.kwh else 0
-        effective = usage.grams / usage.kwh if usage.kwh else 0
-        detail = (
-            f"{usage.kwh:.3f} kWh/30d at {effective:.0f} gCO2e/kWh effective, "
-            f"confidence: {level} "
-            f"({usage.measured_jobs}/{usage.total_jobs} job(s) self-reported, "
-            f"{guessed_pct:.0f}% of energy on unrecognised runners)"
-        )
+        usage, grams, detail = _github_estimate(args, token, runner_watts, grid_intensity)
     return endpoint_json(grams, usage), detail
 
 
@@ -1505,8 +1542,8 @@ def serve(port, args, token, ttl=300, bind=DEFAULT_BIND):
     http.server.HTTPServer((bind, port), handler).serve_forever()
 
 
-def main(argv=None):
-    """CLI entry point: parse args, estimate emissions, emit badge JSON."""
+def _build_parser():
+    """The CLI surface: every flag, its default and its help text."""
     parser = argparse.ArgumentParser(
         prog="carbon-badge",
         description=__doc__,
@@ -1618,6 +1655,12 @@ def main(argv=None):
             "use 127.0.0.1 on a shared host)"
         ),
     )
+    return parser
+
+
+def main(argv=None):
+    """CLI entry point: parse args, estimate emissions, emit badge JSON."""
+    parser = _build_parser()
     args = parser.parse_args(argv)
 
     if not 0 <= args.load_factor <= 1:
