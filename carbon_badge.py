@@ -900,8 +900,7 @@ def live_region_factor(region, eia_key=None, get=requests.get, ci_api=None):
             return _eia_factor(ba, eia_key, get=get)
     except Exception as exc:  # noqa: BLE001 — injected `get`, any failure must fall back
         log.warning(
-            "live grid lookup failed for %s (%s); using the annual average for "
-            "that region",
+            "live grid lookup failed for %s (%s); using the annual average for that region",
             region,
             exc,
         )
@@ -1164,9 +1163,7 @@ def artifact_kwh_by_run(
         # in on the marker.
         job_g = job_kwh * (factor_for(region) if factor_for else grid_factor_for(region))
         so_far = by_run.get(run_id, RunTotals(0.0, 0.0, 0))
-        by_run[run_id] = RunTotals(
-            so_far.kwh + job_kwh, so_far.grams + job_g, so_far.markers + 1
-        )
+        by_run[run_id] = RunTotals(so_far.kwh + job_kwh, so_far.grams + job_g, so_far.markers + 1)
         jobs += 1
     return by_run, jobs
 
@@ -1188,8 +1185,7 @@ def _warn_undeclared_runners(undeclared):
             else "give it a label, or set a blanket --runner-watts <watts>"
         )
         log.warning(
-            "%d job(s) on unrecognised runner '%s' charged at the %s W "
-            "baseline; %s",
+            "%d job(s) on unrecognised runner '%s' charged at the %s W baseline; %s",
             count,
             labels,
             DEFAULT_RUNNER_POWER_W,
@@ -1282,8 +1278,7 @@ def gitlab_kwh_last_30d(
         # a header rather than the body, so we cannot say by how much — only
         # that it may be short. Silence would read as a quiet month.
         log.warning(
-            "read %d pages of jobs and stopped at the cap; the figure may be "
-            "an undercount.",
+            "read %d pages of jobs and stopped at the cap; the figure may be an undercount.",
             _MAX_PAGES,
         )
     _warn_undeclared_runners(undeclared)
