@@ -86,6 +86,11 @@ PUE = 1.15
 #   github-hosted-runners-double-the-power-for-open-source/
 BASELINE_VCPU = 4
 
+# What a standard runner has, and therefore what the table entries describe.
+# Larger GitHub runners keep this ratio, so a core count implies a memory size.
+BASELINE_MEM_GB = 16
+MEM_PER_VCPU_MB = 1024 * BASELINE_MEM_GB // BASELINE_VCPU
+
 # Published. World-average power-sector intensity for 2023: "CO2 intensity
 # reached a new record low of 480 gCO2/kWh, down 1.2% from 486 gCO2/kWh in
 # 2022" — Ember, Global Electricity Review 2024. It is in the "Electricity
@@ -357,32 +362,37 @@ def _hours(start, end):
     return max(dt.total_seconds(), 0) / 3600
 
 
+# Pagination backstop. Generous — a repo doing more than this in 30 days is
+# unusual — but a cap that silently drops data would read as a quiet month
+# rather than a truncated query, so hitting it is always reported.
+_MAX_PAGES = 20
+
+# Requested per page, and therefore what a short page means: fewer than this
+# many results is the last page. The two readings have to stay the same number,
+# which is why it is one name and not two literals.
+# 100, not the API's default of 30: a matrix wider than 30 jobs was silently
+# truncated, and this now also feeds the confidence ratio.
+_PAGE_SIZE = 100
+
+
 def run_jobs(run_id, repo, token, api="https://api.github.com"):
     """Fetch the jobs (with per-job runner labels/timing) for one run."""
     headers = {"Authorization": f"Bearer {token}"} if token else {}
-    # per_page=100, not the API's default of 30: a matrix wider than 30 jobs
-    # was silently truncated, and this now also feeds the confidence ratio.
     jobs, page = [], 1
     while page <= _MAX_PAGES:
         r = requests.get(
             f"{api}/repos/{repo}/actions/runs/{run_id}/jobs",
-            params={"per_page": 100, "page": page},
+            params={"per_page": _PAGE_SIZE, "page": page},
             headers=headers,
             timeout=30,
         )
         r.raise_for_status()
         batch = r.json().get("jobs", [])
         jobs.extend(batch)
-        if len(batch) < 100:
+        if len(batch) < _PAGE_SIZE:
             break
         page += 1
     return jobs
-
-
-# Pagination backstop. Generous — a repo doing more than this in 30 days is
-# unusual — but a cap that silently drops data would read as a quiet month
-# rather than a truncated query, so hitting it is always reported.
-_MAX_PAGES = 20
 
 
 def _warn_if_truncated(kind, fetched, total, hit_page_cap):
@@ -414,7 +424,7 @@ def _list_runs(repo, token, api, since):
     while page <= _MAX_PAGES:
         r = requests.get(
             f"{api}/repos/{repo}/actions/runs",
-            params={"per_page": 100, "page": page, "created": f">={since}"},
+            params={"per_page": _PAGE_SIZE, "page": page, "created": f">={since}"},
             headers=headers,
             timeout=30,
         )
@@ -425,7 +435,7 @@ def _list_runs(repo, token, api, since):
         runs.extend(batch)
         # A short page is the last page — stop rather than spend a request
         # confirming the next one is empty.
-        if len(batch) < 100:
+        if len(batch) < _PAGE_SIZE:
             break
         page += 1
     _warn_if_truncated("run", len(runs), total, page > _MAX_PAGES)
@@ -931,10 +941,6 @@ _ARTIFACT_RE = re.compile(r"^carbon\.v1\.(\d+)\.(\d+)\.(\d+)\.([a-z]+)\.([a-z0-9
 # CCF's would double-count. It is a shape parameter, not a memory coefficient.
 WATTS_BASE = 1.2
 WATTS_PER_GB = 0.1125
-# What a standard runner has, and therefore what the table entries describe.
-# Larger GitHub runners keep this ratio, so a core count implies a memory size.
-BASELINE_MEM_GB = 16
-MEM_PER_VCPU_MB = 1024 * BASELINE_MEM_GB // BASELINE_VCPU
 
 
 # Eco-CI measures the same 4-vCPU slice at 1.76 W idle and 8.18 W at full
@@ -1023,7 +1029,7 @@ def list_artifacts(repo, token, api="https://api.github.com"):
     while page <= _MAX_PAGES:
         r = requests.get(
             f"{api}/repos/{repo}/actions/artifacts",
-            params={"per_page": 100, "page": page},
+            params={"per_page": _PAGE_SIZE, "page": page},
             headers=headers,
             timeout=30,
         )
@@ -1032,7 +1038,7 @@ def list_artifacts(repo, token, api="https://api.github.com"):
         total = payload.get("total_count", total)
         batch = payload.get("artifacts", [])
         artifacts.extend(batch)
-        if len(batch) < 100:  # short page = last page
+        if len(batch) < _PAGE_SIZE:  # short page = last page
             break
         page += 1
     _warn_if_truncated("artifact", len(artifacts), total, page > _MAX_PAGES)
@@ -1185,7 +1191,7 @@ def gitlab_kwh_last_30d(
     while page <= _MAX_PAGES:
         r = requests.get(
             f"{api}/projects/{project_path}/jobs",
-            params={"per_page": 100, "page": page},
+            params={"per_page": _PAGE_SIZE, "page": page},
             headers=headers,
             timeout=30,
         )
