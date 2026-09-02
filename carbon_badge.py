@@ -15,6 +15,7 @@ are different claims. docs/assumptions.md has every constant and its source.
 """
 
 import argparse
+import functools
 import http.server
 import json
 import os
@@ -513,7 +514,7 @@ def ci_kwh_last_30d(
     since = (datetime.now(timezone.utc) - timedelta(days=30)).isoformat()
     runs = _list_runs(repo, token, api, since)
     undeclared = {}
-    factor_for = region_factor_resolver(eia_key=eia_key, override=grid_override)
+    factor_for = RegionFactors(eia_key=eia_key, override=grid_override).factor_for
 
     # Runs whose jobs reported themselves are already measured — exactly, and
     # for free. Only the rest need a request each. Instrumentation therefore
@@ -868,39 +869,46 @@ def live_region_factor(region, eia_key=None, get=requests.get, ci_api=None):
     return None
 
 
-def region_factor_resolver(eia_key=None, override=None, get=requests.get):
+class RegionFactors:
     """Memoised region -> factor, so each distinct region costs one request.
 
     A month of runs touches a handful of regions, so this is a few calls per
-    refresh, not one per job.
+    refresh, not one per job. `factor_for` is a bound method, so it goes
+    wherever the plain function it replaced did.
     """
-    cache = {}
-    snapshot = []  # one-slot memo; [] means "not fetched", [None] means "tried"
 
-    def ci_api():
-        if not snapshot:
+    def __init__(self, eia_key=None, override=None, get=requests.get):
+        self._eia_key = eia_key
+        self._override = override
+        self._get = get
+        self._cache = {}
+        # One-slot memo: [] means "not fetched", [None] means "tried and failed".
+        self._snapshot = []
+
+    def _ci_api(self):
+        if not self._snapshot:
             try:
-                snapshot.append(_ci_api_snapshot(get=get))
+                self._snapshot.append(_ci_api_snapshot(get=self._get))
             except Exception as exc:  # noqa: BLE001 - a failed snapshot must not fail the refresh
                 print(f"carbon-badge: ci-api snapshot failed ({exc})", file=sys.stderr)
-                snapshot.append(None)
-        return snapshot[0]
+                self._snapshot.append(None)
+        return self._snapshot[0]
 
-    def resolve(region):
-        if override is not None:
-            return override
-        if region not in cache:
-            live = live_region_factor(region, eia_key=eia_key, get=get, ci_api=ci_api)
+    def factor_for(self, region):
+        if self._override is not None:
+            return self._override
+        if region not in self._cache:
+            live = live_region_factor(
+                region, eia_key=self._eia_key, get=self._get, ci_api=self._ci_api
+            )
             if live is not None:
                 print(
                     f"carbon-badge: {region} live at {live:.0f} gCO2e/kWh "
                     f"(annual average is {grid_factor_for(region):.0f})",
                     file=sys.stderr,
                 )
-            cache[region] = live if live is not None else grid_factor_for(region)
-        return cache[region]
-
-    return resolve
+            self._cache[region] = live if live is not None else grid_factor_for(region)
+        return self._cache[region]
 
 
 # Jobs self-report into an artifact *name*, which the artifacts API returns in
@@ -1423,34 +1431,46 @@ def estimate(args, token):
     return endpoint_json(grams, usage), detail
 
 
+class BadgeHandler(http.server.BaseHTTPRequestHandler):
+    """Serve /badge.json from `compute()`, re-computing at most once per `ttl`.
+
+    `cache` is owned by the caller and shared across every request: http.server
+    builds a fresh handler per connection, so anything kept on `self` would be
+    a cache of one request.
+    """
+
+    def __init__(self, compute, ttl, cache, *args, **kwargs):
+        self._compute = compute
+        self._ttl = ttl
+        self._cache = cache
+        super().__init__(*args, **kwargs)
+
+    def do_GET(self):
+        if self.path not in ("/", "/badge.json"):
+            self.send_response(404)
+            self.end_headers()
+            return
+        now = time.monotonic()
+        if self._cache["t"] is None or now - self._cache["t"] > self._ttl:
+            self._cache["body"] = json.dumps(self._compute()).encode()
+            self._cache["t"] = now
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Access-Control-Allow-Origin", "*")
+        self.end_headers()
+        self.wfile.write(self._cache["body"])
+
+    def log_message(self, *args):
+        pass
+
+
 def badge_handler(compute, ttl=300):
-    """Build a request handler serving /badge.json from compute(), cached for ttl seconds."""
+    """A BadgeHandler bound to one compute() and one shared cache."""
     # `t=None` means "never computed yet" — not 0.0, since time.monotonic()'s
     # epoch is arbitrary (e.g. near-zero shortly after a container boots), so
     # `now - 0.0 > ttl` can be false on the very first request too, leaving
     # cache["body"] permanently empty.
-    cache = {"t": None, "body": b""}
-
-    class Handler(http.server.BaseHTTPRequestHandler):
-        def do_GET(self):
-            if self.path not in ("/", "/badge.json"):
-                self.send_response(404)
-                self.end_headers()
-                return
-            now = time.monotonic()
-            if cache["t"] is None or now - cache["t"] > ttl:
-                cache["body"] = json.dumps(compute()).encode()
-                cache["t"] = now
-            self.send_response(200)
-            self.send_header("Content-Type", "application/json")
-            self.send_header("Access-Control-Allow-Origin", "*")
-            self.end_headers()
-            self.wfile.write(cache["body"])
-
-        def log_message(self, *args):
-            pass
-
-    return Handler
+    return functools.partial(BadgeHandler, compute, ttl, {"t": None, "body": b""})
 
 
 # The default has to be every interface: the documented --serve deployment is a
@@ -1459,6 +1479,13 @@ def badge_handler(compute, ttl=300):
 # CI token is listening on every interface of whatever host runs it, so --bind
 # exists for anyone running it directly on a machine that has others.
 DEFAULT_BIND = "0.0.0.0"  # nosec B104 — deliberate, see above
+
+
+def _logged_estimate(args, token):
+    """One estimate, with the same one-line summary the CLI prints."""
+    badge, detail = estimate(args, token)
+    print(f"carbon-badge: {detail} ≈ {badge['message']}", file=sys.stderr)
+    return badge
 
 
 def serve(port, args, token, ttl=300, bind=DEFAULT_BIND):
@@ -1473,13 +1500,9 @@ def serve(port, args, token, ttl=300, bind=DEFAULT_BIND):
     process holds a CI token, so on a shared host that is worth doing.
     """
 
-    def compute():
-        badge, detail = estimate(args, token)
-        print(f"carbon-badge: {detail} ≈ {badge['message']}", file=sys.stderr)
-        return badge
-
     print(f"carbon-badge: serving /badge.json on {bind}:{port} (ttl {ttl}s)", file=sys.stderr)
-    http.server.HTTPServer((bind, port), badge_handler(compute, ttl)).serve_forever()
+    handler = badge_handler(lambda: _logged_estimate(args, token), ttl)
+    http.server.HTTPServer((bind, port), handler).serve_forever()
 
 
 def main(argv=None):

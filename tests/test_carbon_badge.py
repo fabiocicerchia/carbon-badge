@@ -967,18 +967,18 @@ def test_resolver_caches_per_region_and_honours_an_explicit_figure():
         calls.append(url)
         return _resp({"data": [{"intensity": {"actual": 100}}]})
 
-    resolve = carbon_badge.region_factor_resolver(get=fake_get)
+    resolve = carbon_badge.RegionFactors(get=fake_get).factor_for
     assert resolve("uksouth") == 100.0
     assert resolve("uksouth") == 100.0
     assert len(calls) == 1, "resolver should memoise"
 
-    declared = carbon_badge.region_factor_resolver(override=333.0, get=fake_get)
+    declared = carbon_badge.RegionFactors(override=333.0, get=fake_get).factor_for
     assert declared("uksouth") == 333.0
     assert len(calls) == 1, "an explicit figure must not consult a provider"
 
 
 def test_unknown_region_falls_back_to_the_annual_average():
-    resolve = carbon_badge.region_factor_resolver()
+    resolve = carbon_badge.RegionFactors().factor_for
     assert resolve("moonbase1") == carbon_badge.DEFAULT_GRID_INTENSITY
 
 
@@ -1117,7 +1117,7 @@ def test_ci_api_snapshot_is_fetched_once_for_many_regions():
         calls.append(url)
         return _resp(_ci_snapshot(generated_at=_now_z()))
 
-    resolve = carbon_badge.region_factor_resolver(get=fake_get)
+    resolve = carbon_badge.RegionFactors(get=fake_get).factor_for
     assert resolve("japaneast") == 567.0
     assert resolve("japanwest") == 567.0
     assert resolve("southcentralus") == 425.0
@@ -1129,6 +1129,6 @@ def test_ci_api_failure_leaves_the_annual_average_standing(capsys):
     def boom(url, params=None, headers=None, timeout=None):
         raise RuntimeError("ci-api down")
 
-    resolve = carbon_badge.region_factor_resolver(get=boom)
+    resolve = carbon_badge.RegionFactors(get=boom).factor_for
     assert resolve("japaneast") == carbon_badge.AZURE_REGION_GRID["japaneast"]
     assert "ci-api snapshot failed" in capsys.readouterr().err
