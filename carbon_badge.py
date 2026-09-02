@@ -375,23 +375,39 @@ _MAX_PAGES = 20
 _PAGE_SIZE = 100
 
 
-def run_jobs(run_id, repo, token, api="https://api.github.com"):
-    """Fetch the jobs (with per-job runner labels/timing) for one run."""
+def _get_pages(url, token, key, params=None):
+    """Every item under `key` across pages -> (items, total_count, hit_page_cap).
+
+    The three GitHub listings this tool reads page identically, and the pieces
+    that have to agree — the requested page size and the short-page test that
+    ends the loop — are the ones that would silently disagree if each caller
+    kept its own copy. `total_count` is None for a listing that omits it.
+    """
     headers = {"Authorization": f"Bearer {token}"} if token else {}
-    jobs, page = [], 1
+    items, page, total = [], 1, None
     while page <= _MAX_PAGES:
         r = requests.get(
-            f"{api}/repos/{repo}/actions/runs/{run_id}/jobs",
-            params={"per_page": _PAGE_SIZE, "page": page},
+            url,
+            params={**(params or {}), "per_page": _PAGE_SIZE, "page": page},
             headers=headers,
             timeout=30,
         )
         r.raise_for_status()
-        batch = r.json().get("jobs", [])
-        jobs.extend(batch)
+        payload = r.json()
+        total = payload.get("total_count", total)
+        batch = payload.get(key, [])
+        items.extend(batch)
+        # A short page is the last page — stop rather than spend a request
+        # confirming the next one is empty.
         if len(batch) < _PAGE_SIZE:
             break
         page += 1
+    return items, total, page > _MAX_PAGES
+
+
+def run_jobs(run_id, repo, token, api="https://api.github.com"):
+    """Fetch the jobs (with per-job runner labels/timing) for one run."""
+    jobs, _, _ = _get_pages(f"{api}/repos/{repo}/actions/runs/{run_id}/jobs", token, "jobs")
     return jobs
 
 
@@ -419,26 +435,13 @@ def _warn_if_truncated(kind, fetched, total, hit_page_cap):
 
 def _list_runs(repo, token, api, since):
     """Every run in the window — cheap, 100 per request."""
-    headers = {"Authorization": f"Bearer {token}"} if token else {}
-    runs, page, total = [], 1, None
-    while page <= _MAX_PAGES:
-        r = requests.get(
-            f"{api}/repos/{repo}/actions/runs",
-            params={"per_page": _PAGE_SIZE, "page": page, "created": f">={since}"},
-            headers=headers,
-            timeout=30,
-        )
-        r.raise_for_status()
-        payload = r.json()
-        total = payload.get("total_count", total)
-        batch = payload.get("workflow_runs", [])
-        runs.extend(batch)
-        # A short page is the last page — stop rather than spend a request
-        # confirming the next one is empty.
-        if len(batch) < _PAGE_SIZE:
-            break
-        page += 1
-    _warn_if_truncated("run", len(runs), total, page > _MAX_PAGES)
+    runs, total, hit_cap = _get_pages(
+        f"{api}/repos/{repo}/actions/runs",
+        token,
+        "workflow_runs",
+        {"created": f">={since}"},
+    )
+    _warn_if_truncated("run", len(runs), total, hit_cap)
     return runs
 
 
@@ -1024,24 +1027,10 @@ def parse_carbon_artifact(name):
 
 def list_artifacts(repo, token, api="https://api.github.com"):
     """Every non-expired artifact, 100 per request."""
-    headers = {"Authorization": f"Bearer {token}"} if token else {}
-    artifacts, page, total = [], 1, None
-    while page <= _MAX_PAGES:
-        r = requests.get(
-            f"{api}/repos/{repo}/actions/artifacts",
-            params={"per_page": _PAGE_SIZE, "page": page},
-            headers=headers,
-            timeout=30,
-        )
-        r.raise_for_status()
-        payload = r.json()
-        total = payload.get("total_count", total)
-        batch = payload.get("artifacts", [])
-        artifacts.extend(batch)
-        if len(batch) < _PAGE_SIZE:  # short page = last page
-            break
-        page += 1
-    _warn_if_truncated("artifact", len(artifacts), total, page > _MAX_PAGES)
+    artifacts, total, hit_cap = _get_pages(
+        f"{api}/repos/{repo}/actions/artifacts", token, "artifacts"
+    )
+    _warn_if_truncated("artifact", len(artifacts), total, hit_cap)
     return artifacts
 
 
