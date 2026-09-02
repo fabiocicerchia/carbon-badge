@@ -544,32 +544,18 @@ def _run_kwh(run, repo, token, api, runner_watts, undeclared):
     `undeclared`, rather than skipped. Skipping scored them as zero, which made
     moving a build onto the biggest machine you own *improve* the badge.
     """
-    kwh, jobs, guessed_kwh = 0.0, 0, 0.0
-    for job in run_jobs(run["id"], repo, token, api):
-        # Skipped jobs burn nothing and cannot self-report; counting them would
-        # inflate both the denominator and the "N/M measured" ratio.
-        if not _ran(job):
-            continue
-        labels = job.get("labels", [])
-        start, end = job.get("started_at"), job.get("completed_at")
-        # Skipped only when the job never ran (queued/in-progress). A genuine
-        # zero-duration job still gets its runner recorded, so an unrecognised
-        # one is reported even if that particular job was instant.
-        if not (start and end):
-            continue
-        hours = _hours(start, end)
-        watts = runner_power_w(labels, runner_watts)
-        guessed = watts is None
-        if guessed:
-            watts = DEFAULT_RUNNER_POWER_W
-            key = ",".join(labels) or "(no labels)"
-            undeclared[key] = undeclared.get(key, 0) + 1
-        job_kwh = hours * watts / 1000
-        kwh += job_kwh
-        # Tracked in energy, not job count: one long job on an unknown runner
-        # undermines the total far more than a dozen short known ones.
-        guessed_kwh += job_kwh if guessed else 0.0
-        jobs += 1
+    # The body lives in _api_run_detail, which the reconciliation also needs;
+    # this returns the three values the badge path has always used. Skipped
+    # jobs and jobs with no timestamps are dropped there — counting them would
+    # inflate both the denominator and the "N/M measured" ratio, and a skipped
+    # job can never write a marker.
+    kwh, _seconds, jobs, guessed_kwh, _per_job, found = _api_run_detail(
+        run, repo, token, api, runner_watts
+    )
+    # Tracked in energy, not job count: one long job on an unknown runner
+    # undermines the total far more than a dozen short known ones.
+    for key, count in found.items():
+        undeclared[key] = undeclared.get(key, 0) + count
     return kwh, jobs, guessed_kwh
 
 
@@ -1226,6 +1212,309 @@ def artifact_kwh_by_run(
     return by_run, jobs
 
 
+# ------------------------------------------------------- reconciliation ---
+#
+# docs/getting-started.md has always told people to compare the default path
+# against --ignore-self-reported, and left them to eyeball two totals. Two
+# totals cannot say WHY they differ, and there are three separate reasons they
+# can, pulling in different directions:
+#
+#   1. SETUP TIME. A marker times the instrumented step. The API bills the
+#      whole job — runner provisioning, checkout, tool caches, upload. That gap
+#      is real energy the self-reported path does not see, and it is the one
+#      known remaining bias.
+#   2. THE WATTS MODEL. A marker prices itself from its own vCPU/memory through
+#      a linear model; the API path prices from the runner label through a
+#      lookup table. The same job can get two different wattages.
+#   3. THE GRID FACTOR. A marker carries the region it ran in and is priced at
+#      that grid; a run priced from the API has no region and takes the world
+#      average. GitHub's regions differ by ~25x, so this is the largest single
+#      term and it is not an error in either direction — the per-region figure
+#      is the better one.
+#
+# Reporting one number hides all three. This decomposes the divergence so each
+# can be judged separately, which is the difference between "the two paths
+# differ by 12%" and "setup time is 8% of the total and the grid factor
+# accounts for the rest".
+
+Divergence = namedtuple(
+    "Divergence",
+    "run_id workflow_id jobs marker_seconds api_seconds marker_kwh api_kwh "
+    "marker_grams api_grams matched_jobs",
+)
+
+Reconciliation = namedtuple(
+    "Reconciliation",
+    "rows runs_total runs_compared marker_kwh api_kwh marker_grams api_grams "
+    "marker_seconds api_seconds jobs setup_kwh model_kwh grid_grams api_factor",
+)
+
+
+def carbon_artifact_slug(name):
+    """The job slug a marker carries, or None.
+
+    Kept separate from parse_carbon_artifact rather than widening its tuple:
+    every caller of that unpacks five values, and the slug is only ever wanted
+    here.
+    """
+    if not _ARTIFACT_RE.match(name or ""):
+        return None
+    # The regex ends at the dot after the region; the slug is the remainder.
+    rest = name[_ARTIFACT_RE.match(name).end() :]
+    return rest or None
+
+
+def job_slug(name):
+    """An API job name reduced the way the reporting action reduces it.
+
+    Best effort, and deliberately so: the sanitising happens in the action that
+    writes the marker, not here, so this can only approximate it. A slug that
+    does not match falls back to per-run comparison rather than being dropped —
+    the run-level answer is still correct, it is just coarser.
+    """
+    slug = re.sub(r"[^a-z0-9]+", "-", (name or "").lower()).strip("-")
+    return slug or None
+
+
+def _api_run_detail(run, repo, token, api, runner_watts):
+    """(kwh, seconds, jobs, guessed_kwh, per_job) for one run, from the API.
+
+    Same arithmetic as _run_kwh — which now calls this — plus the seconds and
+    the per-job breakdown that only the reconciliation needs.
+    """
+    kwh = seconds = guessed_kwh = 0.0
+    jobs = 0
+    per_job = {}
+    undeclared = {}
+    for job in run_jobs(run["id"], repo, token, api):
+        if not _ran(job):
+            continue
+        start, end = job.get("started_at"), job.get("completed_at")
+        if not (start and end):
+            continue
+        labels = job.get("labels", [])
+        hours = _hours(start, end)
+        watts = runner_power_w(labels, runner_watts)
+        guessed = watts is None
+        if guessed:
+            watts = DEFAULT_RUNNER_POWER_W
+            key = ",".join(labels) or "(no labels)"
+            undeclared[key] = undeclared.get(key, 0) + 1
+        job_kwh = hours * watts / 1000
+        kwh += job_kwh
+        seconds += hours * 3600
+        guessed_kwh += job_kwh if guessed else 0.0
+        jobs += 1
+        slug = job_slug(job.get("name"))
+        if slug:
+            # A matrix leg and its parent can slugify alike; sum rather than
+            # overwrite, so the comparison is never quietly missing a job.
+            prev = per_job.get(slug, (0.0, 0.0))
+            per_job[slug] = (prev[0] + job_kwh, prev[1] + hours * 3600)
+    return kwh, seconds, jobs, guessed_kwh, per_job, undeclared
+
+
+def reconcile_last_30d(
+    repo,
+    token,
+    api="https://api.github.com",
+    runner_watts=None,
+    grid_override=None,
+    eia_key=None,
+):
+    """Run BOTH paths over the same runs and decompose where they disagree.
+
+    Expensive on purpose: it prices every run from the API *and* reads every
+    marker, which is the one thing the normal path exists to avoid. This is a
+    diagnostic, not something to put in a badge refresh.
+    """
+    since = (datetime.now(timezone.utc) - timedelta(days=30)).isoformat()
+    runs = _list_runs(repo, token, api, since)
+    factor_for = region_factor_resolver(eia_key=eia_key, override=grid_override)
+    by_run, _ = artifact_kwh_by_run(repo, token, api, runner_watts, factor_for)
+    expected = _expected_markers(runs, by_run, repo, token, api) if by_run else {}
+    api_factor = grid_factor_for(None, grid_override)
+
+    marker_seconds_by_run = _marker_seconds_by_run(repo, token, api)
+
+    rows = []
+    undeclared = {}
+    for run in runs:
+        entry = by_run.get(run.get("id"))
+        want = expected.get(run.get("workflow_id"), 0)
+        # Only fully instrumented runs are comparable. A partly instrumented
+        # one would show a divergence that is just the missing jobs, which is
+        # not what any of the three terms above is about.
+        if entry is None or entry[2] < want:
+            continue
+        a_kwh, a_seconds, a_jobs, _, a_per_job, a_undeclared = _api_run_detail(
+            run, repo, token, api, runner_watts
+        )
+        for k, v in a_undeclared.items():
+            undeclared[k] = undeclared.get(k, 0) + v
+        m_slugs = marker_seconds_by_run.get(run.get("id"), {})
+        matched = sum(1 for slug in m_slugs if slug in a_per_job)
+        rows.append(
+            Divergence(
+                run_id=run.get("id"),
+                workflow_id=run.get("workflow_id"),
+                jobs=a_jobs,
+                marker_seconds=sum(m_slugs.values()),
+                api_seconds=a_seconds,
+                marker_kwh=entry[0],
+                api_kwh=a_kwh,
+                marker_grams=entry[1],
+                api_grams=a_kwh * api_factor,
+                matched_jobs=matched,
+            )
+        )
+    _warn_undeclared_runners(undeclared)
+
+    m_kwh = sum(r.marker_kwh for r in rows)
+    a_kwh = sum(r.api_kwh for r in rows)
+    m_g = sum(r.marker_grams for r in rows)
+    a_g = sum(r.api_grams for r in rows)
+    m_s = sum(r.marker_seconds for r in rows)
+    a_s = sum(r.api_seconds for r in rows)
+    jobs = sum(r.jobs for r in rows)
+
+    # The decomposition. Setup time is priced at the API path's own mean draw
+    # over the compared runs, so it is the share of the kWh gap that the extra
+    # SECONDS explain; whatever is left over is the two models disagreeing
+    # about wattage on the same seconds.
+    mean_watts = (a_kwh * 1000 * 3600 / a_s) if a_s else 0.0
+    setup_kwh = (a_s - m_s) / 3600 * mean_watts / 1000
+    model_kwh = (a_kwh - m_kwh) - setup_kwh
+    # And the grams gap that is NOT explained by the kWh gap is the grid: one
+    # side priced per region, the other at the world average.
+    grid_grams = (a_g - m_g) - (a_kwh - m_kwh) * api_factor
+
+    return Reconciliation(
+        rows=rows,
+        runs_total=len(runs),
+        runs_compared=len(rows),
+        marker_kwh=m_kwh,
+        api_kwh=a_kwh,
+        marker_grams=m_g,
+        api_grams=a_g,
+        marker_seconds=m_s,
+        api_seconds=a_s,
+        jobs=jobs,
+        setup_kwh=setup_kwh,
+        model_kwh=model_kwh,
+        grid_grams=grid_grams,
+        api_factor=api_factor,
+    )
+
+
+def _marker_seconds_by_run(repo, token, api="https://api.github.com"):
+    """{run_id: {slug: seconds}} — the raw durations the markers carry.
+
+    Separate from artifact_kwh_by_run because that one has already priced them,
+    and the seconds are what isolates setup time from the wattage models.
+    """
+    cutoff = datetime.now(timezone.utc) - timedelta(days=30)
+    out = {}
+    for artifact in list_artifacts(repo, token, api):
+        if artifact.get("expired"):
+            continue
+        parsed = parse_carbon_artifact(artifact.get("name"))
+        if not parsed:
+            continue
+        created = artifact.get("created_at")
+        if created and datetime.fromisoformat(created.replace("Z", "+00:00")) < cutoff:
+            continue
+        run_id = (artifact.get("workflow_run") or {}).get("id")
+        if run_id is None:
+            continue
+        slug = carbon_artifact_slug(artifact.get("name")) or f"?{len(out)}"
+        out.setdefault(run_id, {})
+        out[run_id][slug] = out[run_id].get(slug, 0.0) + parsed[0]
+    return out
+
+
+def _pct(part, whole):
+    return (100 * part / whole) if whole else 0.0
+
+
+def format_reconciliation(rec, limit=15):
+    """The report. Per run, then the aggregate, then the decomposition."""
+    if not rec.rows:
+        return (
+            f"carbon-badge: nothing to reconcile — {rec.runs_total} run(s) in the "
+            f"window, none of them fully self-reported.\n"
+            "Both paths need the same runs to compare, so a repo with no "
+            "instrumented workflow has nothing to say here yet."
+        )
+    out = []
+    out.append(
+        f"Reconciliation over {rec.runs_compared} fully self-reported run(s) "
+        f"of {rec.runs_total} in the last 30 days ({rec.jobs} job(s)).\n"
+    )
+    out.append(
+        f"{'run':>12}  {'jobs':>4}  {'marker s':>9}  {'api s':>9}  "
+        f"{'setup s/job':>11}  {'marker g':>9}  {'api g':>9}  {'delta':>7}"
+    )
+    out.append("-" * 84)
+    worst = sorted(rows_by_gap(rec.rows), key=lambda r: -abs(r.api_grams - r.marker_grams))
+    for r in worst[:limit]:
+        per_job = (r.api_seconds - r.marker_seconds) / r.jobs if r.jobs else 0.0
+        out.append(
+            f"{r.run_id:>12}  {r.jobs:>4}  {r.marker_seconds:>9.0f}  "
+            f"{r.api_seconds:>9.0f}  {per_job:>11.0f}  {r.marker_grams:>9.1f}  "
+            f"{r.api_grams:>9.1f}  {_pct(r.api_grams - r.marker_grams, r.marker_grams):>6.0f}%"
+        )
+    if len(worst) > limit:
+        out.append(f"... and {len(worst) - limit} more, ordered by absolute gCO2e gap")
+
+    setup_per_job = (rec.api_seconds - rec.marker_seconds) / rec.jobs if rec.jobs else 0.0
+    matched = sum(r.matched_jobs for r in rec.rows)
+    out.append("")
+    out.append("AGGREGATE")
+    out.append(f"  self-reported   {rec.marker_kwh:>10.4f} kWh   {rec.marker_grams:>10.1f} gCO2e")
+    out.append(f"  API            {rec.api_kwh:>10.4f} kWh   {rec.api_grams:>10.1f} gCO2e")
+    out.append(
+        f"  divergence     {rec.api_kwh - rec.marker_kwh:>+10.4f} kWh   "
+        f"{rec.api_grams - rec.marker_grams:>+10.1f} gCO2e   "
+        f"({_pct(rec.api_grams - rec.marker_grams, rec.marker_grams):+.1f}%)"
+    )
+    out.append("")
+    out.append("WHERE IT COMES FROM")
+    out.append(
+        f"  setup time     {rec.setup_kwh:>+10.4f} kWh   "
+        f"({_pct(rec.setup_kwh, rec.marker_kwh):+.1f}% of the self-reported total)\n"
+        f"                 {rec.api_seconds - rec.marker_seconds:.0f} s across {rec.jobs} job(s) "
+        f"= {setup_per_job:.0f} s/job the marker never sees"
+    )
+    out.append(
+        f"  watts model    {rec.model_kwh:>+10.4f} kWh   "
+        f"({_pct(rec.model_kwh, rec.marker_kwh):+.1f}%) — the same seconds priced two ways"
+    )
+    out.append(
+        f"  grid factor    {rec.grid_grams:>+10.1f} gCO2e   "
+        f"({_pct(rec.grid_grams, rec.marker_grams):+.1f}%) — per-region markers vs the "
+        f"{rec.api_factor:.0f} gCO2e/kWh world average"
+    )
+    out.append("")
+    out.append(
+        f"  {matched}/{rec.jobs} job(s) matched by name between the two paths. An "
+        f"unmatched job\n  still counts in its run's totals; only the per-job "
+        f"attribution needs the name."
+    )
+    out.append(
+        "\n  Setup time is the only one of the three that is a BIAS: it is energy "
+        "really\n  spent that the self-reported path cannot see, and it is always "
+        "one-directional.\n  The other two are the two paths knowing different things, "
+        "and on both counts\n  the self-reported side is the better informed one."
+    )
+    return "\n".join(out)
+
+
+def rows_by_gap(rows):
+    """Rows worth printing: a run where both paths agree exactly says nothing."""
+    return [r for r in rows if abs(r.api_grams - r.marker_grams) > 1e-9]
+
+
 def _warn_undeclared_runners(undeclared):
     """Name the labels, not just a count — the label *is* the fix, since it's
     what the user passes back in --runner-watts."""
@@ -1680,6 +1969,17 @@ def main(argv=None):
         ),
     )
     p.add_argument(
+        "--reconcile",
+        action="store_true",
+        help=(
+            "run BOTH paths over the same runs and report where they disagree, "
+            "split into setup time, the watts model and the grid factor. A "
+            "diagnostic, not a badge: it prices every run from the API as well "
+            "as reading every marker, which is the work the normal path exists "
+            "to avoid. See docs/assumptions.md"
+        ),
+    )
+    p.add_argument(
         "--minutes",
         type=float,
         default=None,
@@ -1720,6 +2020,28 @@ def main(argv=None):
 
     if args.serve:
         serve(args.serve, args, token, bind=args.bind)
+        return 0
+
+    if args.reconcile:
+        # Prints to stdout and emits no badge JSON: this is a report to read,
+        # not a value to pipe into Shields.
+        if args.provider != "github":
+            p.error("--reconcile needs the GitHub artifact markers; not available for GitLab")
+        if args.minutes is not None:
+            p.error("--reconcile compares two API paths; --minutes uses neither")
+        grid = args.grid_intensity
+        if args.grid_region:
+            em_token = args.electricitymaps_token or os.environ.get("ELECTRICITYMAPS_TOKEN")
+            grid = live_grid_intensity(args.grid_region, token=em_token)
+        rec = reconcile_last_30d(
+            args.repo,
+            token,
+            api=args.api or "https://api.github.com",
+            runner_watts=parse_runner_watts(getattr(args, "runner_watts", None)),
+            grid_override=grid,
+            eia_key=getattr(args, "eia_key", None) or os.environ.get("EIA_API_KEY"),
+        )
+        print(format_reconciliation(rec))
         return 0
 
     data, detail = estimate(args, token)

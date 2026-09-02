@@ -440,6 +440,56 @@ mostly-waiting job it is high by up to about 3x. It is never low on this axis.
 That direction is deliberate — a carbon figure that flatters the caller is
 worth less than one that does not.
 
+## Reconciling the two paths
+
+`carbon-badge --reconcile` runs the self-reported and API paths over the same
+runs and decomposes the divergence. The decomposition is the point: two totals
+cannot say *why* they differ, and there are three separate reasons they can,
+pulling in different directions.
+
+| term | what it is | is it a bias? |
+| --- | --- | --- |
+| **setup time** | A marker times the instrumented step. The API bills the whole job — runner provisioning, checkout, tool caches, the artifact upload itself. | **Yes.** Energy really spent that the self-reported path cannot see, always one-directional, always understating. |
+| **watts model** | A marker prices itself from its own vCPU and memory through the linear model; the API path prices from the runner *label* through a lookup table. The same job can get two wattages. | No. The two paths know different things, and the marker knows more — the Actions API exposes no CPU or memory for any runner. |
+| **grid factor** | A marker carries the region it ran in and is priced at that grid. A run priced from the API has no region and takes the world average. | No, and it is usually the largest term. GitHub's regions differ by roughly 25×, so this is the biggest available correction and the per-region figure is the better one. |
+
+Only fully self-reported runs are compared. A partly instrumented run would
+show a divergence that is just the missing jobs, which is none of the three
+things above.
+
+### How the split is computed
+
+The seconds gap is exact — it involves no wattage at all, so it isolates setup
+time cleanly. That gap is then priced at the API path's own mean draw over the
+compared runs, giving the share of the kWh divergence that the extra *seconds*
+explain. Whatever kWh divergence is left is the two wattage models disagreeing
+about the *same* seconds. Finally, the gCO2e divergence not explained by the
+kWh divergence is the grid factor.
+
+The three terms account for the whole gap with nothing left over, which is
+asserted by a test rather than assumed.
+
+An explicit `--grid-intensity` or `--grid-region` prices both paths at one
+factor, which zeroes the grid term and is the way to isolate the other two.
+
+### Per-job attribution is best effort
+
+A marker carries a job slug, sanitised by the reporting action rather than
+here, so matching it back to an API job name can only be approximated. A job
+that does not match still counts in its run's totals — only the per-job line
+loses it. The report says how many matched, so a low number is visible rather
+than silently changing what the table means.
+
+### Not yet run on a repo with real coverage
+
+The decomposition is unit-tested against fixtures — including the case where
+two wattages must *not* be reported as setup time, which is the mistake that
+would send somebody to optimise a checkout that is not the problem — but no
+figures here come from a repo with meaningful workflow coverage and a week of
+history. Setup time is the one remaining known bias in the self-reported path,
+and its size is still unmeasured. Producing that number is one command
+(`--reconcile`) against such a repo, and the result belongs in this section.
+
 ## Known limits
 
 - **A flat wattage cannot be right.** The default prices at full load and so
@@ -460,6 +510,9 @@ worth less than one that does not.
   Energy says it estimates whole-machine draw and SPECpower measures at the AC
   inlet, which together mean the overhead is not already there — but neither
   project says "no PUE" outright.
+- **Setup time is unmeasured.** `--reconcile` isolates it and nothing has yet
+  run it against a repo with real coverage, so how much the self-reported path
+  understates by is a known unknown rather than a bounded one.
 
 Treat the output as an order of magnitude and a trend line, not a figure to put
 in a report.

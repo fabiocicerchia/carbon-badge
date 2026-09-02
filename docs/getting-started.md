@@ -164,18 +164,41 @@ trial repo it was a near-constant **~5.7 s/job**, so the error scales inversely
 with job length: ~39% on ten-second jobs, ~1% on a ten-minute build. It biases
 the self-reported figure **downward**. See `TODO.md` for the candidate fix.
 
-**Before trusting the self-reported figure, reconcile it once.** Run both paths
-against the same repo and compare:
+**Before trusting the self-reported figure, reconcile it once:**
 
 ```sh
-carbon-badge owner/repo --token "$GITHUB_TOKEN"                        # normal
-carbon-badge owner/repo --token "$GITHUB_TOKEN" --ignore-self-reported # API only
+carbon-badge owner/repo --token "$GITHUB_TOKEN" --reconcile
 ```
 
-That is the only reason `--ignore-self-reported` exists — it is slower and no
-more accurate for day-to-day use. A persistent gap between the two figures is
-the cancelled/killed population. If that matters for your repo, keep the flag
-on permanently and pay the requests.
+This runs *both* paths over the same runs and reports where they disagree —
+per run, in aggregate, and split into the three separate reasons they can:
+
+```
+AGGREGATE
+  self-reported       0.0412 kWh        17.8 gCO2e
+  API                 0.0498 kWh        23.9 gCO2e
+  divergence         +0.0086 kWh        +6.1 gCO2e   (+34.3%)
+
+WHERE IT COMES FROM
+  setup time         +0.0061 kWh   (+14.8% of the self-reported total)
+                     2184 s across 36 job(s) = 61 s/job the marker never sees
+  watts model        +0.0025 kWh   (+6.1%) — the same seconds priced two ways
+  grid factor           +3.2 gCO2e (+18.0%) — per-region markers vs the
+                     480 gCO2e/kWh world average
+```
+
+(Illustrative shape, not a measurement — see
+[assumptions.md](assumptions.md#reconciling-the-two-paths).)
+
+Only the first of the three is a **bias**. Setup time is energy really spent
+that a marker cannot see, and it is always one-directional. The other two are
+the two paths knowing different things, and on both counts the self-reported
+side is the better informed one — it knows the machine's actual vCPU and memory
+and the region it ran in, neither of which the API exposes.
+
+`--ignore-self-reported` still exists for the cruder version of the same
+comparison: two totals, no attribution. It is slower and no more accurate for
+day-to-day use.
 
 ### Telling it how big your runners are
 
