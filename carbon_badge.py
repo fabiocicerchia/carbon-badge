@@ -18,6 +18,7 @@ import argparse
 import functools
 import http.server
 import json
+import logging
 import os
 import re
 import sys
@@ -26,6 +27,11 @@ from collections import namedtuple
 from datetime import datetime, timedelta, timezone
 
 import requests
+
+# One logger for the process. Diagnostics go here; the badge JSON — the tool's
+# actual result — stays on stdout. Configured once in main(); a caller using
+# this module as a library gets logging's own default behaviour.
+log = logging.getLogger("carbon-badge")
 
 # --------------------------------------------------------------------------
 # Where these numbers come from. See docs/assumptions.md for the full working.
@@ -450,10 +456,12 @@ def _warn_if_truncated(kind, fetched, total, hit_page_cap):
         else "GitHub caps this listing at 1000 results; a narrower window is the "
         "only way to see the rest"
     )
-    print(
-        f"carbon-badge: only read {fetched} of {total} {kind}(s) — {cause}. "
-        "The figure is an undercount.",
-        file=sys.stderr,
+    log.warning(
+        "only read %d of %d %s(s) — %s. The figure is an undercount.",
+        fetched,
+        total,
+        kind,
+        cause,
     )
 
 
@@ -584,11 +592,12 @@ def ci_kwh_last_30d(
             if (entry := by_run.get(run.get("id")))
             and entry.markers >= expected.get(run.get("workflow_id"), 0)
         )
-        print(
-            f"carbon-badge: {trusted}/{len(runs)} run(s) fully self-reported; "
-            f"{len(runs) - trusted} priced from the API. Instrument the remaining "
-            "jobs to shrink that.",
-            file=sys.stderr,
+        log.info(
+            "%d/%d run(s) fully self-reported; %d priced from the API. "
+            "Instrument the remaining jobs to shrink that.",
+            trusted,
+            len(runs),
+            len(runs) - trusted,
         )
     _warn_undeclared_runners(undeclared)
     # used_markers, not every marker read: markers from runs outside the window,
@@ -890,10 +899,11 @@ def live_region_factor(region, eia_key=None, get=requests.get, ci_api=None):
         if ba and eia_key:
             return _eia_factor(ba, eia_key, get=get)
     except Exception as exc:  # noqa: BLE001 — injected `get`, any failure must fall back
-        print(
-            f"carbon-badge: live grid lookup failed for {region} ({exc}); "
-            "using the annual average for that region",
-            file=sys.stderr,
+        log.warning(
+            "live grid lookup failed for %s (%s); using the annual average for "
+            "that region",
+            region,
+            exc,
         )
     return None
 
@@ -919,7 +929,7 @@ class RegionFactors:
             try:
                 self._snapshot.append(_ci_api_snapshot(get=self._get))
             except Exception as exc:  # noqa: BLE001 - a failed snapshot must not fail the refresh
-                print(f"carbon-badge: ci-api snapshot failed ({exc})", file=sys.stderr)
+                log.warning("ci-api snapshot failed (%s)", exc)
                 self._snapshot.append(None)
         return self._snapshot[0]
 
@@ -931,10 +941,11 @@ class RegionFactors:
                 region, eia_key=self._eia_key, get=self._get, ci_api=self._ci_api
             )
             if live is not None:
-                print(
-                    f"carbon-badge: {region} live at {live:.0f} gCO2e/kWh "
-                    f"(annual average is {grid_factor_for(region):.0f})",
-                    file=sys.stderr,
+                log.info(
+                    "%s live at %.0f gCO2e/kWh (annual average is %.0f)",
+                    region,
+                    live,
+                    grid_factor_for(region),
                 )
             self._cache[region] = live if live is not None else grid_factor_for(region)
         return self._cache[region]
@@ -1176,11 +1187,13 @@ def _warn_undeclared_runners(undeclared):
             if usable
             else "give it a label, or set a blanket --runner-watts <watts>"
         )
-        print(
-            f"carbon-badge: {count} job(s) on unrecognised runner "
-            f"'{labels}' charged at the {DEFAULT_RUNNER_POWER_W} W baseline; "
-            f"{remedy}",
-            file=sys.stderr,
+        log.warning(
+            "%d job(s) on unrecognised runner '%s' charged at the %s W "
+            "baseline; %s",
+            count,
+            labels,
+            DEFAULT_RUNNER_POWER_W,
+            remedy,
         )
 
 
@@ -1268,10 +1281,10 @@ def gitlab_kwh_last_30d(
         # Loop ran to the cap without a short page: GitLab returns its total in
         # a header rather than the body, so we cannot say by how much — only
         # that it may be short. Silence would read as a quiet month.
-        print(
-            f"carbon-badge: read {_MAX_PAGES} pages of jobs and stopped at the "
-            "cap; the figure may be an undercount.",
-            file=sys.stderr,
+        log.warning(
+            "read %d pages of jobs and stopped at the cap; the figure may be "
+            "an undercount.",
+            _MAX_PAGES,
         )
     _warn_undeclared_runners(undeclared)
     # record/ is a GitHub Action, so nothing self-reports on GitLab and measured
@@ -1323,10 +1336,10 @@ def live_grid_intensity(
             return sum(readings) / len(readings)
         raise ValueError("history returned no usable readings")
     except Exception as exc:  # noqa: BLE001 — injected `get`, any failure must fall back
-        print(
-            f"carbon-badge: 24h grid history unavailable ({exc}); using the "
-            "instantaneous reading, which prices a month at one moment",
-            file=sys.stderr,
+        log.warning(
+            "24h grid history unavailable (%s); using the instantaneous "
+            "reading, which prices a month at one moment",
+            exc,
         )
 
     response = get(
@@ -1455,10 +1468,10 @@ def estimate(args, token):
     if args.grid_region:
         em_token = args.electricitymaps_token or os.environ.get("ELECTRICITYMAPS_TOKEN")
         grid_intensity = live_grid_intensity(args.grid_region, token=em_token)
-        print(
-            f"carbon-badge: grid factor for {args.grid_region} = "
-            f"{grid_intensity:.0f} gCO2e/kWh (24h mean)",
-            file=sys.stderr,
+        log.info(
+            "grid factor for %s = %.0f gCO2e/kWh (24h mean)",
+            args.grid_region,
+            grid_intensity,
         )
     runner_watts = parse_runner_watts(getattr(args, "runner_watts", None))
     usage = None
@@ -1527,7 +1540,7 @@ DEFAULT_BIND = "0.0.0.0"  # nosec B104 — deliberate, see above
 def _logged_estimate(args, token):
     """One estimate, with the same one-line summary the CLI prints."""
     badge, detail = estimate(args, token)
-    print(f"carbon-badge: {detail} ≈ {badge['message']}", file=sys.stderr)
+    log.info("%s ≈ %s", detail, badge["message"])
     return badge
 
 
@@ -1543,7 +1556,7 @@ def serve(port, args, token, ttl=300, bind=DEFAULT_BIND):
     process holds a CI token, so on a shared host that is worth doing.
     """
 
-    print(f"carbon-badge: serving /badge.json on {bind}:{port} (ttl {ttl}s)", file=sys.stderr)
+    log.info("serving /badge.json on %s:%d (ttl %ds)", bind, port, ttl)
     handler = badge_handler(lambda: _logged_estimate(args, token), ttl)
     http.server.HTTPServer((bind, port), handler).serve_forever()
 
@@ -1666,6 +1679,8 @@ def _build_parser():
 
 def main(argv=None):
     """CLI entry point: parse args, estimate emissions, emit badge JSON."""
+    # stderr, and the tool's name in the format rather than in every message.
+    logging.basicConfig(level=logging.INFO, format="carbon-badge: %(message)s")
     parser = _build_parser()
     args = parser.parse_args(argv)
 
@@ -1690,8 +1705,9 @@ def main(argv=None):
 
     badge, detail = estimate(args, token)
     json.dump(badge, sys.stdout, indent=2)
+    # Not a diagnostic: a blank line separating the JSON from the summary.
     print(file=sys.stderr)
-    print(f"carbon-badge: {detail} ≈ {badge['message']}", file=sys.stderr)
+    log.info("%s ≈ %s", detail, badge["message"])
     return 0
 
 
