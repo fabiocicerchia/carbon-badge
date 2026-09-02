@@ -233,6 +233,11 @@ DEFAULT_RUNNER_POWER_W = RUNNER_POWER_W["ubuntu"]
 # figure from a partly inferred one.
 CiUsage = namedtuple("CiUsage", "kwh grams measured_jobs total_jobs measured_kwh guessed_kwh")
 
+# What one run's markers add up to. `markers` is a count of jobs that reported
+# themselves, not energy — it is the numerator of the completeness check, and
+# reading it as a third float is the mistake the positional tuple invited.
+RunTotals = namedtuple("RunTotals", "kwh grams markers")
+
 # One colour, always. The badge used to run a red-amber-green scale, which was
 # wrong in two ways.
 #
@@ -555,12 +560,12 @@ def ci_kwh_last_30d(
         # instrumentation is still landing on that workflow, so the markers are
         # discarded and the API priced for the whole run — adding them would
         # double-count the jobs that did report.
-        if entry is not None and entry[2] >= want:
-            kwh += entry[0]
-            grams += entry[1]
-            measured_kwh += entry[0]
-            used_markers += entry[2]
-            total_jobs += entry[2]
+        if entry is not None and entry.markers >= want:
+            kwh += entry.kwh
+            grams += entry.grams
+            measured_kwh += entry.kwh
+            used_markers += entry.markers
+            total_jobs += entry.markers
         else:
             run_kwh, run_jobs_seen, run_guessed = _run_kwh(
                 run, repo, token, api, runner_watts, undeclared
@@ -577,7 +582,7 @@ def ci_kwh_last_30d(
             1
             for run in runs
             if (entry := by_run.get(run.get("id")))
-            and entry[2] >= expected.get(run.get("workflow_id"), 0)
+            and entry.markers >= expected.get(run.get("workflow_id"), 0)
         )
         print(
             f"carbon-badge: {trusted}/{len(runs)} run(s) fully self-reported; "
@@ -1097,8 +1102,7 @@ def _expected_markers(runs, by_run, repo, token, api):
         entry = by_run.get(run.get("id"))
         if entry is None:
             continue
-        # entry is (kwh, grams, marker_count) — the count, not the energy.
-        observed[workflow_id] = max(observed.get(workflow_id, 0), entry[2])
+        observed[workflow_id] = max(observed.get(workflow_id, 0), entry.markers)
         if workflow_id not in seen:
             seen.add(workflow_id)
             try:
@@ -1116,7 +1120,7 @@ def _expected_markers(runs, by_run, repo, token, api):
 def artifact_kwh_by_run(
     repo, token, api="https://api.github.com", runner_watts=None, factor_for=None
 ):
-    """{run_id: (kWh, grams, marker_count)} for runs whose jobs recorded themselves.
+    """{run_id: RunTotals} for runs whose jobs recorded themselves.
 
     Keyed by run because instrumentation arrives one workflow file at a time,
     so the answer is almost never "all" or "none" — it is "these runs, not
@@ -1148,8 +1152,10 @@ def artifact_kwh_by_run(
         # largest correction available and it costs nothing — the region came
         # in on the marker.
         job_g = job_kwh * (factor_for(region) if factor_for else grid_factor_for(region))
-        kwh, grams, count = by_run.get(run_id, (0.0, 0.0, 0))
-        by_run[run_id] = (kwh + job_kwh, grams + job_g, count + 1)
+        so_far = by_run.get(run_id, RunTotals(0.0, 0.0, 0))
+        by_run[run_id] = RunTotals(
+            so_far.kwh + job_kwh, so_far.grams + job_g, so_far.markers + 1
+        )
         jobs += 1
     return by_run, jobs
 
