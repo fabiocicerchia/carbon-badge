@@ -5,7 +5,8 @@
   "description": "Records a job's duration and real CPU/memory into an artifact name.",
   "license": "Apache-2.0",
   "scripts": {
-    "build": "esbuild src/main.js --bundle --platform=node --format=esm --target=node24 --minify --banner:js=\"import{createRequire}from'node:module';const require=createRequire(import.meta.url);\" --outfile=dist/main/index.mjs && esbuild src/post.js --bundle --platform=node --format=esm --target=node24 --minify --banner:js=\"import{createRequire}from'node:module';const require=createRequire(import.meta.url);\" --outfile=dist/post/index.mjs"
+    "build": "esbuild src/main.js --bundle --platform=node --format=esm --target=node24 --minify --banner:js=\"import{createRequire}from'node:module';const require=createRequire(import.meta.url);\" --outfile=dist/main/index.mjs && esbuild src/post.js --bundle --platform=node --format=esm --target=node24 --minify --banner:js=\"import{createRequire}from'node:module';const require=createRequire(import.meta.url);\" --outfile=dist/post/index.mjs",
+    "test": "node --test src/*.test.js"
   },
   "dependencies": {
     "@actions/artifact": "^6.2.1",

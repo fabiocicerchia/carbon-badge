@@ -14,6 +14,7 @@ import os from 'node:os';
 import path from 'node:path';
 import * as core from '@actions/core';
 import { DefaultArtifactClient } from '@actions/artifact';
+import { isHosted, jobSeconds } from './duration.js';
 
 // CPU and memory alone do not determine draw: the same 4 vCPU / 16 GiB reading
 // means a very different wattage on Apple silicon than on a shared x86 VM, so
@@ -95,7 +96,11 @@ async function run() {
     return;
   }
 
-  const seconds = Math.max(0, Math.round((Date.now() - Number(started)) / 1000));
+  // On a hosted runner this counts the VM's whole life, which includes the
+  // provisioning and setup this action cannot see from inside the job. See
+  // duration.js.
+  const hosted = isHosted();
+  const seconds = jobSeconds(started, Date.now(), os.uptime(), hosted);
   const vcpu = os.cpus().length || 2;
   const memMb = Math.round(os.totalmem() / (1024 * 1024));
 
@@ -116,7 +121,7 @@ async function run() {
     });
     core.info(
       `carbon-badge: ${seconds}s on ${vcpu} vCPU / ${memMb} MB ` +
-        `(${platform()}, ${region})`,
+        `(${platform()}, ${region}, ${hosted ? 'hosted: includes setup' : 'self-hosted: step time only'})`,
     );
   } catch (err) {
     // Telemetry must never fail somebody's build.
