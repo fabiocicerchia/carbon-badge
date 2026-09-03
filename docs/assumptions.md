@@ -35,9 +35,40 @@ project from SPECpower data
 | 50% | 5.16 W | 8.90 W |
 | 100% | 8.18 W | 15.53 W |
 
-These are **machine draw**, so datacentre overhead is applied separately.
+These are **machine draw**, so datacentre overhead is applied separately —
+see the next section for how that was confirmed rather than assumed.
 
 ### PUE
+
+**Is the overhead already in the curve?** No — checked, because if it were,
+every figure here would be ~15% high:
+
+- Cloud Energy, which produces the curves Eco-CI ships, describes its output as
+  *"the estimation of the current power draw of the whole machine in Watts"* —
+  the machine, not the facility. PUE, cooling and distribution losses appear
+  nowhere in that project
+  ([cloud-energy](https://github.com/green-coding-solutions/cloud-energy)).
+- It is trained on **SPECpower_ssj2008**, which requires the power analyser to
+  sit between the AC line source and the system under test with no active
+  component between them ([SPECpower_ssj2008](https://www.spec.org/power_ssj2008/)).
+  That boundary is the server's own AC inlet — which is precisely the
+  *denominator* of PUE (facility power ÷ IT equipment power), so the two
+  measure different things and cannot overlap.
+- **Eco-CI never applies one.** The string `PUE` does not occur anywhere in
+  [eco-ci-energy-estimation](https://github.com/green-coding-solutions/eco-ci-energy-estimation),
+  so it is neither baked into the curves nor added by the action.
+
+Cloud Energy's own caveats point the same way: SPECpower machines *"tend to be
+rather tuned and do not necessarily represent the reality of current datacenter
+configurations. So you are likely to get a too small value than a too high
+value."* The base figure errs low, so multiplying by PUE is not recovering an
+overhead it already had.
+
+**Residual uncertainty.** Neither project states "no PUE" in so many words —
+this is inferred from what the model says it estimates and from the measurement
+boundary of the benchmark it is trained on. If Green Coding Solutions later
+document a facility factor inside the curves, this constant becomes 1.0 and
+every figure drops ~13%.
 
 `PUE = 1.15`. GitHub's hosted runners are Azure VMs, so the hyperscale end is
 the right one: Cloud Carbon Footprint publishes **1.125 for Azure**, 1.135 for
@@ -61,11 +92,12 @@ visible and can be changed on its own.
 | `ubuntu` | 8.18 × 1.15 | **9.4** |
 | `windows` | 8.18 × 1.15 | **9.4** |
 | `macos` | 15.53 × 1.15 | **17.9** |
-| `arm` | 8.18 × 0.6 × 1.15 | **5.6** |
-| `gpu` | (8.18 + 70) × 1.15 | **89.9** |
+| `arm` | 8.18 × 0.6 × 1.15 | **5.6** *(estimate)* |
+| `gpu` | (8.18 + 70) × 1.15 | **89.9** *(estimate)* |
 
-The `gpu` row is a 4-vCPU host slice — the same one `ubuntu` describes — plus
-one T4-class accelerator at its 70 W board TDP.
+The first three rows come from a measured curve; the last two do not, and the
+tool says so at run time — see [the two rows that are
+estimates](#the-two-rows-that-are-estimates-and-how-you-know).
 
 **Windows is not 2× Linux and macOS is not 10×.** GitHub bills them at those
 multipliers, but billing is a pricing decision. Windows runs on the same Azure
@@ -73,17 +105,79 @@ hardware as Linux and draws the same; macOS runs on Mac minis, which are
 efficient. Using billing multipliers as energy factors would be wrong by a wide
 margin — in the macOS case, by about 4×.
 
-The two weak entries are `arm` and `gpu`: no measured curve exists for either,
-so `arm` is taken as ~40% below x86 and `gpu` as a T4-class accelerator plus
-host. A TDP is a ceiling, not a mean, so the `gpu` row overstates anything but
-a saturated card. If you run either seriously, declare your own with
-`--runner-watts arm=… gpu=…`.
+### The two rows that are estimates, and how you know
 
-Note the ARM figure deliberately avoids the "3–4× more efficient" claim that
-circulates. AWS's own published figure is *up to 60% less energy for equal
-work* ([Graviton](https://aws.amazon.com/ec2/graviton/)), and independent
-benchmarks land nearer 45–50%, so 40% is the conservative end. greenlint's
-GL016 uses the same 40%.
+`ubuntu`, `windows` and `macos` come from a measured curve. **`arm` and `gpu`
+do not** — Eco-CI publishes no curve for either, and none was found elsewhere.
+They are composed here, and a reader cannot tell 9.4 W from 89.9 W apart by
+looking, so the tool says so itself: any run that prices a job on one of them
+prints, on stderr,
+
+```
+carbon-badge: 12 job(s) priced on the 'gpu' class at 89.9 W, which is an
+estimate: composed from a 4-vCPU host slice plus one T4 at its 70 W board
+limit — a ceiling, not a measured mean. Pass --runner-watts gpu=<watts> to
+price yours. See docs/assumptions.md
+```
+
+The line fires only when an estimated class actually contributed to the figure
+being printed, and not at all once you have declared your own value — someone
+who has measured their hardware has replaced the estimate, and telling them
+otherwise trains them to ignore the line.
+
+**`gpu` — hardware sourced, draw not.** GitHub's GPU runner is
+`gpu-t4-4-core`: 4 vCPU, 28 GB RAM and one NVIDIA Tesla T4 with 16 GB
+([changelog](https://github.blog/changelog/2024-07-08-github-actions-gpu-hosted-runners-are-now-generally-available/)),
+which is Azure's `Standard_NC4as_T4_v3` — T4 GPUs on AMD EPYC 7V12 hosts
+([NCasT4_v3](https://learn.microsoft.com/en-us/azure/virtual-machines/sizes/gpu-accelerated/ncast4v3-series)).
+The T4's **70 W board limit** is why the card takes no supplemental power
+connector at all
+([product brief PB-09256-001](https://www.nvidia.com/content/dam/en-zz/Solutions/Data-Center/tesla-t4/t4-tensor-core-product-brief.pdf)).
+So 8.18 + 70 = 78.2 W of machine draw. What is *not* sourced is that a job
+draws the ceiling: a board limit is not a mean, so this overstates anything
+short of a saturated card, and badly overstates a job that merely has a GPU
+attached. Two smaller caveats: the host is an EPYC 7V12 (Rome) rather than the
+7763 (Milan) the curve was modelled on, and the SKU carries 28 GiB rather than
+the 16 GiB the standard vCPU:memory ratio implies.
+
+**`arm` — extrapolated, and no curve exists to take.** Eco-CI's
+[machine-power-data](https://github.com/green-coding-solutions/eco-ci-energy-estimation/tree/main/machine-power-data)
+holds EPYC 7763, EPYC 7B12, Xeon 6246 and a Mac mini M1, and nothing else. So
+this is the x86 baseline at ~40% less energy for equal work — deliberately not
+the "3–4× more efficient" claim that circulates. AWS's published figure is *up
+to 60% less energy for equal work*
+([Graviton](https://aws.amazon.com/ec2/graviton/)) and independent benchmarks
+land nearer 45–50%. greenlint's GL016 uses the same 40%.
+
+> **Worth re-checking.** GitHub's arm64 runners are **Azure Cobalt 100**, not
+> Graviton, and Microsoft reports ~30% lower power for web-server and database
+> workloads on Cobalt 100 against x86
+> ([Azure blog](https://azure.microsoft.com/en-us/blog/how-azure-cobalt-100-vms-are-powering-real-world-solutions-delivering-performance-and-efficiency-results/)).
+> That is a figure for the actual silicon, and a *less* flattering one than
+> 40%. If it holds, the right factor is 0.7 rather than 0.6 — 6.6 W rather than
+> 5.6 W — and it is a one-line change. It is left at 0.6 because that source
+> has not been verified first-hand, not because it was dismissed.
+
+### The escape hatch
+
+Every row above is a **default, not a constant**. `--runner-watts` replaces any
+of them and takes precedence over the built-in table:
+
+```sh
+# one figure for everything you run
+carbon-badge owner/repo --runner-watts 180
+
+# per class, repeatable — only needed if you mix runner types
+carbon-badge owner/repo --runner-watts gpu=400 --runner-watts arm=6
+
+# a substring matches a whole family, so one entry prices every GPU label
+carbon-badge owner/repo --runner-watts gpu=400
+```
+
+A declared figure also silences the estimate warning for that class, and beats
+the model on the self-reported path too: someone who knows their hardware's
+real draw beats a linear model of it. This is the answer to every row you
+disagree with — including the two above.
 
 ### One law, both routes
 
@@ -346,6 +440,56 @@ mostly-waiting job it is high by up to about 3x. It is never low on this axis.
 That direction is deliberate — a carbon figure that flatters the caller is
 worth less than one that does not.
 
+## Reconciling the two paths
+
+`carbon-badge --reconcile` runs the self-reported and API paths over the same
+runs and decomposes the divergence. The decomposition is the point: two totals
+cannot say *why* they differ, and there are three separate reasons they can,
+pulling in different directions.
+
+| term | what it is | is it a bias? |
+| --- | --- | --- |
+| **setup time** | A marker times the instrumented step. The API bills the whole job — runner provisioning, checkout, tool caches, the artifact upload itself. | **Yes.** Energy really spent that the self-reported path cannot see, always one-directional, always understating. |
+| **watts model** | A marker prices itself from its own vCPU and memory through the linear model; the API path prices from the runner *label* through a lookup table. The same job can get two wattages. | No. The two paths know different things, and the marker knows more — the Actions API exposes no CPU or memory for any runner. |
+| **grid factor** | A marker carries the region it ran in and is priced at that grid. A run priced from the API has no region and takes the world average. | No, and it is usually the largest term. GitHub's regions differ by roughly 25×, so this is the biggest available correction and the per-region figure is the better one. |
+
+Only fully self-reported runs are compared. A partly instrumented run would
+show a divergence that is just the missing jobs, which is none of the three
+things above.
+
+### How the split is computed
+
+The seconds gap is exact — it involves no wattage at all, so it isolates setup
+time cleanly. That gap is then priced at the API path's own mean draw over the
+compared runs, giving the share of the kWh divergence that the extra *seconds*
+explain. Whatever kWh divergence is left is the two wattage models disagreeing
+about the *same* seconds. Finally, the gCO2e divergence not explained by the
+kWh divergence is the grid factor.
+
+The three terms account for the whole gap with nothing left over, which is
+asserted by a test rather than assumed.
+
+An explicit `--grid-intensity` or `--grid-region` prices both paths at one
+factor, which zeroes the grid term and is the way to isolate the other two.
+
+### Per-job attribution is best effort
+
+A marker carries a job slug, sanitised by the reporting action rather than
+here, so matching it back to an API job name can only be approximated. A job
+that does not match still counts in its run's totals — only the per-job line
+loses it. The report says how many matched, so a low number is visible rather
+than silently changing what the table means.
+
+### Not yet run on a repo with real coverage
+
+The decomposition is unit-tested against fixtures — including the case where
+two wattages must *not* be reported as setup time, which is the mistake that
+would send somebody to optimise a checkout that is not the problem — but no
+figures here come from a repo with meaningful workflow coverage and a week of
+history. Setup time is the one remaining known bias in the self-reported path,
+and its size is still unmeasured. Producing that number is one command
+(`--reconcile`) against such a repo, and the result belongs in this section.
+
 ## Known limits
 
 - **A flat wattage cannot be right.** The default prices at full load and so
@@ -358,11 +502,34 @@ worth less than one that does not.
   the grid factor carry their own error. The confidence score in the
   [README](README.md#how-a-number-is-arrived-at) describes how the *inputs*
   were obtained, not how close the answer is.
+- **`arm` and `gpu` have no measured curve behind them.** They are labelled as
+  estimates on stderr wherever they are used, and `--runner-watts` replaces
+  them. `gpu` in particular prices a board *limit*, so a job that has a GPU
+  attached but barely uses it is overstated by up to ~9×.
+- **The PUE finding is an inference, not a statement from the source.** Cloud
+  Energy says it estimates whole-machine draw and SPECpower measures at the AC
+  inlet, which together mean the overhead is not already there — but neither
+  project says "no PUE" outright.
+- **Setup time is unmeasured.** `--reconcile` isolates it and nothing has yet
+  run it against a repo with real coverage, so how much the self-reported path
+  understates by is a known unknown rather than a bounded one.
 
 Treat the output as an order of magnitude and a trend line, not a figure to put
 in a report.
 
 ## Changelog of these assumptions
+
+**2026-09** — no figure changed; two of them gained a provenance they did not
+have.
+
+- **PUE double-counting ruled out.** Confirmed against Cloud Energy's stated
+  scope, SPECpower's measurement boundary and the absence of any PUE handling
+  in Eco-CI. `1.15` stands.
+- **`arm` and `gpu` are now labelled as estimates in the output**, with the
+  hardware behind the `gpu` row sourced (GitHub `gpu-t4-4-core` → Azure
+  `Standard_NC4as_T4_v3` → NVIDIA T4 70 W board limit) even though its *draw*
+  is still a ceiling rather than a curve.
+
 
 **2026-08 (b)** — sourced the numbers that had no source, and reconciled
 against greenlint. Nothing about the method changed; three sets of figures

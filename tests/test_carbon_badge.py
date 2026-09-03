@@ -1137,3 +1137,264 @@ def test_ci_api_failure_leaves_the_annual_average_standing(caplog):
     with caplog.at_level(logging.WARNING, logger="carbon-badge"):
         assert resolve("japaneast") == carbon_badge.AZURE_REGION_GRID["japaneast"]
     assert "ci-api snapshot failed" in caplog.text
+
+
+# --- estimates are labelled as estimates ------------------------------------
+
+
+def test_the_classes_with_no_measured_curve_are_named_as_such():
+    """The x86 and macOS rows come from Eco-CI's machine-power-data. `arm` and
+    `gpu` do not exist there, so they are composed here — and a reader cannot
+    tell 9.4 W from 89.9 W apart by looking."""
+    assert set(carbon_badge.RUNNER_POWER_ESTIMATED) == {"arm", "gpu"}
+    for key in ("ubuntu", "windows", "macos"):
+        assert key not in carbon_badge.RUNNER_POWER_ESTIMATED
+
+
+def test_pricing_a_job_on_an_estimated_class_says_so_and_names_the_flag():
+    carbon_badge._ESTIMATED_USED.clear()
+    runner_power_w(["ubuntu-22.04-arm"])
+    runner_power_w(["ubuntu-latest-4-cores-gpu"])
+    runner_power_w(["ubuntu-latest"])
+    assert carbon_badge._ESTIMATED_USED == {"arm": 1, "gpu": 1}
+
+
+def test_the_warning_names_the_class_the_figure_and_the_replacement(capsys):
+    carbon_badge._ESTIMATED_USED.clear()
+    runner_power_w(["ubuntu-24.04-arm"])
+    carbon_badge._warn_estimated_classes()
+    err = capsys.readouterr().err
+    assert "'arm'" in err
+    assert "5.6 W" in err
+    # The flag is the fix, so it has to be in the message people actually see.
+    assert "--runner-watts arm=<watts>" in err
+    assert "estimate" in err
+
+
+def test_a_declared_figure_is_not_reported_as_an_estimate(capsys):
+    """Someone who passed --runner-watts has replaced the estimate; telling
+    them their own measurement is a guess would train them to ignore the line."""
+    carbon_badge._ESTIMATED_USED.clear()
+    overrides = carbon_badge.parse_runner_watts(["arm=6", "gpu=400"])
+    runner_power_w(["ubuntu-22.04-arm"], overrides)
+    runner_power_w(["ubuntu-latest-gpu"], overrides)
+    assert carbon_badge._ESTIMATED_USED == {}
+    carbon_badge._warn_estimated_classes()
+    assert capsys.readouterr().err == ""
+
+
+def test_the_self_reported_route_admits_to_the_same_estimate():
+    """Both routes price the same machine the same way, so both have to make
+    the same admission — a self-reported arm job is no better founded."""
+    carbon_badge._ESTIMATED_USED.clear()
+    carbon_badge.watts_from_specs(4, 16 * 1024, "arm")
+    carbon_badge.watts_from_specs(4, 16 * 1024, "ubuntu")
+    assert carbon_badge._ESTIMATED_USED == {"arm": 1}
+
+
+def test_the_gpu_row_is_the_t4_board_limit_on_top_of_a_host_slice():
+    """GitHub's GPU runner is `gpu-t4-4-core`: 4 vCPU plus one Tesla T4, whose
+    70 W board limit is why the card needs no supplemental power connector."""
+    assert carbon_badge.RUNNER_POWER_W["gpu"] == round((8.18 + 70.0) * carbon_badge.PUE, 1)
+
+
+def test_pue_is_applied_once_and_stays_its_own_constant():
+    """Cloud Energy estimates "the power draw of the whole machine", and
+    SPECpower measures at the server's AC inlet — the denominator of PUE — so
+    the overhead is not already in the curve. It stays visible and separate."""
+    assert carbon_badge.PUE == 1.15
+    assert carbon_badge.RUNNER_POWER_W["ubuntu"] == round(8.18 * carbon_badge.PUE, 1)
+
+
+# ---------------------------------------------------------- reconciliation ---
+#
+# The point of --reconcile is not that the two paths differ — of course they do
+# — it is that the difference decomposes into three terms that mean different
+# things. These pin the decomposition, because a report that adds up to the
+# right total while attributing it to the wrong cause is worse than no report.
+
+
+def _named_job(labels, minutes, name, start_offset=0):
+    start = datetime(2026, 8, 1, 0, 0, tzinfo=timezone.utc) + timedelta(minutes=start_offset)
+    end = start + timedelta(minutes=minutes)
+    return {
+        "name": name,
+        "labels": labels,
+        "started_at": start.isoformat().replace("+00:00", "Z"),
+        "completed_at": end.isoformat().replace("+00:00", "Z"),
+    }
+
+
+def _serve_named(artifacts, runs, jobs, calls=None):
+    def fake_get(url, params=None, headers=None, timeout=None):
+        if calls is not None:
+            calls.append(url)
+        page = params["page"] if params else 1
+        if "/artifacts" in url:
+            return _FakeResponse({"artifacts": artifacts if page == 1 else []})
+        if "/jobs" in url:
+            return _FakeResponse({"jobs": jobs if page == 1 else []})
+        return _FakeResponse({"workflow_runs": runs if page == 1 else []})
+
+    return fake_get
+
+
+def _one_run_repo(marker_seconds, job_minutes):
+    """One run, one job. The marker says `marker_seconds`; the API bills
+    `job_minutes` — the difference is the setup the marker never saw."""
+    now = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+    runs = [{"id": 1, "workflow_id": 7, "run_started_at": now, "updated_at": now}]
+    artifacts = [_artifact(f"carbon.v1.{marker_seconds}.2.7168.ubuntu.eastus.build", 1)]
+    jobs = [_named_job(["ubuntu-latest"], job_minutes, "build")]
+    return artifacts, runs, jobs
+
+
+def test_a_run_the_marker_and_the_api_agree_on_shows_no_setup_gap(monkeypatch):
+    artifacts, runs, jobs = _one_run_repo(600, 10)  # 600 s both ways
+    monkeypatch.setattr(carbon_badge.requests, "get", _serve_named(artifacts, runs, jobs))
+    rec = carbon_badge.reconcile_last_30d("o/r", token=None)
+
+    assert rec.runs_compared == 1
+    assert round(rec.api_seconds - rec.marker_seconds, 6) == 0
+    assert round(rec.setup_kwh, 12) == 0
+
+
+def test_the_setup_gap_is_the_seconds_the_marker_never_saw(monkeypatch):
+    # The marker times a 10-minute step inside a job the API bills for 15.
+    artifacts, runs, jobs = _one_run_repo(600, 15)
+    monkeypatch.setattr(carbon_badge.requests, "get", _serve_named(artifacts, runs, jobs))
+    rec = carbon_badge.reconcile_last_30d("o/r", token=None)
+
+    assert rec.api_seconds - rec.marker_seconds == 300
+    assert rec.setup_kwh > 0, "five minutes of runner setup priced as zero energy"
+    # And it is the whole of the kWh gap the seconds explain, at the API's own
+    # mean draw: 300 s of a 900 s job is a third of its energy.
+    assert round(rec.setup_kwh / rec.api_kwh, 6) == round(300 / 900, 6)
+
+
+def test_a_watts_disagreement_is_not_reported_as_setup_time(monkeypatch):
+    """Same seconds, two wattages. Attributing that to setup time would tell
+    somebody to go and optimise a checkout that is not the problem."""
+    artifacts, runs, jobs = _one_run_repo(600, 10)
+    monkeypatch.setattr(carbon_badge.requests, "get", _serve_named(artifacts, runs, jobs))
+    # Force the API path onto a different draw from the marker's linear model.
+    rec = carbon_badge.reconcile_last_30d("o/r", token=None, runner_watts={"ubuntu-latest": 500.0})
+    assert round(rec.setup_kwh, 12) == 0, "no seconds differ, so no setup energy"
+    assert rec.model_kwh > 0
+    assert round(rec.model_kwh, 9) == round(rec.api_kwh - rec.marker_kwh, 9)
+
+
+def test_the_grid_gap_is_separated_from_the_energy_gap(monkeypatch):
+    """The largest term, and the one that is not an error: a marker carries the
+    region it ran in, a run priced from the API takes the world average.
+
+    Same seconds both ways, so nothing here is setup time, and every gram of
+    divergence has to land in either the watts model or the grid — never in a
+    residual nobody named.
+    """
+    artifacts, runs, jobs = _one_run_repo(600, 10)
+    monkeypatch.setattr(carbon_badge.requests, "get", _serve_named(artifacts, runs, jobs))
+    rec = carbon_badge.reconcile_last_30d("o/r", token=None)
+
+    assert round(rec.setup_kwh, 12) == 0
+    assert abs(rec.grid_grams) > 0, "eastus and the world average priced alike"
+    # The identity the whole report rests on: the three terms account for the
+    # total, with nothing left over.
+    explained = (rec.setup_kwh + rec.model_kwh) * rec.api_factor + rec.grid_grams
+    assert round(explained, 9) == round(rec.api_grams - rec.marker_grams, 9)
+
+
+def test_an_explicit_grid_figure_removes_the_grid_term(monkeypatch):
+    """Both paths priced at one declared factor: nothing left for the grid to
+    explain, which is how you isolate the other two terms."""
+    artifacts, runs, jobs = _one_run_repo(600, 15)
+    monkeypatch.setattr(carbon_badge.requests, "get", _serve_named(artifacts, runs, jobs))
+    rec = carbon_badge.reconcile_last_30d("o/r", token=None, grid_override=400.0)
+    assert round(rec.grid_grams, 9) == 0
+    assert rec.setup_kwh > 0
+
+
+def test_a_partly_instrumented_run_is_not_compared(monkeypatch):
+    """It would show a divergence that is only the missing jobs, which is none
+    of the three things this report is about."""
+    now = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+    runs = [{"id": 1, "workflow_id": 7, "run_started_at": now, "updated_at": now}]
+    artifacts = [_artifact("carbon.v1.600.2.7168.ubuntu.eastus.build", 1)]  # one of two
+    jobs = [
+        _named_job(["ubuntu-latest"], 10, "build"),
+        _named_job(["ubuntu-latest"], 10, "test"),
+    ]
+    monkeypatch.setattr(carbon_badge.requests, "get", _serve_named(artifacts, runs, jobs))
+    rec = carbon_badge.reconcile_last_30d("o/r", token=None)
+    assert rec.runs_compared == 0
+    assert rec.runs_total == 1
+    assert "none of them fully self-reported" in carbon_badge.format_reconciliation(rec)
+
+
+def test_jobs_are_matched_by_name_between_the_two_paths(monkeypatch):
+    now = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+    runs = [{"id": 1, "workflow_id": 7, "run_started_at": now, "updated_at": now}]
+    artifacts = [
+        _artifact("carbon.v1.600.2.7168.ubuntu.eastus.build", 1),
+        _artifact("carbon.v1.600.2.7168.ubuntu.eastus.unit-tests", 1),
+    ]
+    jobs = [
+        _named_job(["ubuntu-latest"], 10, "build"),
+        _named_job(["ubuntu-latest"], 10, "Unit Tests"),  # slugifies to unit-tests
+    ]
+    monkeypatch.setattr(carbon_badge.requests, "get", _serve_named(artifacts, runs, jobs))
+    rec = carbon_badge.reconcile_last_30d("o/r", token=None)
+    assert rec.rows[0].matched_jobs == 2
+
+
+def test_an_unmatched_job_still_counts_in_its_run(monkeypatch):
+    """Slug matching is best effort — the sanitising happens in the reporting
+    action, not here — so a miss must cost the per-job attribution and nothing
+    else. Losing the run's energy over a name would be much worse."""
+    now = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+    runs = [{"id": 1, "workflow_id": 7, "run_started_at": now, "updated_at": now}]
+    artifacts = [_artifact("carbon.v1.600.2.7168.ubuntu.eastus.mystery-slug", 1)]
+    jobs = [_named_job(["ubuntu-latest"], 10, "build")]
+    monkeypatch.setattr(carbon_badge.requests, "get", _serve_named(artifacts, runs, jobs))
+    rec = carbon_badge.reconcile_last_30d("o/r", token=None)
+    assert rec.rows[0].matched_jobs == 0
+    assert rec.marker_seconds == 600 and rec.api_seconds == 600
+    assert rec.marker_kwh > 0 and rec.api_kwh > 0
+
+
+def test_the_report_names_all_three_terms(monkeypatch):
+    artifacts, runs, jobs = _one_run_repo(600, 15)
+    monkeypatch.setattr(carbon_badge.requests, "get", _serve_named(artifacts, runs, jobs))
+    text = carbon_badge.format_reconciliation(carbon_badge.reconcile_last_30d("o/r", token=None))
+    for term in ("setup time", "watts model", "grid factor"):
+        assert term in text, term
+    # And says which of the three is a bias rather than a difference of opinion.
+    assert "BIAS" in text
+
+
+def test_the_slug_is_read_off_the_marker_name():
+    assert carbon_badge.carbon_artifact_slug("carbon.v1.600.2.7168.ubuntu.eastus.build") == "build"
+    assert carbon_badge.carbon_artifact_slug("some-build-output.zip") is None
+
+
+@pytest.mark.parametrize(
+    "name,slug",
+    [
+        ("build", "build"),
+        ("Unit Tests", "unit-tests"),
+        ("test (3.11, ubuntu-latest)", "test-3-11-ubuntu-latest"),
+        ("", None),
+        ("///", None),
+    ],
+)
+def test_job_names_reduce_to_slugs(name, slug):
+    assert carbon_badge.job_slug(name) == slug
+
+
+def test_reconcile_refuses_the_combinations_that_cannot_work(capsys):
+    for argv in (
+        ["--repo", "o/r", "--reconcile", "--provider", "gitlab"],
+        ["--repo", "o/r", "--reconcile", "--minutes", "100"],
+    ):
+        with pytest.raises(SystemExit):
+            carbon_badge.main(argv)
