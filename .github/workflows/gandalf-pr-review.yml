@@ -34,6 +34,6 @@ jobs:
         with:
           fetch-depth: 0 # need base + head + their merge-base for the PR diff
 
-      - uses: fabiocicerchia/gandalf@34aaf696d7331d1c821a0fae1827ebaf9d5c7017  # v0.4.0
+      - uses: fabiocicerchia/gandalf@e29978b27a220a6c0ef83e23d69d7c376094ed87  # v0.11.0
         with:
           code-scanning: ${{ vars.GANDALF_INGEST_CODE_SCANNING || 'true' }}
