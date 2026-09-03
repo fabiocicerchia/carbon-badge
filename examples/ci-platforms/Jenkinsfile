@@ -1,0 +1,45 @@
+// Jenkins — refresh the badge nightly.
+// Copy into a Jenkinsfile at the repo root (Multibranch Pipeline picks it up).
+pipeline {
+  // The published image as the build container. Its entrypoint is the CLI, so
+  // Jenkins is told to run a shell instead and the CLI is invoked by name.
+  agent {
+    docker {
+      image 'ghcr.io/fabiocicerchia/carbon-badge:0.2.1'
+      args '--entrypoint='
+    }
+  }
+
+  triggers {
+    // H spreads the load across the hour instead of every job firing at :00.
+    cron('H 2 * * *')
+  }
+
+  environment {
+    TARGET_REPO    = 'OWNER/REPO'
+    GRID_INTENSITY = '56' // eu-north-1; unset = per-region, then world average
+  }
+
+  stages {
+    stage('Refresh the badge') {
+      steps {
+        // A PAT with actions:read, stored as a Secret Text credential.
+        withCredentials([string(credentialsId: 'carbon-badge-token', variable: 'GITHUB_TOKEN')]) {
+          sh '''
+            set -eu
+            carbon-badge "$TARGET_REPO" --grid-intensity "$GRID_INTENSITY" > badge.json
+            cat badge.json
+          '''
+        }
+      }
+    }
+  }
+
+  post {
+    always {
+      // shields.io cannot read a Jenkins artifact without auth — publish
+      // badge.json to a public bucket or a gh-pages branch for the README URL.
+      archiveArtifacts artifacts: 'badge.json', allowEmptyArchive: true
+    }
+  }
+}

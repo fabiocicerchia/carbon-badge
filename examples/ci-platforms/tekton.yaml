@@ -1,0 +1,182 @@
+# Tekton — refresh the badge on a schedule.
+# kubectl apply -f tekton.yaml. Tekton has no cron of its own; the CronJob at
+# the bottom is what fires the TaskRun (Tekton Triggers is the other way).
+#
+# Everything lands in its own namespace, and both pods run unprivileged with a
+# read-only root filesystem. That is not decoration: this file is meant to be
+# copied, and a copied example is where a default security context becomes
+# someone's production workload.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: carbon-badge
+---
+apiVersion: tekton.dev/v1
+kind: Task
+metadata:
+  name: carbon-badge
+  namespace: carbon-badge
+spec:
+  description: >-
+    Estimates a repo's CI carbon footprint and emits Shields.io endpoint JSON.
+  params:
+    - name: repo
+      description: owner/repo (GitHub) or group/project (GitLab)
+      type: string
+    - name: provider
+      type: string
+      default: github
+    - name: grid-intensity
+      description: gCO2e/kWh; omit to price each job on its own region's grid
+      type: string
+      default: "56"
+  workspaces:
+    - name: out
+      description: Where badge.json is written
+  steps:
+    - name: badge
+      image: ghcr.io/fabiocicerchia/carbon-badge:0.2.1
+      # The image's entrypoint is carbon-badge; a shell is only needed to
+      # redirect stdout into the workspace.
+      command: [sh, -c]
+      args:
+        - >-
+          carbon-badge "$(params.repo)" --provider "$(params.provider)"
+          --grid-intensity "$(params.grid-intensity)"
+          > "$(workspaces.out.path)/badge.json"
+      env:
+        # A PAT with actions:read (GitHub) or read_api (GitLab).
+        - name: GITHUB_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: carbon-badge
+              key: token
+      # No readOnlyRootFilesystem here: the CLI runs under a full Python and
+      # the interpreter's own temp use is not something this example can
+      # promise. The trigger pod below, which runs a single static binary,
+      # does set it.
+      securityContext:
+        runAsNonRoot: true
+        allowPrivilegeEscalation: false
+        capabilities:
+          drop: [ALL]
+        seccompProfile:
+          type: RuntimeDefault
+      computeResources:
+        requests: {cpu: 100m, memory: 128Mi}
+        limits: {cpu: 200m, memory: 256Mi}
+---
+# The TaskRun the CronJob submits. Keeping it in a ConfigMap rather than a
+# heredoc is what lets the trigger pod below run a distroless kubectl with no
+# shell at all — there is nothing left for a shell to do.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: carbon-badge-taskrun
+  namespace: carbon-badge
+data:
+  taskrun.yaml: |
+    apiVersion: tekton.dev/v1
+    kind: TaskRun
+    metadata:
+      generateName: carbon-badge-
+    spec:
+      taskRef:
+        name: carbon-badge
+      params:
+        - name: repo
+          value: OWNER/REPO
+      workspaces:
+        - name: out
+          persistentVolumeClaim:
+            claimName: carbon-badge-out
+---
+# The RBAC is the part worth reviewing: `create` on taskruns in this namespace
+# and nothing else.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: carbon-badge-runner
+  namespace: carbon-badge
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: carbon-badge-runner
+  namespace: carbon-badge
+rules:
+  - apiGroups: ["tekton.dev"]
+    resources: ["taskruns"]
+    verbs: ["create"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: carbon-badge-runner
+  namespace: carbon-badge
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: carbon-badge-runner
+subjects:
+  - kind: ServiceAccount
+    name: carbon-badge-runner
+    namespace: carbon-badge
+---
+# Fires the Task nightly. Tekton has no cron of its own, so a plain Kubernetes
+# CronJob creates the TaskRun. Tekton Triggers is the other way to do this.
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: carbon-badge-nightly
+  namespace: carbon-badge
+spec:
+  schedule: "17 2 * * *"
+  concurrencyPolicy: Forbid
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          serviceAccountName: carbon-badge-runner
+          restartPolicy: OnFailure
+          automountServiceAccountToken: true
+          securityContext:
+            runAsNonRoot: true
+            # The distroless image's own nonroot user, and above the 10000
+            # floor that separates an app identity from a host one.
+            runAsUser: 65532
+            runAsGroup: 65532
+            fsGroup: 65532
+            seccompProfile:
+              type: RuntimeDefault
+          containers:
+            - name: trigger
+              image: ghcr.io/fabiocicerchia/kubectl-versioned:1.34.10
+              command: [kubectl]
+              args:
+                - create
+                # Discovery cache would otherwise land under $HOME on a
+                # read-only filesystem.
+                - --cache-dir=/tmp/kube-cache
+                - -f
+                - /manifests/taskrun.yaml
+              securityContext:
+                allowPrivilegeEscalation: false
+                readOnlyRootFilesystem: true
+                capabilities:
+                  drop: [ALL]
+              volumeMounts:
+                - name: manifests
+                  mountPath: /manifests
+                  readOnly: true
+                - name: tmp
+                  mountPath: /tmp
+              resources:
+                requests: {cpu: 50m, memory: 64Mi}
+                limits: {cpu: 100m, memory: 128Mi}
+          volumes:
+            - name: manifests
+              configMap:
+                name: carbon-badge-taskrun
+            - name: tmp
+              emptyDir: {}

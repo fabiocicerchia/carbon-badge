@@ -31,7 +31,7 @@ carbon-badge OWNER/REPO --grid-intensity 56 > badge.json
 ```
 
 To refresh the badge nightly in CI, copy
-[`.github-workflow-example/carbon-badge.yml`](../.github-workflow-example/carbon-badge.yml)
+[`.github-workflow-example/carbon-badge.yml`](https://github.com/fabiocicerchia/carbon-badge/blob/main/.github-workflow-example/carbon-badge.yml)
 into the target repo.
 
 ## Development
@@ -67,9 +67,9 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
 ```
 
-See all inputs/outputs in [`action.yml`](../action.yml); full example workflow
+See all inputs/outputs in [`action.yml`](https://github.com/fabiocicerchia/carbon-badge/blob/main/action.yml); full example workflow
 (with the cron schedule) at
-[`.github-workflow-example/carbon-badge.yml`](../.github-workflow-example/carbon-badge.yml).
+[`.github-workflow-example/carbon-badge.yml`](https://github.com/fabiocicerchia/carbon-badge/blob/main/.github-workflow-example/carbon-badge.yml).
 
 ### Letting jobs measure themselves (recommended)
 
@@ -164,18 +164,41 @@ trial repo it was a near-constant **~5.7 s/job**, so the error scales inversely
 with job length: ~39% on ten-second jobs, ~1% on a ten-minute build. It biases
 the self-reported figure **downward**. See `TODO.md` for the candidate fix.
 
-**Before trusting the self-reported figure, reconcile it once.** Run both paths
-against the same repo and compare:
+**Before trusting the self-reported figure, reconcile it once:**
 
 ```sh
-carbon-badge owner/repo --token "$GITHUB_TOKEN"                        # normal
-carbon-badge owner/repo --token "$GITHUB_TOKEN" --ignore-self-reported # API only
+carbon-badge owner/repo --token "$GITHUB_TOKEN" --reconcile
 ```
 
-That is the only reason `--ignore-self-reported` exists — it is slower and no
-more accurate for day-to-day use. A persistent gap between the two figures is
-the cancelled/killed population. If that matters for your repo, keep the flag
-on permanently and pay the requests.
+This runs *both* paths over the same runs and reports where they disagree —
+per run, in aggregate, and split into the three separate reasons they can:
+
+```
+AGGREGATE
+  self-reported       0.0412 kWh        17.8 gCO2e
+  API                 0.0498 kWh        23.9 gCO2e
+  divergence         +0.0086 kWh        +6.1 gCO2e   (+34.3%)
+
+WHERE IT COMES FROM
+  setup time         +0.0061 kWh   (+14.8% of the self-reported total)
+                     2184 s across 36 job(s) = 61 s/job the marker never sees
+  watts model        +0.0025 kWh   (+6.1%) — the same seconds priced two ways
+  grid factor           +3.2 gCO2e (+18.0%) — per-region markers vs the
+                     480 gCO2e/kWh world average
+```
+
+(Illustrative shape, not a measurement — see
+[assumptions.md](assumptions.md#reconciling-the-two-paths).)
+
+Only the first of the three is a **bias**. Setup time is energy really spent
+that a marker cannot see, and it is always one-directional. The other two are
+the two paths knowing different things, and on both counts the self-reported
+side is the better informed one — it knows the machine's actual vCPU and memory
+and the region it ran in, neither of which the API exposes.
+
+`--ignore-self-reported` still exists for the cruder version of the same
+comparison: two totals, no attribution. It is slower and no more accurate for
+day-to-day use.
 
 ### Telling it how big your runners are
 
@@ -236,3 +259,52 @@ carbon-badge fabiocicerchia/nginx-lua --token $GITHUB_TOKEN --serve 8080
 
 Put a reverse proxy (or an SSH tunnel) in front of it for anything public —
 this is a bare `http.server`, not a hardened production service.
+
+It binds every interface by default, because the container deployment below
+needs that and `127.0.0.1` inside a container is unreachable from outside it.
+Running it directly on a machine other people can reach, narrow it:
+
+```sh
+carbon-badge fabiocicerchia/nginx-lua --token $GITHUB_TOKEN --serve 8080 --bind 127.0.0.1
+```
+
+The endpoint is unauthenticated and the process is holding your CI token, so on
+a shared host that is worth doing.
+
+## Other CI systems
+
+The action wrapper is GitHub-specific; the CLI is not. Anything that can run
+Python 3.10+ and hold a token can refresh the badge:
+
+```sh
+docker run --rm -e GITHUB_TOKEN ghcr.io/fabiocicerchia/carbon-badge:0.2.1 \
+  OWNER/REPO --grid-intensity 56 > badge.json
+```
+
+The image's entrypoint is the CLI, so the repo is just an argument. Every
+example in `examples/ci-platforms/` pulls it rather than installing from
+source; `pipx install` remains the right answer on a workstation.
+
+Two things to keep separate. **Where the badge is computed** can be any CI
+system. **What it measures** is whatever `--provider` points at — GitHub
+Actions or GitLab CI. A Jenkins job refreshing the badge for a GitHub repo is
+measuring that repo's Actions, not the Jenkins build that ran the command.
+
+Off GitHub Actions there is no built-in `GITHUB_TOKEN`, so a PAT with
+`actions:read` (or a GitLab token with `read_api`) is the one credential the
+job needs. And the JSON has to end up somewhere shields.io can fetch over
+public HTTPS — GitLab Pages, an S3/GCS bucket, or a `gh-pages` branch. A build
+artifact is not a public URL.
+
+Drop-in files for GitLab CI, CircleCI, Travis, Azure DevOps, AWS CodePipeline,
+Devtron, Northflank, Spacelift, Jenkins, Bitbucket Pipelines, Google Cloud
+Build, Tekton, Argo Workflows, Harness, Buildkite and Drone/Woodpecker are in
+[`examples/ci-platforms/`](https://github.com/fabiocicerchia/carbon-badge/blob/main/examples/ci-platforms/README.md), along with a
+table of where each platform keeps its cron.
+
+GitLab is the one platform there that can measure itself:
+
+```sh
+carbon-badge "$CI_PROJECT_PATH" --provider gitlab --api "$CI_API_V4_URL" \
+  --token "$GITLAB_TOKEN" > public/badge.json
+```

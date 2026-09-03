@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "carbon-badge"
-version = "0.2.1"
+version = "0.6.0"
 description = "Shields-style README badge for a repo's CI carbon footprint"
 readme = "README.md"
 license = "Apache-2.0"
@@ -36,3 +36,9 @@ py-modules = ["carbon_badge"]
 
 [tool.ruff]
 line-length = 100
+
+[tool.pytest.ini_options]
+# Without this pytest imports an installed carbon_badge from site-packages
+# instead of the module in this checkout, so the suite can pass (or fail)
+# against code that is not in the tree.
+pythonpath = ["."]

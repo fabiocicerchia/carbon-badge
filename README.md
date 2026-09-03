@@ -110,13 +110,20 @@ uncertainty — it means "we measured what was measurable", not "accurate to 5%"
 |---|---|---|
 | `ubuntu` / `windows` | 8.18 W × 1.15 PUE | 9.4 |
 | `macos` | 15.53 W × 1.15 | 17.9 |
-| `arm` | 8.18 W × 0.6 × 1.15 | 5.6 |
-| `gpu` | (8.18 + 70) W × 1.15 | 89.9 |
+| `arm` | 8.18 W × 0.6 × 1.15 | 5.6 *(estimate)* |
+| `gpu` | (8.18 + 70) W × 1.15 | 89.9 *(estimate)* |
 
 The base figures are [Eco-CI's](https://github.com/green-coding-solutions/eco-ci-energy-estimation/tree/main/machine-power-data)
 measured power curves at full CPU, for the exact machines GitHub runs jobs on —
 a shared 4-core EPYC 7763, and a Mac mini M1. Public repos have had **4-vCPU /
 16 GiB** runners since December 2023, so larger runners scale off 4, not 2.
+Those curves are machine draw and carry no datacentre overhead, which is why
+the PUE is a separate multiplier here rather than already inside them.
+
+`arm` and `gpu` have **no measured curve** — none is published — so they are
+composed from the x86 baseline and a T4 board limit respectively. A run that
+prices anything on one of them says so on stderr and names the flag that
+replaces it; `--runner-watts gpu=400` is believed over the estimate.
 
 Windows is *not* 2× Linux and macOS is *not* 10×: those are GitHub's billing
 multipliers, not power ones. Same hardware draws the same watts.

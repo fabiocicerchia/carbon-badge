@@ -1,0 +1,37 @@
+# CircleCI — refresh the badge nightly and keep it as a build artifact.
+# Copy into .circleci/config.yml.
+#
+# Add the schedule under Project Settings -> Triggers -> Scheduled pipelines;
+# the `when:` below is what keeps this workflow off every push.
+version: 2.1
+
+jobs:
+  carbon-badge:
+    docker:
+      - image: ghcr.io/fabiocicerchia/carbon-badge:0.2.1
+        # The image's entrypoint is carbon-badge itself; steps need a shell.
+        entrypoint: ["/bin/sh"]
+        user: root
+    steps:
+      - run:
+          name: Refresh the badge
+          # GITHUB_TOKEN: a PAT with actions:read on the target repo, set as a
+          # project environment variable. Off GitHub there is no built-in token.
+          # No checkout step: the tool reads the API, not the repository.
+          command: |
+            mkdir -p /tmp/badge
+            carbon-badge "$TARGET_REPO" --grid-intensity 56 > /tmp/badge/badge.json
+            cat /tmp/badge/badge.json
+      - store_artifacts:
+          path: /tmp/badge
+
+workflows:
+  nightly:
+    when:
+      equal: [scheduled_pipeline, << pipeline.trigger_source >>]
+    jobs:
+      - carbon-badge
+
+# CircleCI artifacts are behind auth on private projects, so for a README badge
+# push badge.json somewhere public instead — an S3 bucket, a gh-pages branch,
+# or any static host. shields.io has to be able to fetch it.

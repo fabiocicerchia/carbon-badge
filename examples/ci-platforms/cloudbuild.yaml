@@ -1,0 +1,37 @@
+# Google Cloud Build — refresh the badge nightly, publish it to a public bucket.
+# Copy into cloudbuild.yaml at the repo root.
+#
+# Scheduling: Cloud Scheduler -> a Pub/Sub-backed Cloud Build trigger. Cloud
+# Build triggers are event-driven; the cron lives in Scheduler.
+steps:
+  # The image's entrypoint is carbon-badge itself; it is overridden here only
+  # because the JSON goes to stdout and a step cannot redirect without a shell.
+  - id: badge
+    name: ghcr.io/fabiocicerchia/carbon-badge:0.2.1
+    entrypoint: sh
+    args:
+      - -c
+      - |
+        carbon-badge "${_TARGET_REPO}" --grid-intensity 56 > /workspace/badge.json
+        cat /workspace/badge.json
+    secretEnv: [GITHUB_TOKEN]
+
+availableSecrets:
+  secretManager:
+    # A PAT with actions:read on the target repo.
+    - versionName: projects/$PROJECT_ID/secrets/carbon-badge-token/versions/latest
+      env: GITHUB_TOKEN
+
+# shields.io fetches this URL on every view, so the bucket has to be public.
+artifacts:
+  objects:
+    location: gs://${_BADGE_BUCKET}/
+    paths:
+      - /workspace/badge.json
+
+options:
+  logging: CLOUD_LOGGING_ONLY
+
+substitutions:
+  _TARGET_REPO: OWNER/REPO
+  _BADGE_BUCKET: my-public-badges

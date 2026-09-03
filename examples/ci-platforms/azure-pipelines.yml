@@ -1,0 +1,56 @@
+# Azure Pipelines — refresh the badge nightly and publish it to Blob Storage.
+# Copy into azure-pipelines.yml.
+#
+# The published image is run with `docker run` rather than as a `container:`
+# job: Microsoft-hosted agents have Docker, and keeping the tasks on the host
+# means they still have the Node runtime that container jobs require.
+trigger: none
+pr: none
+
+schedules:
+  - cron: "17 2 * * *" # UTC
+    displayName: nightly carbon badge
+    branches:
+      include: [main]
+    always: true # run even when nothing changed — the CI figure still moves
+
+pool:
+  vmImage: ubuntu-latest
+
+variables:
+  TARGET_REPO: OWNER/REPO
+  CARBON_BADGE_IMAGE: ghcr.io/fabiocicerchia/carbon-badge:0.2.1
+
+steps:
+  - checkout: none # the tool reads the API, not the repository
+
+  # GITHUB_TOKEN: a PAT with actions:read, stored as a secret variable or in a
+  # variable group backed by Key Vault, and mapped in explicitly — secret
+  # variables are not exported to the environment on their own.
+  - script: |
+      set -euo pipefail
+      docker run --rm -e GITHUB_TOKEN "$CARBON_BADGE_IMAGE" \
+        "$TARGET_REPO" --grid-intensity 56 \
+        > "$(Build.ArtifactStagingDirectory)/badge.json"
+      cat "$(Build.ArtifactStagingDirectory)/badge.json"
+    displayName: Refresh the badge
+    env:
+      GITHUB_TOKEN: $(GITHUB_TOKEN)
+
+  - task: PublishPipelineArtifact@1
+    inputs:
+      targetPath: $(Build.ArtifactStagingDirectory)
+      artifact: carbon-badge
+
+  # shields.io needs a public URL, and pipeline artifacts are not one. Upload to
+  # a static-website-enabled container and point the README there instead.
+  - task: AzureCLI@2
+    condition: succeededOrFailed()
+    inputs:
+      azureSubscription: YOUR_SERVICE_CONNECTION
+      scriptType: bash
+      scriptLocation: inlineScript
+      inlineScript: |
+        az storage blob upload --overwrite \
+          --account-name YOUR_ACCOUNT --container-name '$web' \
+          --name badge.json --file "$(Build.ArtifactStagingDirectory)/badge.json"

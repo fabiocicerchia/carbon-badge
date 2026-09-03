@@ -9,6 +9,18 @@ name: release
 # pull requests" enabled. PyPI publishing is opt-in: configure a Trusted
 # Publisher (workflow: release.yml, environment: pypi) on pypi.org and set the
 # repository variable PUBLISH_TO_PYPI to "true".
+#
+# Why this is two release-please jobs and not one — do not collapse them back:
+# a draft release has no git tag, publishing it is what creates the tag. A
+# single invocation cuts the release and then computes the next release PR in
+# the same run, while the release is still a draft — so there is no tag for the
+# version already in .release-please-manifest.json, release-please loses its
+# anchor, walks the entire history and opens a PR re-releasing everything.
+# Merging that cuts another release, which opens another PR, forever. So:
+#
+#   release-please  phase 1 — cut the draft release only
+#   attach-assets   attach assets, publish the draft -> the tag now exists
+#   release-pr      phase 2 — open/update the next release PR only
 
 on:
   push:
@@ -37,6 +49,7 @@ jobs:
           # still a draft; a later step flips it to published.
           config-file: release-please-config.json
           manifest-file: .release-please-manifest.json
+          skip-github-pull-request: true
 
   build:
     needs: release-please
@@ -101,7 +114,9 @@ jobs:
   # GitHub does not start workflows from GITHUB_TOKEN events. Called in the
   # same run, it just works — no PAT to mint, rotate, or leak.
   publish:
-    needs: release-please
+    # After `attach-assets`: this checks out the tag, and a
+    # draft release has no tag until it is published.
+    needs: [release-please, attach-assets]
     if: needs.release-please.outputs.release_created == 'true'
     permissions:
       contents: read
@@ -109,3 +124,27 @@ jobs:
     uses: ./.github/workflows/publish.yml
     with:
       tag: ${{ needs.release-please.outputs.tag_name }}
+
+  # Phase 2 — open/update the next release PR, now that `attach-assets` has
+  # published the draft and the tag exists. `always()` because on an
+  # ordinary push no release was cut and `attach-assets` is skipped, yet the
+  # release PR still has to be kept up to date; when a release *was* cut,
+  # `attach-assets` must have succeeded, or there is no tag to anchor on and
+  # this would re-release the whole history.
+  release-pr:
+    needs: [release-please, attach-assets]
+    if: always()
+      && needs.release-please.result == 'success'
+      && (needs.release-please.outputs.release_created != 'true'
+      || needs.attach-assets.result == 'success')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write # open/update the release PR
+    steps:
+      # Same configuration as phase 1 — the two invocations must agree.
+      - uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7  # v5.0.0
+        with:
+          config-file: release-please-config.json
+          manifest-file: .release-please-manifest.json
+          skip-github-release: true
