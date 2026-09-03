@@ -36,3 +36,9 @@ py-modules = ["carbon_badge"]
 
 [tool.ruff]
 line-length = 100
+
+[tool.pytest.ini_options]
+# Without this pytest imports an installed carbon_badge from site-packages
+# instead of the module in this checkout, so the suite can pass (or fail)
+# against code that is not in the tree.
+pythonpath = ["."]

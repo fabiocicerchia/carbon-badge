@@ -18,6 +18,7 @@ WORKDIR /app
 COPY --from=build /src/dist/*.whl /tmp/
 RUN pip install --no-cache-dir /tmp/*.whl && rm /tmp/*.whl
 USER app
+# hardener: run this image with `docker run --read-only` for a read-only rootfs
 
 # Default use is one-shot (see usage above); the optional --serve mode is
 # self-checking (http.server.serve_forever binds immediately or fails fast),

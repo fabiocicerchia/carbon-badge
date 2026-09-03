@@ -2,6 +2,7 @@
 
 import http.server
 import json
+import logging
 import threading
 import urllib.error
 import urllib.request
@@ -116,7 +117,7 @@ def test_parse_runner_watts_rejects_malformed_input(bad):
         carbon_badge.parse_runner_watts([bad])
 
 
-def test_unknown_runners_are_charged_not_skipped(monkeypatch, capsys):
+def test_unknown_runners_are_charged_not_skipped(monkeypatch, caplog):
     """Skipping self-hosted scored it as zero, so moving a build onto the
     biggest machine you own improved the badge. It's charged and reported now."""
     now = datetime.now(timezone.utc).isoformat()
@@ -135,9 +136,9 @@ def test_unknown_runners_are_charged_not_skipped(monkeypatch, capsys):
         return _FakeResponse({"workflow_runs": runs if params["page"] == 1 else []})
 
     monkeypatch.setattr(carbon_badge.requests, "get", fake_get)
-    carbon_badge.ci_kwh_last_30d("owner/repo", token=None)
-    err = capsys.readouterr().err
-    assert "self-hosted" in err and "--runner-watts" in err
+    with caplog.at_level(logging.WARNING, logger="carbon-badge"):
+        carbon_badge.ci_kwh_last_30d("owner/repo", token=None)
+    assert "self-hosted" in caplog.text and "--runner-watts" in caplog.text
 
 
 def test_badge_passes_no_verdict():
@@ -165,7 +166,7 @@ def _usage(kwh, measured_jobs=0, total_jobs=0, measured_kwh=0.0, guessed_kwh=0.0
     return carbon_badge.CiUsage(kwh, grams, measured_jobs, total_jobs, measured_kwh, guessed_kwh)
 
 
-def test_pagination_cap_is_reported_not_silent(monkeypatch, capsys):
+def test_pagination_cap_is_reported_not_silent(monkeypatch, caplog):
     """A cap that silently drops runs understates the badge and reads as a
     quiet month. Same reasoning as the closed-PR search cap."""
     full_page = [{"id": i, "run_started_at": None, "updated_at": None} for i in range(100)]
@@ -174,19 +175,20 @@ def test_pagination_cap_is_reported_not_silent(monkeypatch, capsys):
         return _FakeResponse({"workflow_runs": full_page, "total_count": 9999})
 
     monkeypatch.setattr(carbon_badge.requests, "get", fake_get)
-    runs = carbon_badge._list_runs("o/r", None, "https://api.github.com", "2026-07-09")
-    err = capsys.readouterr().err
+    with caplog.at_level(logging.WARNING, logger="carbon-badge"):
+        runs = carbon_badge._list_runs("o/r", None, "https://api.github.com", "2026-07-09")
     assert len(runs) == 100 * carbon_badge._MAX_PAGES
-    assert "undercount" in err and "9999" in err
+    assert "undercount" in caplog.text and "9999" in caplog.text
 
 
-def test_no_warning_when_everything_was_read(monkeypatch, capsys):
+def test_no_warning_when_everything_was_read(monkeypatch, caplog):
     def fake_get(url, params=None, headers=None, timeout=None):
         return _FakeResponse({"workflow_runs": [{"id": 1}], "total_count": 1})
 
     monkeypatch.setattr(carbon_badge.requests, "get", fake_get)
-    carbon_badge._list_runs("o/r", None, "https://api.github.com", "2026-07-09")
-    assert "undercount" not in capsys.readouterr().err
+    with caplog.at_level(logging.WARNING, logger="carbon-badge"):
+        carbon_badge._list_runs("o/r", None, "https://api.github.com", "2026-07-09")
+    assert "undercount" not in caplog.text
 
 
 def test_confidence_is_driven_by_energy_not_job_count():
@@ -681,12 +683,12 @@ def test_run_jobs_pages_past_thirty(monkeypatch):
     assert len(carbon_badge.run_jobs(1, "o/r", token=None)) == 105
 
 
-def test_undeclared_warning_never_suggests_a_command_that_will_not_parse(capsys):
+def test_undeclared_warning_never_suggests_a_command_that_will_not_parse(caplog):
     """The message exists to hand over the fix; a broken flag is worse than an
     honest "cannot suggest one"."""
-    carbon_badge._warn_undeclared_runners({"(no labels)": 3, "my-builder,linux": 2})
-    err = capsys.readouterr().err
-    for line in err.strip().splitlines():
+    with caplog.at_level(logging.WARNING, logger="carbon-badge"):
+        carbon_badge._warn_undeclared_runners({"(no labels)": 3, "my-builder,linux": 2})
+    for line in caplog.messages:
         if "--runner-watts '" not in line:
             continue
         flag = line.split("--runner-watts '")[1].split("'")[0]
@@ -842,7 +844,7 @@ def test_grid_factor_averages_a_day_not_an_instant():
     assert not any(c.endswith("latest") for c in calls)
 
 
-def test_grid_factor_falls_back_to_the_instant_reading(capsys):
+def test_grid_factor_falls_back_to_the_instant_reading(caplog):
     """History coverage varies by zone and plan; a token that can only reach
     `latest` must still work, loudly."""
 
@@ -851,8 +853,9 @@ def test_grid_factor_falls_back_to_the_instant_reading(capsys):
             return _FakeResponse({"history": []})
         return _FakeResponse({"carbonIntensity": 412.0})
 
-    assert carbon_badge.live_grid_intensity("SE", get=fake_get) == 412.0
-    assert "instantaneous" in capsys.readouterr().err
+    with caplog.at_level(logging.WARNING, logger="carbon-badge"):
+        assert carbon_badge.live_grid_intensity("SE", get=fake_get) == 412.0
+    assert "instantaneous" in caplog.text
 
 
 def test_grid_factor_ignores_gaps_in_the_history():
@@ -948,14 +951,15 @@ def test_us_regions_need_a_key_and_degrade_without_one():
     assert calls == []
 
 
-def test_a_failing_provider_never_breaks_the_refresh(capsys):
+def test_a_failing_provider_never_breaks_the_refresh(caplog):
     """A grid lookup is an optional refinement; it must not fail a badge."""
 
     def boom(url, params=None, headers=None, timeout=None):
         raise RuntimeError("provider down")
 
-    assert carbon_badge.live_region_factor("uksouth", get=boom) is None
-    assert "live grid lookup failed" in capsys.readouterr().err
+    with caplog.at_level(logging.WARNING, logger="carbon-badge"):
+        assert carbon_badge.live_region_factor("uksouth", get=boom) is None
+    assert "live grid lookup failed" in caplog.text
 
 
 def test_resolver_caches_per_region_and_honours_an_explicit_figure():
@@ -967,18 +971,18 @@ def test_resolver_caches_per_region_and_honours_an_explicit_figure():
         calls.append(url)
         return _resp({"data": [{"intensity": {"actual": 100}}]})
 
-    resolve = carbon_badge.region_factor_resolver(get=fake_get)
+    resolve = carbon_badge.RegionFactors(get=fake_get).factor_for
     assert resolve("uksouth") == 100.0
     assert resolve("uksouth") == 100.0
     assert len(calls) == 1, "resolver should memoise"
 
-    declared = carbon_badge.region_factor_resolver(override=333.0, get=fake_get)
+    declared = carbon_badge.RegionFactors(override=333.0, get=fake_get).factor_for
     assert declared("uksouth") == 333.0
     assert len(calls) == 1, "an explicit figure must not consult a provider"
 
 
 def test_unknown_region_falls_back_to_the_annual_average():
-    resolve = carbon_badge.region_factor_resolver()
+    resolve = carbon_badge.RegionFactors().factor_for
     assert resolve("moonbase1") == carbon_badge.DEFAULT_GRID_INTENSITY
 
 
@@ -1117,7 +1121,7 @@ def test_ci_api_snapshot_is_fetched_once_for_many_regions():
         calls.append(url)
         return _resp(_ci_snapshot(generated_at=_now_z()))
 
-    resolve = carbon_badge.region_factor_resolver(get=fake_get)
+    resolve = carbon_badge.RegionFactors(get=fake_get).factor_for
     assert resolve("japaneast") == 567.0
     assert resolve("japanwest") == 567.0
     assert resolve("southcentralus") == 425.0
@@ -1125,10 +1129,11 @@ def test_ci_api_snapshot_is_fetched_once_for_many_regions():
     assert calls[0].endswith("/v1/latest.json")
 
 
-def test_ci_api_failure_leaves_the_annual_average_standing(capsys):
+def test_ci_api_failure_leaves_the_annual_average_standing(caplog):
     def boom(url, params=None, headers=None, timeout=None):
         raise RuntimeError("ci-api down")
 
-    resolve = carbon_badge.region_factor_resolver(get=boom)
-    assert resolve("japaneast") == carbon_badge.AZURE_REGION_GRID["japaneast"]
-    assert "ci-api snapshot failed" in capsys.readouterr().err
+    resolve = carbon_badge.RegionFactors(get=boom).factor_for
+    with caplog.at_level(logging.WARNING, logger="carbon-badge"):
+        assert resolve("japaneast") == carbon_badge.AZURE_REGION_GRID["japaneast"]
+    assert "ci-api snapshot failed" in caplog.text
