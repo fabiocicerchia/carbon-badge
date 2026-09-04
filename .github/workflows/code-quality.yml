@@ -25,6 +25,14 @@ jobs:
       # Enforce .editorconfig (indentation, EOL, trailing whitespace).
       - name: editorconfig-checker
         uses: editorconfig-checker/action-editorconfig-checker@d2ed4fd072ae6f887e9407c909af0f585d2ad9f4  # v2
+        with:
+          # The action is pinned but the tool it downloads was not: it
+          # resolved `latest`, and editorconfig-checker v4.0.0 renamed its
+          # release assets from ec-* to editorconfig-checker-*. The action
+          # looks for `ec-linux-amd64*`, so every run started failing with
+          # "The binary 'ec-linux-amd64*' not found". v4 is a deliberate
+          # bump, not something a release should make for us.
+          version: v3.11.3
 
       # Catch common typos in code and docs.
       - name: typos
