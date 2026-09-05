@@ -48,11 +48,11 @@ The watts are where the uncertainty lives, and there are exactly three ways one
 is obtained. These three words mean the same thing everywhere — in the code, in
 the log, and on the badge.
 
-| | what it means | how you get there |
-|---|---|---|
+|              | what it means                                                           | how you get there                               |
+| ------------ | ----------------------------------------------------------------------- | ----------------------------------------------- |
 | **measured** | the job reported its own duration and the machine's real CPU and memory | add [`carbon-badge/record`](record/) to the job |
-| **declared** | you told us the wattage for that runner | `runner-watts: "my-builder=180"` |
-| **guessed** | the runner was not recognised, so a generic fallback was used | nothing — this is what happens by default |
+| **declared** | you told us the wattage for that runner                                 | `runner-watts: "my-builder=180"`                |
+| **guessed**  | the runner was not recognised, so a generic fallback was used           | nothing — this is what happens by default       |
 
 A recognised GitHub-hosted label (`ubuntu-latest`, `macos-14`, `…-8-cores`,
 `…-arm`, `…-gpu`) counts as **declared**: the figure comes from a published
@@ -68,7 +68,7 @@ number, so a wrong declaration produces a confidently wrong badge. Only
 Nine two-minute `ubuntu-latest` jobs plus one ten-hour job on an unrecognised
 `my-builder`:
 
-```
+```text
                 nine short jobs       the long one              total
 guessed    0.3 h total × 9.4 W  +  10 h × 9.4 W  =   97 Wh  ->   46 gCO2e/mo
 declared   0.3 h total × 9.4 W  +  10 h × 180 W  = 1803 Wh  ->  865 gCO2e/mo
@@ -84,12 +84,12 @@ than quietly absorbed.
 The badge reports the share of **energy** — not the share of jobs, since one
 long job outweighs a dozen short ones — that came from each category.
 
-| badge | meaning |
-|---|---|
-| `113 gCO2e/mo` | measured: essentially all of it self-reported |
-| `113 gCO2e/mo (~18/24 measured)` | partial: some self-reported, the rest from the API |
-| `113 gCO2e/mo (estimated)` | none self-reported, but every runner was recognised or declared — durations real, wattages modelled |
-| `113 gCO2e/mo (rough)` | a quarter or more of the energy rests on a guess |
+| badge                            | meaning                                                                                             |
+| -------------------------------- | --------------------------------------------------------------------------------------------------- |
+| `113 gCO2e/mo`                   | measured: essentially all of it self-reported                                                       |
+| `113 gCO2e/mo (~18/24 measured)` | partial: some self-reported, the rest from the API                                                  |
+| `113 gCO2e/mo (estimated)`       | none self-reported, but every runner was recognised or declared — durations real, wattages modelled |
+| `113 gCO2e/mo (rough)`           | a quarter or more of the energy rests on a guess                                                    |
 
 The grams always cover **all** CI, measured or not. A badge that shrank while
 instrumentation lagged would reward not instrumenting.
@@ -106,12 +106,12 @@ uncertainty — it means "we measured what was measurable", not "accurate to 5%"
 
 ### The wattages
 
-| runner | working | watts |
-|---|---|---|
-| `ubuntu` / `windows` | 8.18 W × 1.15 PUE | 9.4 |
-| `macos` | 15.53 W × 1.15 | 17.9 |
-| `arm` | 8.18 W × 0.6 × 1.15 | 5.6 *(estimate)* |
-| `gpu` | (8.18 + 70) W × 1.15 | 89.9 *(estimate)* |
+| runner               | working              | watts             |
+| -------------------- | -------------------- | ----------------- |
+| `ubuntu` / `windows` | 8.18 W × 1.15 PUE    | 9.4               |
+| `macos`              | 15.53 W × 1.15       | 17.9              |
+| `arm`                | 8.18 W × 0.6 × 1.15  | 5.6 *(estimate)*  |
+| `gpu`                | (8.18 + 70) W × 1.15 | 89.9 *(estimate)* |
 
 The base figures are [Eco-CI's](https://github.com/green-coding-solutions/eco-ci-energy-estimation/tree/main/machine-power-data)
 measured power curves at full CPU, for the exact machines GitHub runs jobs on —
@@ -138,16 +138,16 @@ Green Coding Solutions solves a neighbouring problem, and the power curves this
 tool is calibrated against are theirs. They are worth knowing about before you
 pick one — for some questions they are simply the better answer.
 
-| | Eco-CI | carbon-badge |
-|---|---|---|
-| **measures** | CPU utilisation sampled during the job | job duration, after the fact |
-| **wattage** | integrated across the load curve | the full-load figure, flat |
-| **instrumentation** | required — `start` / `get` / `display` in every job | optional; adds accuracy, not required for a number |
-| **granularity** | per step and per run | 30-day repo total |
-| **where the number goes** | pushed to `metrics.green-coding.io` by default; `send-data: false` opts out | written to a branch of your repo |
-| **CI systems** | GitHub, GitLab, Jenkins | GitHub, GitLab |
-| **platforms** | Linux and macOS (macOS needs GNU `date`) | ubuntu, windows, macos, arm, gpu, or declared |
-| **grid intensity** | Electricity Maps | Electricity Maps, or a fixed factor |
+|                           | Eco-CI                                                                      | carbon-badge                                       |
+| ------------------------- | --------------------------------------------------------------------------- | -------------------------------------------------- |
+| **measures**              | CPU utilisation sampled during the job                                      | job duration, after the fact                       |
+| **wattage**               | integrated across the load curve                                            | the full-load figure, flat                         |
+| **instrumentation**       | required — `start` / `get` / `display` in every job                         | optional; adds accuracy, not required for a number |
+| **granularity**           | per step and per run                                                        | 30-day repo total                                  |
+| **where the number goes** | pushed to `metrics.green-coding.io` by default; `send-data: false` opts out | written to a branch of your repo                   |
+| **CI systems**            | GitHub, GitLab, Jenkins                                                     | GitHub, GitLab                                     |
+| **platforms**             | Linux and macOS (macOS needs GNU `date`)                                    | ubuntu, windows, macos, arm, gpu, or declared      |
+| **grid intensity**        | Electricity Maps                                                            | Electricity Maps, or a fixed factor                |
 
 ### The difference that matters
 
