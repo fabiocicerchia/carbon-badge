@@ -1,0 +1,82 @@
+carbon_badge.py	413	35	arg	overrides	dict
+carbon_badge.py	454	28	arg	overrides	dict[str, float] | None
+carbon_badge.py	507	28	arg	key	str
+carbon_badge.py	507	33	arg	params	dict | None
+carbon_badge.py	507	0	ret	_get_pages	tuple
+carbon_badge.py	537	35	arg	api	str
+carbon_badge.py	543	24	arg	kind	str
+carbon_badge.py	578	0	ret	_run_kwh	tuple
+carbon_badge.py	602	5	arg	api	str
+carbon_badge.py	604	5	arg	use_artifacts	bool
+carbon_badge.py	1111	36	arg	platform	str
+carbon_badge.py	1159	33	arg	api	str
+carbon_badge.py	1202	38	arg	api	str
+carbon_badge.py	1202	0	ret	artifact_kwh_by_run	tuple
+carbon_badge.py	1304	21	arg	run	dict
+carbon_badge.py	1304	0	ret	_api_run_detail	tuple
+carbon_badge.py	1345	5	arg	api	str
+carbon_badge.py	1433	41	arg	api	str
+carbon_badge.py	1463	32	arg	limit	int
+carbon_badge.py	1541	30	arg	undeclared	dict
+carbon_badge.py	1566	16	arg	minutes	int
+carbon_badge.py	1566	64	arg	watts	float
+carbon_badge.py	1590	5	arg	api	str
+carbon_badge.py	1662	43	arg	api	str
+carbon_badge.py	1717	18	arg	grams	int
+carbon_badge.py	1760	19	arg	grams	int
+carbon_badge.py	1760	0	ret	endpoint_json	dict
+carbon_badge.py	1786	0	ret	_gitlab_estimate	tuple
+carbon_badge.py	1798	0	ret	_github_estimate	tuple
+carbon_badge.py	1825	0	ret	estimate	tuple
+carbon_badge.py	1887	28	arg	ttl	int
+carbon_badge.py	1911	30	arg	ttl	int
+tests/test_carbon_badge.py	169	12	arg	kwh	float
+tests/test_carbon_badge.py	169	17	arg	measured_jobs	int
+tests/test_carbon_badge.py	169	34	arg	total_jobs	int
+tests/test_carbon_badge.py	169	48	arg	measured_kwh	float
+tests/test_carbon_badge.py	169	66	arg	guessed_kwh	float
+tests/test_carbon_badge.py	358	15	arg	name	str
+tests/test_carbon_badge.py	358	21	arg	run_id	int
+tests/test_carbon_badge.py	358	43	arg	expired	bool
+tests/test_carbon_badge.py	358	0	ret	_artifact	dict[str, dict]
+tests/test_carbon_badge.py	367	12	arg	artifacts	list
+tests/test_carbon_badge.py	367	23	arg	runs	list
+tests/test_carbon_badge.py	367	29	arg	calls	list
+tests/test_carbon_badge.py	367	36	arg	jobs_per_run	int
+tests/test_carbon_badge.py	506	27	arg	workflow_id	int
+tests/test_carbon_badge.py	506	0	ret	_run	dict
+tests/test_carbon_badge.py	518	10	arg	labels	list[str]
+tests/test_carbon_badge.py	518	18	arg	minutes	int
+tests/test_carbon_badge.py	518	0	ret	_job	dict
+tests/test_carbon_badge.py	1045	9	arg	stamp	str
+tests/test_carbon_badge.py	1053	18	arg	generated_at	str
+tests/test_carbon_badge.py	1053	0	ret	_ci_snapshot	dict[str, dict[str, dict]]
+tests/test_carbon_badge.py	1207	16	arg	labels	list[str]
+tests/test_carbon_badge.py	1207	24	arg	minutes	int
+tests/test_carbon_badge.py	1207	33	arg	name	str
+tests/test_carbon_badge.py	1207	39	arg	start_offset	int
+tests/test_carbon_badge.py	1207	0	ret	_named_job	dict
+tests/test_carbon_badge.py	1218	41	arg	calls	list | None
+tests/test_carbon_badge.py	1232	19	arg	marker_seconds	int
+tests/test_carbon_badge.py	1232	35	arg	job_minutes	int
+tests/test_carbon_badge.py	1232	0	ret	_one_run_repo	tuple
+tests/test_carbon_badge.py	136	23	arg	params	dict | None
+tests/test_carbon_badge.py	221	23	arg	params	dict | None
+tests/test_carbon_badge.py	371	23	arg	params	dict | None
+tests/test_carbon_badge.py	495	18	arg	url	str
+tests/test_carbon_badge.py	495	23	arg	params	dict | None
+tests/test_carbon_badge.py	537	23	arg	params	dict | None
+tests/test_carbon_badge.py	560	23	arg	params	dict | None
+tests/test_carbon_badge.py	573	23	arg	params	dict | None
+tests/test_carbon_badge.py	584	0	ret	compute	dict
+tests/test_carbon_badge.py	624	23	arg	params	dict | None
+tests/test_carbon_badge.py	649	23	arg	params	dict | None
+tests/test_carbon_badge.py	672	23	arg	params	dict | None
+tests/test_carbon_badge.py	698	23	arg	params	dict | None
+tests/test_carbon_badge.py	731	18	arg	url	str
+tests/test_carbon_badge.py	731	23	arg	params	dict | None
+tests/test_carbon_badge.py	772	23	arg	params	dict | None
+tests/test_carbon_badge.py	808	23	arg	params	dict | None
+tests/test_carbon_badge.py	880	23	arg	params	dict | None
+tests/test_carbon_badge.py	913	23	arg	params	dict | None
+tests/test_carbon_badge.py	1219	23	arg	params	dict | None
