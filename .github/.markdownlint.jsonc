@@ -1,0 +1,8 @@
+{
+  // Inherit the repository rules; only the heading rule differs.
+  "extends": "../.markdownlint.jsonc",
+
+  // Issue and PR templates are fragments inserted into a larger document,
+  // so they have no top-level heading of their own.
+  "MD041": false
+}

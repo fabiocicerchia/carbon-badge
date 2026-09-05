@@ -45,24 +45,24 @@ Two consequences worth knowing before reading the files:
 
 ## Files
 
-| Platform | File | Copy it to |
-|---|---|---|
-| GitLab CI | [`gitlab-ci.yml`](gitlab-ci.yml) | `.gitlab-ci.yml` |
-| CircleCI | [`circleci-config.yml`](circleci-config.yml) | `.circleci/config.yml` |
-| Travis CI | [`travis.yml`](travis.yml) | `.travis.yml` |
-| Azure DevOps | [`azure-pipelines.yml`](azure-pipelines.yml) | `azure-pipelines.yml` |
-| AWS CodePipeline | [`buildspec.yml`](buildspec.yml) | `buildspec.yml` (CodeBuild stage) |
-| Devtron | [`devtron-task.sh`](devtron-task.sh) | a Job, or a Post-Deployment task |
-| Northflank | [`northflank-service.json`](northflank-service.json) | `northflank create service deployment -f …` |
-| Spacelift | [`spacelift-config.yml`](spacelift-config.yml) | `.spacelift/config.yml` |
-| Jenkins | [`Jenkinsfile`](Jenkinsfile) | `Jenkinsfile` |
-| Bitbucket Pipelines | [`bitbucket-pipelines.yml`](bitbucket-pipelines.yml) | `bitbucket-pipelines.yml` |
-| Google Cloud Build | [`cloudbuild.yaml`](cloudbuild.yaml) | `cloudbuild.yaml` |
-| Tekton | [`tekton.yaml`](tekton.yaml) | `kubectl apply -f` |
-| Argo Workflows | [`argo-workflow.yaml`](argo-workflow.yaml) | `kubectl apply -f` (a CronWorkflow) |
-| Harness | [`harness-pipeline.yml`](harness-pipeline.yml) | the pipeline's YAML editor |
-| Buildkite | [`buildkite-pipeline.yml`](buildkite-pipeline.yml) | `.buildkite/pipeline.yml` |
-| Drone / Woodpecker | [`drone.yml`](drone.yml) | `.drone.yml` / `.woodpecker.yml` |
+| Platform            | File                                                 | Copy it to                                  |
+| ------------------- | ---------------------------------------------------- | ------------------------------------------- |
+| GitLab CI           | [`gitlab-ci.yml`](gitlab-ci.yml)                     | `.gitlab-ci.yml`                            |
+| CircleCI            | [`circleci-config.yml`](circleci-config.yml)         | `.circleci/config.yml`                      |
+| Travis CI           | [`travis.yml`](travis.yml)                           | `.travis.yml`                               |
+| Azure DevOps        | [`azure-pipelines.yml`](azure-pipelines.yml)         | `azure-pipelines.yml`                       |
+| AWS CodePipeline    | [`buildspec.yml`](buildspec.yml)                     | `buildspec.yml` (CodeBuild stage)           |
+| Devtron             | [`devtron-task.sh`](devtron-task.sh)                 | a Job, or a Post-Deployment task            |
+| Northflank          | [`northflank-service.json`](northflank-service.json) | `northflank create service deployment -f …` |
+| Spacelift           | [`spacelift-config.yml`](spacelift-config.yml)       | `.spacelift/config.yml`                     |
+| Jenkins             | [`Jenkinsfile`](Jenkinsfile)                         | `Jenkinsfile`                               |
+| Bitbucket Pipelines | [`bitbucket-pipelines.yml`](bitbucket-pipelines.yml) | `bitbucket-pipelines.yml`                   |
+| Google Cloud Build  | [`cloudbuild.yaml`](cloudbuild.yaml)                 | `cloudbuild.yaml`                           |
+| Tekton              | [`tekton.yaml`](tekton.yaml)                         | `kubectl apply -f`                          |
+| Argo Workflows      | [`argo-workflow.yaml`](argo-workflow.yaml)           | `kubectl apply -f` (a CronWorkflow)         |
+| Harness             | [`harness-pipeline.yml`](harness-pipeline.yml)       | the pipeline's YAML editor                  |
+| Buildkite           | [`buildkite-pipeline.yml`](buildkite-pipeline.yml)   | `.buildkite/pipeline.yml`                   |
+| Drone / Woodpecker  | [`drone.yml`](drone.yml)                             | `.drone.yml` / `.woodpecker.yml`            |
 
 For GitHub Actions use the action itself — see
 [`../../.github-workflow-example/carbon-badge.yml`](../../.github-workflow-example/carbon-badge.yml).
@@ -72,10 +72,10 @@ For GitHub Actions use the action itself — see
 On GitHub Actions the workflow gets `GITHUB_TOKEN` for free. Nowhere else does,
 so this is the one credential every file needs:
 
-| provider | token | scope |
-|---|---|---|
+| provider | token                           | scope                             |
+| -------- | ------------------------------- | --------------------------------- |
 | `github` | a PAT (classic or fine-grained) | `actions:read` on the target repo |
-| `gitlab` | a project or group access token | `read_api` |
+| `gitlab` | a project or group access token | `read_api`                        |
 
 `$CI_JOB_TOKEN` on GitLab cannot read the jobs API — it has to be a real token.
 
@@ -85,24 +85,24 @@ The badge is a 30-day rolling figure, so it wants a cron, not a push trigger.
 Every platform spells that differently, and several keep the schedule outside
 the config file entirely:
 
-| Platform | Where the cron lives |
-|---|---|
-| GitLab CI | Build → Pipeline schedules (the job filters on `$CI_PIPELINE_SOURCE == "schedule"`) |
-| CircleCI | Project Settings → Triggers → Scheduled pipelines (the workflow filters on `pipeline.trigger_source`) |
-| Travis CI | Settings → Cron Jobs (the script filters on `$TRAVIS_EVENT_TYPE`) |
-| Azure DevOps | `schedules:` in the file — note `always: true`, or a quiet repo never refreshes |
-| AWS CodePipeline | an EventBridge rule targeting the pipeline or the CodeBuild project |
-| Devtron | a Job with a cron trigger |
-| Northflank | not a cron at all — see below |
-| Spacelift | a scheduled task on the stack (the file's hook refreshes after each apply) |
-| Jenkins | `triggers { cron('H 2 * * *') }` in the file |
-| Bitbucket | Repository settings → Pipelines → Schedules, pointed at the `custom:` pipeline |
-| Google Cloud Build | Cloud Scheduler → a trigger; Cloud Build itself is event-driven |
-| Tekton | no native cron — a Kubernetes CronJob creates the TaskRun |
-| Argo Workflows | a `CronWorkflow`, which is native |
-| Harness | a Scheduled trigger on the pipeline (a separate resource from this YAML) |
-| Buildkite | Pipeline Settings → Schedules |
-| Drone | Settings → Cron Jobs in the UI, matched by `trigger: {cron: [nightly]}` |
+| Platform           | Where the cron lives                                                                                  |
+| ------------------ | ----------------------------------------------------------------------------------------------------- |
+| GitLab CI          | Build → Pipeline schedules (the job filters on `$CI_PIPELINE_SOURCE == "schedule"`)                   |
+| CircleCI           | Project Settings → Triggers → Scheduled pipelines (the workflow filters on `pipeline.trigger_source`) |
+| Travis CI          | Settings → Cron Jobs (the script filters on `$TRAVIS_EVENT_TYPE`)                                     |
+| Azure DevOps       | `schedules:` in the file — note `always: true`, or a quiet repo never refreshes                       |
+| AWS CodePipeline   | an EventBridge rule targeting the pipeline or the CodeBuild project                                   |
+| Devtron            | a Job with a cron trigger                                                                             |
+| Northflank         | not a cron at all — see below                                                                         |
+| Spacelift          | a scheduled task on the stack (the file's hook refreshes after each apply)                            |
+| Jenkins            | `triggers { cron('H 2 * * *') }` in the file                                                          |
+| Bitbucket          | Repository settings → Pipelines → Schedules, pointed at the `custom:` pipeline                        |
+| Google Cloud Build | Cloud Scheduler → a trigger; Cloud Build itself is event-driven                                       |
+| Tekton             | no native cron — a Kubernetes CronJob creates the TaskRun                                             |
+| Argo Workflows     | a `CronWorkflow`, which is native                                                                     |
+| Harness            | a Scheduled trigger on the pipeline (a separate resource from this YAML)                              |
+| Buildkite          | Pipeline Settings → Schedules                                                                         |
+| Drone              | Settings → Cron Jobs in the UI, matched by `trigger: {cron: [nightly]}`                               |
 
 Nightly is plenty. The figure covers 30 days, so consecutive runs mostly
 republish a number that has barely moved — and each run costs API calls.
@@ -129,12 +129,12 @@ The tool prints Shields.io endpoint JSON to stdout and stops there. That JSON
 has to end up somewhere **shields.io can fetch over public HTTPS on every view
 of your README** — which build artifacts, on most of these platforms, are not:
 
-| Where | Notes |
-|---|---|
-| GitLab Pages | the `pages` job in [`gitlab-ci.yml`](gitlab-ci.yml); the Pages site must be public |
-| S3 / GCS / Azure Blob | what the AWS, Cloud Build and Azure files do — a bucket policy beats an ACL |
-| a `gh-pages` branch | what the GitHub Action does; any platform can push to it with a token |
-| build artifacts | fine for a log, useless for a badge on every platform here except Pages |
+| Where                 | Notes                                                                              |
+| --------------------- | ---------------------------------------------------------------------------------- |
+| GitLab Pages          | the `pages` job in [`gitlab-ci.yml`](gitlab-ci.yml); the Pages site must be public |
+| S3 / GCS / Azure Blob | what the AWS, Cloud Build and Azure files do — a bucket policy beats an ACL        |
+| a `gh-pages` branch   | what the GitHub Action does; any platform can push to it with a token              |
+| build artifacts       | fine for a log, useless for a badge on every platform here except Pages            |
 
 ## Runners it does not recognise
 

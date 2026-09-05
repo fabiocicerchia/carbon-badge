@@ -88,7 +88,7 @@ jobs:
 One line, at the top of the job. Its `post:` step runs when the job ends and
 uploads a one-line artifact whose *name* carries the measurement:
 
-```
+```text
 carbon.v1.142.4.16384.ubuntu.eastus.build-a1b2c3d4   # 142 s, 4 vCPU, 16384 MB, x86 Linux, US-MIDA-PJM
 ```
 
@@ -131,12 +131,12 @@ on the one that ran.
 Measured, not assumed. Every termination path was run against a live repo
 ([cron-translate#26](https://github.com/fabiocicerchia/cron-translate/pull/26)):
 
-| how the job ended | marker written? |
-|---|---|
-| succeeded | yes |
-| failed (`exit 1`, and by extension an OOM-killed step) | **yes** |
-| cancelled mid-run | **yes** |
-| killed by `timeout-minutes` | **yes** |
+| how the job ended                                      | marker written? |
+| ------------------------------------------------------ | --------------- |
+| succeeded                                              | yes             |
+| failed (`exit 1`, and by extension an OOM-killed step) | **yes**         |
+| cancelled mid-run                                      | **yes**         |
+| killed by `timeout-minutes`                            | **yes**         |
 
 This is why `record/` is a JavaScript action with a `post:` step rather than a
 composite step with `if: always()`. An `if: always()` step does **not** run on
@@ -173,7 +173,7 @@ carbon-badge owner/repo --token "$GITHUB_TOKEN" --reconcile
 This runs *both* paths over the same runs and reports where they disagree —
 per run, in aggregate, and split into the three separate reasons they can:
 
-```
+```text
 AGGREGATE
   self-reported       0.0412 kWh        17.8 gCO2e
   API                 0.0498 kWh        23.9 gCO2e
@@ -233,7 +233,7 @@ then the bare number, then the built-in table.
 Undeclared runners are charged at the ubuntu baseline and named in the log, so
 you can see what to declare:
 
-```
+```text
 carbon-badge: 42 job(s) on unrecognised runner 'self-hosted,linux,x64'
   charged at the 9.4 W baseline; pass --runner-watts 'self-hosted=<watts>' to price it
 ```

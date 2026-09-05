@@ -90,3 +90,9 @@ repos:
     rev: bdc13c1ca39f84ef141bcf34e089fe7fe7dc2f0d  # v0.8.2
     hooks:
       - id: greenlint
+
+  # FC-MD-008 - markdownlint in CI, blocking. Rules live in .markdownlint.jsonc.
+  - repo: https://github.com/DavidAnson/markdownlint-cli2
+    rev: b82a6c8896e491b9cb377a99ff3412131920681b  # v0.23.2
+    hooks:
+      - id: markdownlint-cli2
