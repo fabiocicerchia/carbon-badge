@@ -24,7 +24,9 @@ import re
 import sys
 import time
 from collections import namedtuple
+from collections.abc import Callable
 from datetime import datetime, timedelta, timezone
+from typing import Any
 
 import requests
 
@@ -132,6 +134,19 @@ MEM_PER_VCPU_MB = 1024 * BASELINE_MEM_GB // BASELINE_VCPU
 # 2024), which is far inside the error bars on the wattages it multiplies.
 # greenlint pins the same figure, and the two agreeing matters more than
 # either tracking the latest annual revision.
+# GitHub's and GitLab's JSON, as requests hands it over.
+Json = dict[str, Any]
+# The HTTP getter every network reader takes, so a test can pass its own.
+Getter = Callable[..., Any]
+# --runner-watts: a runner label, lowercased, to the wattage declared for it.
+RunnerWatts = dict[str, float]
+
+# Below this the two reconciliation paths agree to the last gram, and the row
+# says nothing worth printing.
+RECONCILE_EPSILON_G = 1e-9
+# Above a kilogram the badge reads in kg, not g.
+GRAMS_PER_KILOGRAM = 1000
+
 DEFAULT_GRID_INTENSITY = 480.0  # gCO2e/kWh
 
 # Annual-average grid carbon factor (gCO2e/kWh) for the grid each Azure region
@@ -207,7 +222,7 @@ AZURE_REGION_GRID = {
 }
 
 
-def grid_factor_for(region, override=None):
+def grid_factor_for(region: str, override: float | None = None) -> float:
     """gCO2e/kWh for a job, most specific source first.
 
     An explicit --grid-intensity or --grid-region wins outright: someone who
@@ -299,10 +314,7 @@ _NO_CORE_SCALING = {"gpu"}
 # prices a job on one of these says so on stderr and names the flag that
 # replaces it.
 RUNNER_POWER_ESTIMATED = {
-    "gpu": (
-        "composed from a 4-vCPU host slice plus one T4 at its 70 W board "
-        "limit — a ceiling, not a measured mean"
-    ),
+    "gpu": ("composed from a 4-vCPU host slice plus one T4 at its 70 W board limit — a ceiling, not a measured mean"),
     "arm": (
         "extrapolated from the x86 curve at 40% less energy for equal work — "
         "a vendor claim, not a measurement; no Arm curve is published"
@@ -315,17 +327,17 @@ RUNNER_POWER_ESTIMATED = {
 _ESTIMATED_USED = {}
 
 
-def _note_runner_class(key):
+def _note_runner_class(key: str) -> str:
     """Record that a figure came from a class with no measured curve behind it."""
     if key in RUNNER_POWER_ESTIMATED:
         _ESTIMATED_USED[key] = _ESTIMATED_USED.get(key, 0) + 1
     return key
 
 
-def _warn_estimated_classes():
+def _warn_estimated_classes() -> None:
     """Say which of this run's numbers are estimates, and what replaces them."""
     for key, count in sorted(_ESTIMATED_USED.items(), key=lambda kv: -kv[1]):
-        print(
+        print(  # noqa: T201 — the tool's output
             f"carbon-badge: {count} job(s) priced on the '{key}' class at "
             f"{RUNNER_POWER_W[key]:g} W, which is an estimate: "
             f"{RUNNER_POWER_ESTIMATED[key]}. "
@@ -379,7 +391,7 @@ _CORES_RE = re.compile(r"(\d+)\s*-?(?:cores?|vcpus?)\b")
 ANY_RUNNER = "*"
 
 
-def parse_runner_watts(pairs):
+def parse_runner_watts(pairs: list[str]) -> RunnerWatts:
     """["180"] -> {"*": 180.0}; ["my-builder=180"] -> {"my-builder": 180.0}.
 
     A bare number is the common case and the whole point of the flag: nearly
@@ -392,8 +404,8 @@ def parse_runner_watts(pairs):
     exactly the case the user was trying to correct.
     """
     table = {}
-    for pair in pairs or []:
-        pair = pair.strip()
+    for raw in pairs or []:
+        pair = raw.strip()
         if not pair:
             continue
         label, sep, value = pair.partition("=")
@@ -413,7 +425,7 @@ def parse_runner_watts(pairs):
     return table
 
 
-def _declared_watts(labels_lower, overrides):
+def _declared_watts(labels_lower: list[str], overrides: RunnerWatts | None) -> float | None:
     """A --runner-watts figure for these labels, or None if none was declared.
 
     Exact label first, then a substring one (so `gpu=320` prices a family), then
@@ -429,7 +441,7 @@ def _declared_watts(labels_lower, overrides):
     return overrides.get(ANY_RUNNER)
 
 
-def _table_watts(labels_lower):
+def _table_watts(labels_lower: list[str]) -> float | None:
     """The built-in GitHub-hosted figure for these labels, or None.
 
     Checked in RUNNER_POWER_W's own order, first substring match wins, and
@@ -454,7 +466,7 @@ def _table_watts(labels_lower):
     return None
 
 
-def runner_power_w(labels, overrides=None):
+def runner_power_w(labels: list[str], overrides: RunnerWatts | None = None) -> float:
     """Map job labels (e.g. ["windows-latest"]) to a W draw, or None if unknown.
 
     Resolution order: an exact --runner-watts label, then a substring one (so
@@ -474,7 +486,7 @@ def runner_power_w(labels, overrides=None):
     return _table_watts(labels_lower)
 
 
-def _ran(job):
+def _ran(job: Json) -> bool:
     """Did this job actually execute, and so could it have recorded itself?
 
     A skipped job still appears in the jobs API with both timestamps set — and
@@ -486,13 +498,11 @@ def _ran(job):
     return job.get("conclusion") != "skipped"
 
 
-def _hours(start, end):
+def _hours(start: str, end: str) -> float:
     """Hours between two ISO timestamps, or 0 if either is missing."""
     if not (start and end):
         return 0.0
-    dt = datetime.fromisoformat(end.replace("Z", "+00:00")) - datetime.fromisoformat(
-        start.replace("Z", "+00:00")
-    )
+    dt = datetime.fromisoformat(end.replace("Z", "+00:00")) - datetime.fromisoformat(start.replace("Z", "+00:00"))
     return max(dt.total_seconds(), 0) / 3600
 
 
@@ -509,7 +519,9 @@ _MAX_PAGES = 20
 _PAGE_SIZE = 100
 
 
-def _get_pages(url, token, key, params=None):
+def _get_pages(
+    url: str, token: str | None, key: str, params: dict[str, str] | None = None
+) -> tuple[list[Json], int, bool]:
     """Every item under `key` across pages -> (items, total_count, hit_page_cap).
 
     The three GitHub listings this tool reads page identically, and the pieces
@@ -539,13 +551,13 @@ def _get_pages(url, token, key, params=None):
     return items, total, page > _MAX_PAGES
 
 
-def run_jobs(run_id, repo, token, api="https://api.github.com"):
+def run_jobs(run_id: str, repo: str, token: str | None, api: str = "https://api.github.com") -> list[Json]:
     """Fetch the jobs (with per-job runner labels/timing) for one run."""
     jobs, _, _ = _get_pages(f"{api}/repos/{repo}/actions/runs/{run_id}/jobs", token, "jobs")
     return jobs
 
 
-def _warn_if_truncated(kind, fetched, total, hit_page_cap):
+def _warn_if_truncated(kind: str, fetched: int, total: int, hit_page_cap: bool) -> None:
     """A silent shortfall understates the badge and looks like good news.
 
     Two different ceilings can cause it and they need different advice: our own
@@ -557,8 +569,7 @@ def _warn_if_truncated(kind, fetched, total, hit_page_cap):
     cause = (
         f"hit the local {_MAX_PAGES}-page cap, so raising _MAX_PAGES would help"
         if hit_page_cap
-        else "GitHub caps this listing at 1000 results; a narrower window is the "
-        "only way to see the rest"
+        else "GitHub caps this listing at 1000 results; a narrower window is the only way to see the rest"
     )
     log.warning(
         "only read %d of %d %s(s) — %s. The figure is an undercount.",
@@ -569,7 +580,7 @@ def _warn_if_truncated(kind, fetched, total, hit_page_cap):
     )
 
 
-def _list_runs(repo, token, api, since):
+def _list_runs(repo: str, token: str | None, api: str, since: str) -> list[Json]:
     """Every run in the window — cheap, 100 per request."""
     runs, total, hit_cap = _get_pages(
         f"{api}/repos/{repo}/actions/runs",
@@ -581,7 +592,9 @@ def _list_runs(repo, token, api, since):
     return runs
 
 
-def _run_kwh(run, repo, token, api, runner_watts, undeclared):
+def _run_kwh(  # noqa: PLR0913,PLR0917 — the run, where to fetch it, and the two tables it charges against
+    run: Json, repo: str, token: str | None, api: str, runner_watts: RunnerWatts | None, undeclared: dict[str, int]
+) -> tuple[float, int, float]:
     """Exact kWh for one run: sum its jobs, each at its own runner's draw.
 
     Costs one API call. Jobs on a runner this cannot price — self-hosted, or
@@ -594,9 +607,7 @@ def _run_kwh(run, repo, token, api, runner_watts, undeclared):
     # jobs and jobs with no timestamps are dropped there — counting them would
     # inflate both the denominator and the "N/M measured" ratio, and a skipped
     # job can never write a marker.
-    kwh, _seconds, jobs, guessed_kwh, _per_job, found = _api_run_detail(
-        run, repo, token, api, runner_watts
-    )
+    kwh, _seconds, jobs, guessed_kwh, _per_job, found = _api_run_detail(run, repo, token, api, runner_watts)
     # Tracked in energy, not job count: one long job on an unknown runner
     # undermines the total far more than a dozen short known ones.
     for key, count in found.items():
@@ -604,15 +615,16 @@ def _run_kwh(run, repo, token, api, runner_watts, undeclared):
     return kwh, jobs, guessed_kwh
 
 
-def ci_kwh_last_30d(
-    repo,
-    token,
-    api="https://api.github.com",
-    runner_watts=None,
-    use_artifacts=True,
-    grid_override=None,
-    eia_key=None,
-):
+def ci_kwh_last_30d(  # noqa: PLR0913 — the repo/token/api trio plus independent optional knobs
+    repo: str,
+    token: str | None,
+    *,
+    api: str = "https://api.github.com",
+    runner_watts: RunnerWatts | None = None,
+    use_artifacts: bool = True,
+    grid_override: float | None = None,
+    eia_key: str | None = None,
+) -> CiUsage:
     """kWh across the last 30 days of runs: one API call per run, summing each
     job at its own runner's power draw.
 
@@ -665,9 +677,7 @@ def ci_kwh_last_30d(
             used_markers += entry.markers
             total_jobs += entry.markers
         else:
-            run_kwh, run_jobs_seen, run_guessed = _run_kwh(
-                run, repo, token, api, runner_watts, undeclared
-            )
+            run_kwh, run_jobs_seen, run_guessed = _run_kwh(run, repo, token, api, runner_watts, undeclared)
             kwh += run_kwh
             grams += run_kwh * api_factor
             guessed_kwh += run_guessed
@@ -679,12 +689,10 @@ def ci_kwh_last_30d(
         trusted = sum(
             1
             for run in runs
-            if (entry := by_run.get(run.get("id")))
-            and entry.markers >= expected.get(run.get("workflow_id"), 0)
+            if (entry := by_run.get(run.get("id"))) and entry.markers >= expected.get(run.get("workflow_id"), 0)
         )
         log.info(
-            "%d/%d run(s) fully self-reported; %d priced from the API. "
-            "Instrument the remaining jobs to shrink that.",
+            "%d/%d run(s) fully self-reported; %d priced from the API. Instrument the remaining jobs to shrink that.",
             trusted,
             len(runs),
             len(runs) - trusted,
@@ -819,7 +827,7 @@ IPCC_FUEL_G_PER_KWH = {
 }
 
 
-def _energy_charts_factor(country, get=requests.get):
+def _energy_charts_factor(country: str, get: Getter = requests.get) -> float | None:
     """Latest absolute gCO2eq/kWh from Fraunhofer ISE. No key, 15-minute data."""
     response = get(
         "https://api.energy-charts.info/co2eq",
@@ -831,7 +839,7 @@ def _energy_charts_factor(country, get=requests.get):
     return float(values[-1]) if values else None
 
 
-def _uk_factor(get=requests.get):
+def _uk_factor(get: Getter = requests.get) -> float | None:
     """Great Britain, from NESO. No key, half-hourly."""
     response = get("https://api.carbonintensity.org.uk/intensity", timeout=20)
     response.raise_for_status()
@@ -842,7 +850,7 @@ def _uk_factor(get=requests.get):
     return float(value) if value is not None else None
 
 
-def _to_float(value):
+def _to_float(value: Any) -> float | None:
     """A number from a JSON field, or 0.0 when the field is not one.
 
     EIA sends its figures as JSON strings and occasionally as null; a row that
@@ -854,7 +862,7 @@ def _to_float(value):
         return 0.0
 
 
-def _eia_factor(balancing_authority, api_key, get=requests.get):
+def _eia_factor(balancing_authority: str, api_key: str, get: Getter = requests.get) -> float | None:
     """US, computed from the balancing authority's fuel mix.
 
     EIA publishes generation by fuel type, not carbon intensity, so this is the
@@ -898,7 +906,7 @@ def _eia_factor(balancing_authority, api_key, get=requests.get):
     return grams / mwh if mwh else None
 
 
-def _ci_api_snapshot(get=requests.get):
+def _ci_api_snapshot(get: Getter = requests.get) -> Json | None:
     """The whole world in one request, from https://ci-api.fabiocicerchia.it.
 
     Per-region lookups would be the obvious shape and are the wrong one: the
@@ -913,7 +921,7 @@ def _ci_api_snapshot(get=requests.get):
     return response.json()
 
 
-def _measured_reading(key, snapshot, now=None):
+def _measured_reading(key: str, snapshot: Json | None, now: float | None = None) -> Json | None:
     """The `_REGION_CI_API` reading for `key`, or None if it cannot be trusted.
 
     Three ways it cannot: the snapshot is not an object, it is older than
@@ -939,7 +947,7 @@ def _measured_reading(key, snapshot, now=None):
     return reading
 
 
-def _ci_api_factor(key, snapshot, now=None):
+def _ci_api_factor(key: str, snapshot: Json | None, now: float | None = None) -> float | None:
     """gCO2e/kWh for a `_REGION_CI_API` key, or None if the snapshot can't say.
 
     Reports `consumption_lifecycle`: upstream emissions plus the trade
@@ -965,7 +973,9 @@ def _ci_api_factor(key, snapshot, now=None):
     return None
 
 
-def live_region_factor(region, eia_key=None, get=requests.get, ci_api=None):
+def live_region_factor(
+    region: str, eia_key: str | None = None, get: Getter = requests.get, ci_api: Json | None = None
+) -> float:
     """A live gCO2e/kWh for an Azure region, or None if nothing covers it.
 
     Never raises: a grid lookup failing must not fail a badge refresh. Every
@@ -988,7 +998,7 @@ def live_region_factor(region, eia_key=None, get=requests.get, ci_api=None):
         ba = _REGION_EIA_BA.get(region)
         if ba and eia_key:
             return _eia_factor(ba, eia_key, get=get)
-    except Exception as exc:  # noqa: BLE001 — injected `get`, any failure must fall back
+    except Exception as exc:
         log.warning(
             "live grid lookup failed for %s (%s); using the annual average for that region",
             region,
@@ -1005,7 +1015,7 @@ class RegionFactors:
     wherever the plain function it replaced did.
     """
 
-    def __init__(self, eia_key=None, override=None, get=requests.get):
+    def __init__(self, eia_key: str | None = None, override: float | None = None, get: Getter = requests.get) -> None:
         self._eia_key = eia_key
         self._override = override
         self._get = get
@@ -1013,22 +1023,20 @@ class RegionFactors:
         # One-slot memo: [] means "not fetched", [None] means "tried and failed".
         self._snapshot = []
 
-    def _ci_api(self):
+    def _ci_api(self) -> Json | None:
         if not self._snapshot:
             try:
                 self._snapshot.append(_ci_api_snapshot(get=self._get))
-            except Exception as exc:  # noqa: BLE001 - a failed snapshot must not fail the refresh
+            except Exception as exc:
                 log.warning("ci-api snapshot failed (%s)", exc)
                 self._snapshot.append(None)
         return self._snapshot[0]
 
-    def factor_for(self, region):
+    def factor_for(self, region: str) -> float:
         if self._override is not None:
             return self._override
         if region not in self._cache:
-            live = live_region_factor(
-                region, eia_key=self._eia_key, get=self._get, ci_api=self._ci_api
-            )
+            live = live_region_factor(region, eia_key=self._eia_key, get=self._get, ci_api=self._ci_api)
             if live is not None:
                 log.info(
                     "%s live at %.0f gCO2e/kWh (annual average is %.0f)",
@@ -1106,7 +1114,7 @@ IDLE_FRACTION = 1.76 / 8.18
 LOAD_FACTOR = 1.0
 
 
-def apply_load_factor(watts, load_factor=None):
+def apply_load_factor(watts: float, load_factor: float | None = None) -> float:
     """Scale a full-load wattage to a stated average CPU utilisation.
 
     Only the variable part scales: a machine at 0% CPU still draws its idle
@@ -1122,7 +1130,7 @@ def apply_load_factor(watts, load_factor=None):
     return round(watts * (IDLE_FRACTION + (1 - IDLE_FRACTION) * load_factor), 2)
 
 
-def watts_from_specs(vcpu, mem_mb, platform="ubuntu"):
+def watts_from_specs(vcpu: int, mem_mb: int, platform: str = "ubuntu") -> float:
     """Power draw from a machine's CPU count, memory and platform.
 
     The single pricing law. Both routes into it — a runner recognised by its
@@ -1154,12 +1162,10 @@ def watts_from_specs(vcpu, mem_mb, platform="ubuntu"):
     per_vcpu = (baseline_w - WATTS_BASE - WATTS_PER_GB * BASELINE_MEM_GB) / BASELINE_VCPU
     # Rounded so the two routes compare equal rather than differing in float
     # noise, and so the log prints a sane number.
-    return apply_load_factor(
-        round(WATTS_BASE + per_vcpu * vcpu + WATTS_PER_GB * (mem_mb / 1024), 2)
-    )
+    return apply_load_factor(round(WATTS_BASE + per_vcpu * vcpu + WATTS_PER_GB * (mem_mb / 1024), 2))
 
 
-def parse_carbon_artifact(name):
+def parse_carbon_artifact(name: str) -> tuple[float, int, int, str, str] | None:
     """ "carbon.v1.142.4.16384.ubuntu.build" -> (142.0 s, 4 vcpu, 16384 MB, "ubuntu").
 
     None for anything that is not one of ours, so a repo's normal build
@@ -1172,16 +1178,16 @@ def parse_carbon_artifact(name):
     return (float(seconds), int(vcpu), int(mem_mb), platform, region)
 
 
-def list_artifacts(repo, token, api="https://api.github.com"):
+def list_artifacts(repo: str, token: str | None, api: str = "https://api.github.com") -> list[Json]:
     """Every non-expired artifact, 100 per request."""
-    artifacts, total, hit_cap = _get_pages(
-        f"{api}/repos/{repo}/actions/artifacts", token, "artifacts"
-    )
+    artifacts, total, hit_cap = _get_pages(f"{api}/repos/{repo}/actions/artifacts", token, "artifacts")
     _warn_if_truncated("artifact", len(artifacts), total, hit_cap)
     return artifacts
 
 
-def _expected_markers(runs, by_run, repo, token, api):
+def _expected_markers(
+    runs: list[Json], by_run: dict[str, Any], repo: str, token: str | None, api: str
+) -> dict[str, int]:
     """True job count per workflow, sampled from one run of each.
 
     Needed because a marker only proves *a* job reported, not that all of them
@@ -1211,20 +1217,19 @@ def _expected_markers(runs, by_run, repo, token, api):
         if workflow_id not in seen:
             seen.add(workflow_id)
             try:
-                sampled[workflow_id] = sum(
-                    1 for j in run_jobs(run["id"], repo, token, api) if _ran(j)
-                )
-            except Exception:  # noqa: BLE001 — injected `get`, any failure must fall back
+                sampled[workflow_id] = sum(1 for j in run_jobs(run["id"], repo, token, api) if _ran(j))
+            except Exception:
                 sampled[workflow_id] = 0  # unreachable sample; the observed bound stands
-    return {
-        workflow_id: max(observed.get(workflow_id, 0), sampled.get(workflow_id, 0))
-        for workflow_id in observed
-    }
+    return {workflow_id: max(observed.get(workflow_id, 0), sampled.get(workflow_id, 0)) for workflow_id in observed}
 
 
 def artifact_kwh_by_run(
-    repo, token, api="https://api.github.com", runner_watts=None, factor_for=None
-):
+    repo: str,
+    token: str | None,
+    api: str = "https://api.github.com",
+    runner_watts: RunnerWatts | None = None,
+    factor_for: Callable[[str], float] | None = None,
+) -> tuple[dict[str, Any], int]:
     """{run_id: RunTotals} for runs whose jobs recorded themselves.
 
     Keyed by run because instrumentation arrives one workflow file at a time,
@@ -1290,8 +1295,7 @@ def artifact_kwh_by_run(
 
 Divergence = namedtuple(
     "Divergence",
-    "run_id workflow_id jobs marker_seconds api_seconds marker_kwh api_kwh "
-    "marker_grams api_grams matched_jobs",
+    "run_id workflow_id jobs marker_seconds api_seconds marker_kwh api_kwh marker_grams api_grams matched_jobs",
 )
 
 Reconciliation = namedtuple(
@@ -1301,7 +1305,7 @@ Reconciliation = namedtuple(
 )
 
 
-def carbon_artifact_slug(name):
+def carbon_artifact_slug(name: str) -> str | None:
     """The job slug a marker carries, or None.
 
     Kept separate from parse_carbon_artifact rather than widening its tuple:
@@ -1315,7 +1319,7 @@ def carbon_artifact_slug(name):
     return rest or None
 
 
-def job_slug(name):
+def job_slug(name: str) -> str:
     """An API job name reduced the way the reporting action reduces it.
 
     Best effort, and deliberately so: the sanitising happens in the action that
@@ -1327,7 +1331,9 @@ def job_slug(name):
     return slug or None
 
 
-def _api_run_detail(run, repo, token, api, runner_watts):
+def _api_run_detail(
+    run: Json, repo: str, token: str | None, api: str, runner_watts: RunnerWatts | None
+) -> tuple[float, float, int, float, dict[str, Any], dict[str, int]]:
     """(kwh, seconds, jobs, guessed_kwh, per_job) for one run, from the API.
 
     Same arithmetic as _run_kwh — which now calls this — plus the seconds and
@@ -1365,14 +1371,15 @@ def _api_run_detail(run, repo, token, api, runner_watts):
     return kwh, seconds, jobs, guessed_kwh, per_job, undeclared
 
 
-def reconcile_last_30d(
-    repo,
-    token,
-    api="https://api.github.com",
-    runner_watts=None,
-    grid_override=None,
-    eia_key=None,
-):
+def reconcile_last_30d(  # noqa: PLR0913 — the repo/token/api trio plus independent optional knobs
+    repo: str,
+    token: str | None,
+    *,
+    api: str = "https://api.github.com",
+    runner_watts: RunnerWatts | None = None,
+    grid_override: float | None = None,
+    eia_key: str | None = None,
+) -> Reconciliation:
     """Run BOTH paths over the same runs and decompose where they disagree.
 
     Expensive on purpose: it prices every run from the API *and* reads every
@@ -1398,9 +1405,7 @@ def reconcile_last_30d(
         # not what any of the three terms above is about.
         if entry is None or entry[2] < want:
             continue
-        a_kwh, a_seconds, a_jobs, _, a_per_job, a_undeclared = _api_run_detail(
-            run, repo, token, api, runner_watts
-        )
+        a_kwh, a_seconds, a_jobs, _, a_per_job, a_undeclared = _api_run_detail(run, repo, token, api, runner_watts)
         for k, v in a_undeclared.items():
             undeclared[k] = undeclared.get(k, 0) + v
         m_slugs = marker_seconds_by_run.get(run.get("id"), {})
@@ -1458,7 +1463,7 @@ def reconcile_last_30d(
     )
 
 
-def _marker_seconds_by_run(repo, token, api="https://api.github.com"):
+def _marker_seconds_by_run(repo: str, token: str | None, api: str = "https://api.github.com") -> dict[str, float]:
     """{run_id: {slug: seconds}} — the raw durations the markers carry.
 
     Separate from artifact_kwh_by_run because that one has already priced them,
@@ -1484,11 +1489,11 @@ def _marker_seconds_by_run(repo, token, api="https://api.github.com"):
     return out
 
 
-def _pct(part, whole):
+def _pct(part: float, whole: float) -> float:
     return (100 * part / whole) if whole else 0.0
 
 
-def format_reconciliation(rec, limit=15):
+def format_reconciliation(rec: Json, limit: int = 15) -> str:
     """The report. Per run, then the aggregate, then the decomposition."""
     if not rec.rows:
         return (
@@ -1561,12 +1566,12 @@ def format_reconciliation(rec, limit=15):
     return "\n".join(out)
 
 
-def rows_by_gap(rows):
+def rows_by_gap(rows: list[Any]) -> list[Any]:
     """Rows worth printing: a run where both paths agree exactly says nothing."""
-    return [r for r in rows if abs(r.api_grams - r.marker_grams) > 1e-9]
+    return [r for r in rows if abs(r.api_grams - r.marker_grams) > RECONCILE_EPSILON_G]
 
 
-def _warn_undeclared_runners(undeclared):
+def _warn_undeclared_runners(undeclared: dict[str, int]) -> None:
     """Name the labels, not just a count — the label *is* the fix, since it's
     what the user passes back in --runner-watts."""
     for labels, count in sorted(undeclared.items(), key=lambda kv: -kv[1]):
@@ -1591,7 +1596,9 @@ def _warn_undeclared_runners(undeclared):
         )
 
 
-def grams_co2e(minutes, grid_intensity=DEFAULT_GRID_INTENSITY, watts=DEFAULT_RUNNER_POWER_W):
+def grams_co2e(
+    minutes: float, grid_intensity: float = DEFAULT_GRID_INTENSITY, watts: float = DEFAULT_RUNNER_POWER_W
+) -> float:
     """Convert CI runner-minutes to gCO2e for the given grid intensity.
 
     `watts` honours a declared blanket --runner-watts: without it, an offline
@@ -1607,18 +1614,18 @@ def grams_co2e(minutes, grid_intensity=DEFAULT_GRID_INTENSITY, watts=DEFAULT_RUN
     return minutes * (watts / 1000 / 60) * grid_intensity
 
 
-def grams_co2e_kwh(kwh, grid_intensity=DEFAULT_GRID_INTENSITY):
+def grams_co2e_kwh(kwh: float, grid_intensity: float = DEFAULT_GRID_INTENSITY) -> float:
     """Convert kWh to gCO2e for the given grid intensity."""
     return kwh * grid_intensity
 
 
 def gitlab_kwh_last_30d(
-    project,
-    token,
-    api="https://gitlab.com/api/v4",
-    runner_watts=None,
-    grid_override=None,
-):
+    project: str,
+    token: str | None,
+    api: str = "https://gitlab.com/api/v4",
+    runner_watts: RunnerWatts | None = None,
+    grid_override: float | None = None,
+) -> CiUsage:
     """Sum kWh across the last 30 days of GitLab CI jobs.
 
     GitLab's job list already carries per-job `duration` and `runner` info,
@@ -1687,9 +1694,17 @@ def gitlab_kwh_last_30d(
     return CiUsage(kwh, kwh * factor, 0, total_jobs, 0.0, guessed_kwh)
 
 
+def _mean_reading(readings: list[float]) -> float:
+    """The mean of a day's readings, or a refusal to average nothing."""
+    if not readings:
+        msg = "history returned no usable readings"
+        raise ValueError(msg)
+    return sum(readings) / len(readings)
+
+
 def live_grid_intensity(
-    zone, token=None, api="https://api.electricitymap.org/v3", get=requests.get
-):
+    zone: str, token: str | None = None, api: str = "https://api.electricitymap.org/v3", get: Getter = requests.get
+) -> float | None:
     """A zone's recent mean carbon factor (gCO2eq/kWh) from Electricity Maps.
 
     The mean of the past 24 hours, not the instantaneous reading. A single
@@ -1725,13 +1740,10 @@ def live_grid_intensity(
             for h in response.json().get("history", [])
             if h.get("carbonIntensity") is not None
         ]
-        if readings:
-            return sum(readings) / len(readings)
-        raise ValueError("history returned no usable readings")
-    except Exception as exc:  # noqa: BLE001 — injected `get`, any failure must fall back
+        return _mean_reading(readings)
+    except Exception as exc:
         log.warning(
-            "24h grid history unavailable (%s); using the instantaneous "
-            "reading, which prices a month at one moment",
+            "24h grid history unavailable (%s); using the instantaneous reading, which prices a month at one moment",
             exc,
         )
 
@@ -1745,9 +1757,11 @@ def live_grid_intensity(
     return float(response.json()["carbonIntensity"])
 
 
-def format_grams(grams):
+def format_grams(grams: float) -> str:
     """Format gCO2e as a human-readable per-month string (g or kg)."""
-    return f"{grams / 1000:.1f} kgCO2e/mo" if grams >= 1000 else f"{grams:.0f} gCO2e/mo"
+    if grams >= GRAMS_PER_KILOGRAM:
+        return f"{grams / GRAMS_PER_KILOGRAM:.1f} kgCO2e/mo"
+    return f"{grams:.0f} gCO2e/mo"
 
 
 # Share of energy that must be directly measured before the figure is called
@@ -1760,7 +1774,7 @@ MEASURED_THRESHOLD = 0.95
 ROUGH_THRESHOLD = 0.25
 
 
-def confidence(usage):
+def confidence(usage: Json | None) -> str:
     """How far the total can be trusted, in one word.
 
     Driven by the share of *energy*, not the share of jobs: a single long job on
@@ -1788,7 +1802,7 @@ def confidence(usage):
     return "estimated"
 
 
-def endpoint_json(grams, usage=None):
+def endpoint_json(grams: float, usage: Json | None = None) -> Json:
     """Build the Shields.io endpoint JSON payload for the badge.
 
     The message carries how the figure was arrived at, because "113 gCO2e/mo"
@@ -1814,7 +1828,9 @@ def endpoint_json(grams, usage=None):
     }
 
 
-def _gitlab_estimate(args, token, runner_watts, grid_intensity):
+def _gitlab_estimate(
+    args: argparse.Namespace, token: str | None, runner_watts: RunnerWatts | None, grid_intensity: float
+) -> tuple[CiUsage, float, str]:
     """The GitLab branch of estimate() -> (usage, grams, detail)."""
     usage = gitlab_kwh_last_30d(
         args.repo,
@@ -1826,7 +1842,9 @@ def _gitlab_estimate(args, token, runner_watts, grid_intensity):
     return usage, usage.grams, f"{usage.kwh:.3f} kWh/30d, confidence: {confidence(usage)}"
 
 
-def _github_estimate(args, token, runner_watts, grid_intensity):
+def _github_estimate(
+    args: argparse.Namespace, token: str | None, runner_watts: RunnerWatts | None, grid_intensity: float
+) -> tuple[CiUsage, float, str]:
     """The GitHub branch of estimate() -> (usage, grams, detail).
 
     The detail line carries more than GitLab's because only GitHub has the
@@ -1853,7 +1871,7 @@ def _github_estimate(args, token, runner_watts, grid_intensity):
     return usage, usage.grams, detail
 
 
-def estimate(args, token):
+def estimate(args: argparse.Namespace, token: str | None) -> tuple[CiUsage, float, str]:
     """Run one carbon estimate for the parsed CLI args. Returns (endpoint_json, detail)."""
     _ESTIMATED_USED.clear()
     # None means "nothing declared, use each job's own region where it reported
@@ -1890,13 +1908,20 @@ class BadgeHandler(http.server.BaseHTTPRequestHandler):
     a cache of one request.
     """
 
-    def __init__(self, compute, ttl, cache, *args, **kwargs):
+    def __init__(
+        self,
+        compute: Callable[[], Json],
+        ttl: int,
+        cache: dict[str, Any],
+        *args: Any,
+        **kwargs: Any,
+    ) -> None:
         self._compute = compute
         self._ttl = ttl
         self._cache = cache
         super().__init__(*args, **kwargs)
 
-    def do_GET(self):
+    def do_GET(self) -> None:
         if self.path not in ("/", "/badge.json"):
             self.send_response(404)
             self.end_headers()
@@ -1911,11 +1936,11 @@ class BadgeHandler(http.server.BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(self._cache["body"])
 
-    def log_message(self, *args):
+    def log_message(self, *args: Any) -> None:
         pass
 
 
-def badge_handler(compute, ttl=300):
+def badge_handler(compute: Callable[[], Json], ttl: int = 300) -> type[http.server.BaseHTTPRequestHandler]:
     """A BadgeHandler bound to one compute() and one shared cache."""
     # `t=None` means "never computed yet" — not 0.0, since time.monotonic()'s
     # epoch is arbitrary (e.g. near-zero shortly after a container boots), so
@@ -1929,17 +1954,17 @@ def badge_handler(compute, ttl=300):
 # inside one is unreachable from outside it. That does mean a process holding a
 # CI token is listening on every interface of whatever host runs it, so --bind
 # exists for anyone running it directly on a machine that has others.
-DEFAULT_BIND = "0.0.0.0"  # nosec B104 — deliberate, see above
+DEFAULT_BIND = "0.0.0.0"  # noqa: S104 — deliberate, see above
 
 
-def _logged_estimate(args, token):
+def _logged_estimate(args: argparse.Namespace, token: str | None) -> tuple[CiUsage, float, str]:
     """One estimate, with the same one-line summary the CLI prints."""
     badge, detail = estimate(args, token)
     log.info("%s ≈ %s", detail, badge["message"])
     return badge
 
 
-def serve(port, args, token, ttl=300, bind=DEFAULT_BIND):
+def serve(port: int, args: argparse.Namespace, token: str | None, ttl: int = 300, bind: str = DEFAULT_BIND) -> None:
     """Serve the badge JSON at /badge.json on bind:port.
 
     Recomputes at most once every `ttl` seconds (default 5 min) so repeated
@@ -1953,10 +1978,12 @@ def serve(port, args, token, ttl=300, bind=DEFAULT_BIND):
 
     log.info("serving /badge.json on %s:%d (ttl %ds)", bind, port, ttl)
     handler = badge_handler(lambda: _logged_estimate(args, token), ttl)
+    # 0.0.0.0 by default because the usual deployment is a container whose
+    # port is published; --bind exists for anyone who wants loopback.
     http.server.HTTPServer((bind, port), handler).serve_forever()
 
 
-def _build_parser():
+def _build_parser() -> argparse.ArgumentParser:
     """The CLI surface: every flag, its default and its help text."""
     parser = argparse.ArgumentParser(
         prog="carbon-badge",
@@ -2076,14 +2103,13 @@ def _build_parser():
         default=DEFAULT_BIND,
         metavar="ADDR",
         help=(
-            f"interface for --serve (default: {DEFAULT_BIND}, which a container needs; "
-            "use 127.0.0.1 on a shared host)"
+            f"interface for --serve (default: {DEFAULT_BIND}, which a container needs; use 127.0.0.1 on a shared host)"
         ),
     )
     return parser
 
 
-def main(argv=None):
+def main(argv: list[str] | None = None) -> int:
     """CLI entry point: parse args, estimate emissions, emit badge JSON."""
     # stderr, and the tool's name in the format rather than in every message.
     logging.basicConfig(level=logging.INFO, format="carbon-badge: %(message)s")
@@ -2092,7 +2118,10 @@ def main(argv=None):
 
     if not 0 <= args.load_factor <= 1:
         parser.error("--load-factor must be between 0 and 1")
-    global LOAD_FACTOR
+    # The load factor is a property of the run, read by functions several
+    # layers down that take no config object. Threading one through purely to
+    # carry a single float would be a larger change than the rule prevents.
+    global LOAD_FACTOR  # noqa: PLW0603
     LOAD_FACTOR = args.load_factor
 
     # Validated up front so a typo fails the command rather than surfacing as a
@@ -2128,13 +2157,13 @@ def main(argv=None):
             grid_override=grid,
             eia_key=getattr(args, "eia_key", None) or os.environ.get("EIA_API_KEY"),
         )
-        print(format_reconciliation(rec))
+        print(format_reconciliation(rec))  # noqa: T201 — the tool's output
         return 0
 
     badge, detail = estimate(args, token)
     json.dump(badge, sys.stdout, indent=2)
     # Not a diagnostic: a blank line separating the JSON from the summary.
-    print(file=sys.stderr)
+    print(file=sys.stderr)  # noqa: T201 — the tool's output
     log.info("%s ≈ %s", detail, badge["message"])
     return 0
 
