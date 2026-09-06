@@ -146,7 +146,7 @@ class Response(Protocol):
 
     def raise_for_status(self) -> None: ...
 
-    def json(self) -> Any: ...
+    def json(self) -> Any: ...  # noqa: ANN401 — requests.Response.json() is Any
 
 
 class Getter(Protocol):

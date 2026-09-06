@@ -24,6 +24,12 @@ jobs:
         run: pip install --require-hashes -r requirements-dev.txt
       - name: Ruff
         run: ruff check .
+      # FC-PY-003. Runs here rather than in pre-commit because a type checker
+      # with no dependencies installed reports every import as unresolved and
+      # every value that came through one as unknown -- noise that says nothing
+      # about this code.
+      - name: Basedpyright
+        run: basedpyright
 
   test:
     runs-on: ubuntu-latest
