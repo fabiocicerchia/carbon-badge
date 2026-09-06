@@ -91,6 +91,10 @@ repos:
         entry: npx --yes @biomejs/biome@2.5.7 ci --files-ignore-unknown=true --no-errors-on-unmatched
         language: system
         types_or: [javascript, jsx, ts, tsx, css]
+        # One invocation, not one per batch: npx writes the platform binary on
+        # first use, and a second process spawning it while the first still has
+        # it open dies with ETXTBSY. That is what the CI runs hit.
+        require_serial: true
 
   - repo: https://github.com/hadolint/hadolint
     rev: 2eece55955ced00200be9729e9728cb7dacca505  # v2.15.1
