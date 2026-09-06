@@ -25,8 +25,9 @@ build: ## Build sdist and wheel
 run: ## Run carbon-badge
 	carbon-badge --help
 
-format: ## Rewrite the sources to canonical form
+format: ## Rewrite the sources to canonical form — Python and JavaScript
 	ruff format .
+	npx --yes @biomejs/biome@2.5.7 format --write .
 
 analyze: ## Type-check the package
 	basedpyright
