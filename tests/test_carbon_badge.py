@@ -7,13 +7,15 @@ import re
 import threading
 import urllib.error
 import urllib.request
+from collections.abc import Callable
 from datetime import datetime, timedelta, timezone
-from typing import NoReturn
+from typing import Any, NoReturn
 
 import pytest
 
 import carbon_badge
 from carbon_badge import (
+    Json,
     endpoint_json,
     format_grams,
     grams_co2e,
@@ -112,7 +114,7 @@ def test_runner_watts_overrides_price_custom_and_self_hosted_labels() -> None:
 
 
 @pytest.mark.parametrize("bad", ["no-equals", "=100", "label=", "label=abc", "label=0", "label=-5"])
-def test_parse_runner_watts_rejects_malformed_input(bad) -> None:
+def test_parse_runner_watts_rejects_malformed_input(bad: str) -> None:
     """A typo'd override that silently did nothing would leave the badge wrong
     in exactly the case the user was trying to fix."""
     # Every rejection names the input that caused it -- which is the point of
@@ -136,10 +138,16 @@ def test_unknown_runners_are_charged_not_skipped(
         }
     ]
 
-    def fake_get(url, params=None, headers=None, timeout=None):
+    def fake_get(
+        url: str,
+        *,
+        params: dict[str, Any] | None = None,
+        headers: dict[str, str] | None = None,
+        timeout: float | None = None,
+    ) -> _FakeResponse:
         if "/jobs" in url:
             return _FakeResponse({"jobs": jobs})
-        return _FakeResponse({"workflow_runs": runs if params["page"] == 1 else []})
+        return _FakeResponse({"workflow_runs": runs if _page(params) == 1 else []})
 
     monkeypatch.setattr(carbon_badge.requests, "get", fake_get)
     with caplog.at_level(logging.WARNING, logger="carbon-badge"):
@@ -169,7 +177,13 @@ def test_endpoint_schema() -> None:
     assert data["label"] == "CI carbon"
 
 
-def _usage(kwh, measured_jobs=0, total_jobs=0, measured_kwh=0.0, guessed_kwh=0.0):
+def _usage(
+    kwh: float,
+    measured_jobs: int = 0,
+    total_jobs: int = 0,
+    measured_kwh: float = 0.0,
+    guessed_kwh: float = 0.0,
+) -> carbon_badge.CiUsage:
     grams = kwh * carbon_badge.DEFAULT_GRID_INTENSITY
     return carbon_badge.CiUsage(kwh, grams, measured_jobs, total_jobs, measured_kwh, guessed_kwh)
 
@@ -181,7 +195,13 @@ def test_pagination_cap_is_reported_not_silent(
     quiet month. Same reasoning as the closed-PR search cap."""
     full_page = [{"id": i, "run_started_at": None, "updated_at": None} for i in range(100)]
 
-    def fake_get(url, params=None, headers=None, timeout=None):
+    def fake_get(
+        url: str,
+        *,
+        params: dict[str, Any] | None = None,
+        headers: dict[str, str] | None = None,
+        timeout: float | None = None,
+    ) -> _FakeResponse:
         return _FakeResponse({"workflow_runs": full_page, "total_count": 9999})
 
     monkeypatch.setattr(carbon_badge.requests, "get", fake_get)
@@ -193,7 +213,13 @@ def test_pagination_cap_is_reported_not_silent(
 
 
 def test_no_warning_when_everything_was_read(monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture) -> None:
-    def fake_get(url, params=None, headers=None, timeout=None):
+    def fake_get(
+        url: str,
+        *,
+        params: dict[str, Any] | None = None,
+        headers: dict[str, str] | None = None,
+        timeout: float | None = None,
+    ) -> _FakeResponse:
         return _FakeResponse({"workflow_runs": [{"id": 1}], "total_count": 1})
 
     monkeypatch.setattr(carbon_badge.requests, "get", fake_get)
@@ -221,12 +247,18 @@ def test_declaring_an_unknown_runner_clears_the_guess(monkeypatch: pytest.Monkey
     runs = [{"id": 1}]
     jobs = [_job(["ubuntu-latest"], 2)] * 9 + [_job(["my-builder"], 600)]
 
-    def fake_get(url, params=None, headers=None, timeout=None):
+    def fake_get(
+        url: str,
+        *,
+        params: dict[str, Any] | None = None,
+        headers: dict[str, str] | None = None,
+        timeout: float | None = None,
+    ) -> _FakeResponse:
         if "/jobs" in url:
             return _FakeResponse({"jobs": jobs})
         if "/artifacts" in url:
             return _FakeResponse({"artifacts": []})
-        return _FakeResponse({"workflow_runs": runs if params["page"] == 1 else []})
+        return _FakeResponse({"workflow_runs": runs if _page(params) == 1 else []})
 
     monkeypatch.setattr(carbon_badge.requests, "get", fake_get)
 
@@ -277,14 +309,21 @@ def test_badge_grams_always_cover_all_ci() -> None:
     assert fully["message"].startswith("1.5 kgCO2e/mo")
 
 
+def _page(params: dict[str, Any] | None) -> int:
+    """The page number a fake was asked for; 1 when the caller sent none."""
+    return int(params["page"]) if params and "page" in params else 1
+
+
 class _FakeResponse:
-    def __init__(self, payload) -> None:
+    """The two calls carbon_badge makes on a response, and nothing else."""
+
+    def __init__(self, payload: Any) -> None:
         self._payload = payload
 
     def raise_for_status(self) -> None:
         pass
 
-    def json(self):
+    def json(self) -> Any:
         return self._payload
 
 
@@ -358,7 +397,7 @@ def test_watts_from_specs_reproduces_the_known_runner() -> None:
     assert carbon_badge.watts_from_specs(64, 262144) > 100
 
 
-def _artifact(name, run_id, created=None, expired=False):
+def _artifact(name: str, run_id: int, created: str | None = None, expired: bool = False) -> Json:
     return {
         "name": name,
         "workflow_run": {"id": run_id},
@@ -367,13 +406,21 @@ def _artifact(name, run_id, created=None, expired=False):
     }
 
 
-def _serve(artifacts, runs, calls, jobs_per_run=1):
+def _serve(
+    artifacts: list[Json], runs: list[Json], calls: list[str], jobs_per_run: int = 1
+) -> Callable[..., _FakeResponse]:
     """`jobs_per_run` is what the API reports a run really had — the
     denominator the partial-run check compares marker counts against."""
 
-    def fake_get(url, params=None, headers=None, timeout=None):
+    def fake_get(
+        url: str,
+        *,
+        params: dict[str, Any] | None = None,
+        headers: dict[str, str] | None = None,
+        timeout: float | None = None,
+    ) -> _FakeResponse:
         calls.append(url)
-        page = params["page"] if params else 1
+        page = _page(params)
         if "/artifacts" in url:
             return _FakeResponse({"artifacts": artifacts if page == 1 else []})
         if "/jobs" in url:
@@ -386,7 +433,7 @@ def _serve(artifacts, runs, calls, jobs_per_run=1):
 def test_artifact_kwh_by_run_keys_by_run_and_downloads_nothing(monkeypatch: pytest.MonkeyPatch) -> None:
     """Keyed by run because instrumentation lands one workflow at a time, so
     the answer is almost never all-or-nothing."""
-    calls = []
+    calls: list[str] = []
     artifacts = [
         _artifact("carbon.v1.3600.2.7168.ubuntu.eastus.build", 11),
         _artifact("carbon.v1.1800.2.7168.ubuntu.eastus.test", 11),  # same run, second job
@@ -415,7 +462,7 @@ def test_partial_instrumentation_tops_up_from_the_api(monkeypatch: pytest.Monkey
         _artifact("carbon.v1.3600.2.7168.ubuntu.eastus.a", 1),
         _artifact("carbon.v1.3600.2.7168.ubuntu.eastus.b", 2),
     ]
-    calls = []
+    calls: list[str] = []
     monkeypatch.setattr(carbon_badge.requests, "get", _serve(artifacts, runs, calls))
 
     usage = carbon_badge.ci_kwh_last_30d("o/r", token=None)
@@ -439,7 +486,7 @@ def test_full_coverage_costs_one_sample_per_workflow(monkeypatch: pytest.MonkeyP
     now = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
     runs = [{"id": i, "workflow_id": 7, "run_started_at": now, "updated_at": now} for i in (1, 2, 3)]
     artifacts = [_artifact(f"carbon.v1.3600.2.7168.ubuntu.eastus.j{i}", i) for i in (1, 2, 3)]
-    calls = []
+    calls: list[str] = []
     monkeypatch.setattr(carbon_badge.requests, "get", _serve(artifacts, runs, calls))
 
     usage = carbon_badge.ci_kwh_last_30d("o/r", token=None)
@@ -453,7 +500,7 @@ def test_ignore_self_reported_does_not_consult_artifacts(monkeypatch: pytest.Mon
     otherwise the two paths cannot be reconciled against each other."""
     now = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
     runs = [{"id": 1, "workflow_id": 7, "run_started_at": now, "updated_at": now}]
-    calls = []
+    calls: list[str] = []
     monkeypatch.setattr(
         carbon_badge.requests,
         "get",
@@ -491,34 +538,7 @@ def test_declared_watts_still_beat_the_model(monkeypatch: pytest.MonkeyPatch) ->
     assert round(by_run[1][0], 9) == round(200.0 / 1000, 9)
 
 
-def _fake_github(runs, jobs_by_run):
-    """Serve the runs list and each run's jobs, counting the calls made."""
-    calls = {"jobs": 0}
-
-    def fake_get(url, params=None, headers=None, timeout=None):
-        if "/jobs" in url:
-            calls["jobs"] += 1
-            run_id = int(url.split("/runs/")[1].split("/jobs")[0])
-            return _FakeResponse({"jobs": jobs_by_run[run_id]})
-        page = params["page"]
-        return _FakeResponse({"workflow_runs": runs if page == 1 else []})
-
-    return fake_get, calls
-
-
-def _run(run_id, minutes, workflow_id=1):
-    """A run whose wall-clock spans `minutes`."""
-    start = datetime(2026, 8, 1, 0, 0, tzinfo=timezone.utc)
-    end = start + timedelta(minutes=minutes)
-    return {
-        "id": run_id,
-        "workflow_id": workflow_id,
-        "run_started_at": start.isoformat().replace("+00:00", "Z"),
-        "updated_at": end.isoformat().replace("+00:00", "Z"),
-    }
-
-
-def _job(labels, minutes):
+def _job(labels: list[str], minutes: float) -> Json:
     start = datetime(2026, 8, 1, 0, 0, tzinfo=timezone.utc)
     end = start + timedelta(minutes=minutes)
     return {
@@ -537,8 +557,14 @@ def test_gitlab_kwh_charges_self_managed_runners(monkeypatch: pytest.MonkeyPatch
         {"created_at": now, "duration": 3600, "runner": {"is_shared": False}},
     ]
 
-    def fake_get(url, params=None, headers=None, timeout=None):
-        return _FakeResponse(jobs_page1 if params["page"] == 1 else [])
+    def fake_get(
+        url: str,
+        *,
+        params: dict[str, Any] | None = None,
+        headers: dict[str, str] | None = None,
+        timeout: float | None = None,
+    ) -> _FakeResponse:
+        return _FakeResponse(jobs_page1 if _page(params) == 1 else [])
 
     monkeypatch.setattr(carbon_badge.requests, "get", fake_get)
     usage = carbon_badge.gitlab_kwh_last_30d("group/project", token=None)
@@ -560,8 +586,14 @@ def test_gitlab_runner_watts_matches_on_tags(monkeypatch: pytest.MonkeyPatch) ->
         }
     ]
 
-    def fake_get(url, params=None, headers=None, timeout=None):
-        return _FakeResponse(jobs_page1 if params["page"] == 1 else [])
+    def fake_get(
+        url: str,
+        *,
+        params: dict[str, Any] | None = None,
+        headers: dict[str, str] | None = None,
+        timeout: float | None = None,
+    ) -> _FakeResponse:
+        return _FakeResponse(jobs_page1 if _page(params) == 1 else [])
 
     monkeypatch.setattr(carbon_badge.requests, "get", fake_get)
     usage = carbon_badge.gitlab_kwh_last_30d("group/project", token=None, runner_watts={"big-metal": 200.0})
@@ -573,7 +605,14 @@ def test_gitlab_runner_watts_matches_on_tags(monkeypatch: pytest.MonkeyPatch) ->
 def test_live_grid_intensity_injected_client() -> None:
     """live_grid_intensity reads carbonIntensity via the injected `get` callable."""
 
-    def fake_get(url, params=None, headers=None, timeout=None):
+    def fake_get(
+        url: str,
+        *,
+        params: dict[str, Any] | None = None,
+        headers: dict[str, str] | None = None,
+        timeout: float | None = None,
+    ) -> _FakeResponse:
+        assert params is not None
         assert params["zone"] == "SE"
         return _FakeResponse({"carbonIntensity": 42.5})
 
@@ -624,8 +663,14 @@ def test_a_partly_instrumented_run_does_not_lose_its_other_jobs(monkeypatch: pyt
     jobs = [_job(["ubuntu-latest"], 60), _job(["ubuntu-latest"], 600)]
     marker = _artifact("carbon.v1.3600.4.16384.ubuntu.eastus.short", 1)
 
-    def fake_get(url, params=None, headers=None, timeout=None):
-        page = params["page"] if params else 1
+    def fake_get(
+        url: str,
+        *,
+        params: dict[str, Any] | None = None,
+        headers: dict[str, str] | None = None,
+        timeout: float | None = None,
+    ) -> _FakeResponse:
+        page = _page(params)
         if "/artifacts" in url:
             return _FakeResponse({"artifacts": [marker] if page == 1 else []})
         if "/jobs" in url:
@@ -649,8 +694,14 @@ def test_markers_are_not_double_counted_when_a_run_is_topped_up(monkeypatch: pyt
     runs = [{"id": 1, "workflow_id": 7, "run_started_at": now, "updated_at": now}]
     jobs = [_job(["ubuntu-latest"], 60), _job(["ubuntu-latest"], 60)]
 
-    def fake_get(url, params=None, headers=None, timeout=None):
-        page = params["page"] if params else 1
+    def fake_get(
+        url: str,
+        *,
+        params: dict[str, Any] | None = None,
+        headers: dict[str, str] | None = None,
+        timeout: float | None = None,
+    ) -> _FakeResponse:
+        page = _page(params)
         if "/artifacts" in url:
             return _FakeResponse(
                 {"artifacts": [_artifact("carbon.v1.3600.4.16384.ubuntu.eastus.a", 1)]}
@@ -672,9 +723,16 @@ def test_run_jobs_pages_past_thirty(monkeypatch: pytest.MonkeyPatch) -> None:
     the confidence ratio is now derived from these counts."""
     pages = {1: [_job(["ubuntu-latest"], 1)] * 100, 2: [_job(["ubuntu-latest"], 1)] * 5}
 
-    def fake_get(url, params=None, headers=None, timeout=None):
+    def fake_get(
+        url: str,
+        *,
+        params: dict[str, Any] | None = None,
+        headers: dict[str, str] | None = None,
+        timeout: float | None = None,
+    ) -> _FakeResponse:
+        assert params is not None
         assert params["per_page"] == 100
-        return _FakeResponse({"jobs": pages.get(params["page"], [])})
+        return _FakeResponse({"jobs": pages.get(_page(params), [])})
 
     monkeypatch.setattr(carbon_badge.requests, "get", fake_get)
     assert len(carbon_badge.run_jobs(1, "o/r", token=None)) == 105
@@ -698,8 +756,14 @@ def test_gitlab_honours_a_blanket_override_on_untagged_jobs(monkeypatch: pytest.
     now = datetime.now(timezone.utc).isoformat()
     jobs_page1 = [{"created_at": now, "duration": 3600, "runner": {"is_shared": True}}]
 
-    def fake_get(url, params=None, headers=None, timeout=None):
-        return _FakeResponse(jobs_page1 if params["page"] == 1 else [])
+    def fake_get(
+        url: str,
+        *,
+        params: dict[str, Any] | None = None,
+        headers: dict[str, str] | None = None,
+        timeout: float | None = None,
+    ) -> _FakeResponse:
+        return _FakeResponse(jobs_page1 if _page(params) == 1 else [])
 
     monkeypatch.setattr(carbon_badge.requests, "get", fake_get)
     usage = carbon_badge.gitlab_kwh_last_30d("group/project", token=None, runner_watts={carbon_badge.ANY_RUNNER: 180.0})
@@ -729,14 +793,20 @@ def test_an_unusually_small_newest_run_cannot_lower_the_bar(monkeypatch: pytest.
         + [_artifact(f"carbon.v1.3600.4.16384.ubuntu.eastus.a{i}", 2) for i in range(3)]
         + [_artifact(f"carbon.v1.3600.4.16384.ubuntu.eastus.b{i}", 3) for i in range(2)]
     )
-    queried = []
+    queried: list[int] = []
 
-    def fake_get(url, params=None, headers=None, timeout=None):
-        page = params["page"] if params else 1
+    def fake_get(
+        url: str,
+        *,
+        params: dict[str, Any] | None = None,
+        headers: dict[str, str] | None = None,
+        timeout: float | None = None,
+    ) -> _FakeResponse:
+        page = _page(params)
         if "/artifacts" in url:
             return _FakeResponse({"artifacts": markers if page == 1 else []})
         if "/jobs" in url:
-            rid = int(url.split("/runs/")[1].split("/jobs")[0])
+            rid = int(url.split("/runs/")[1].split("/jobs", maxsplit=1)[0])
             queried.append(rid)
             n = jobs_by_run[rid] if page == 1 else 0
             return _FakeResponse({"jobs": [_job(["ubuntu-latest"], 60)] * n})
@@ -770,10 +840,16 @@ def test_skipped_jobs_do_not_make_completeness_unreachable(monkeypatch: pytest.M
         dict(_job(["ubuntu-latest"], 0), name="pypi", conclusion="skipped"),
     ]
     markers = [_artifact("carbon.v1.480.4.16384.ubuntu.eastus.release-please", 1)]
-    queried = []
+    queried: list[str] = []
 
-    def fake_get(url, params=None, headers=None, timeout=None):
-        page = params["page"] if params else 1
+    def fake_get(
+        url: str,
+        *,
+        params: dict[str, Any] | None = None,
+        headers: dict[str, str] | None = None,
+        timeout: float | None = None,
+    ) -> _FakeResponse:
+        page = _page(params)
         if "/artifacts" in url:
             return _FakeResponse({"artifacts": markers if page == 1 else []})
         if "/jobs" in url:
@@ -808,8 +884,14 @@ def test_skipped_jobs_contribute_no_energy(monkeypatch: pytest.MonkeyPatch) -> N
         },
     ]
 
-    def fake_get(url, params=None, headers=None, timeout=None):
-        page = params["page"] if params else 1
+    def fake_get(
+        url: str,
+        *,
+        params: dict[str, Any] | None = None,
+        headers: dict[str, str] | None = None,
+        timeout: float | None = None,
+    ) -> _FakeResponse:
+        page = _page(params)
         if "/artifacts" in url:
             return _FakeResponse({"artifacts": []})
         if "/jobs" in url:
@@ -827,9 +909,15 @@ def test_grid_factor_averages_a_day_not_an_instant() -> None:
     2-3x daily and the refresh runs on a fixed cron — 02:17 Monday for the
     fleet — so `latest` would price a month at an overnight low and the figure
     would move week to week on the clock alone."""
-    calls = []
+    calls: list[str] = []
 
-    def fake_get(url, params=None, headers=None, timeout=None):
+    def fake_get(
+        url: str,
+        *,
+        params: dict[str, Any] | None = None,
+        headers: dict[str, str] | None = None,
+        timeout: float | None = None,
+    ) -> _FakeResponse:
         calls.append(url)
         return _FakeResponse({"history": [{"carbonIntensity": v} for v in (100, 200, 300, 400)]})
 
@@ -843,7 +931,13 @@ def test_grid_factor_falls_back_to_the_instant_reading(caplog: pytest.LogCapture
     """History coverage varies by zone and plan; a token that can only reach
     `latest` must still work, loudly."""
 
-    def fake_get(url, params=None, headers=None, timeout=None):
+    def fake_get(
+        url: str,
+        *,
+        params: dict[str, Any] | None = None,
+        headers: dict[str, str] | None = None,
+        timeout: float | None = None,
+    ) -> _FakeResponse:
         if "history" in url:
             return _FakeResponse({"history": []})
         return _FakeResponse({"carbonIntensity": 412.0})
@@ -856,7 +950,13 @@ def test_grid_factor_falls_back_to_the_instant_reading(caplog: pytest.LogCapture
 def test_grid_factor_ignores_gaps_in_the_history() -> None:
     """Electricity Maps returns nulls for hours it has no data for."""
 
-    def fake_get(url, params=None, headers=None, timeout=None):
+    def fake_get(
+        url: str,
+        *,
+        params: dict[str, Any] | None = None,
+        headers: dict[str, str] | None = None,
+        timeout: float | None = None,
+    ) -> _FakeResponse:
         return _FakeResponse(
             {
                 "history": [
@@ -873,15 +973,22 @@ def test_grid_factor_ignores_gaps_in_the_history() -> None:
 # --- live grid providers ----------------------------------------------------
 
 
-def _resp(payload):
+def _resp(payload: Any) -> _FakeResponse:
     return _FakeResponse(payload)
 
 
 def test_energy_charts_takes_the_latest_non_null_reading() -> None:
     """15-minute series, and the newest slot is often still null."""
 
-    def fake_get(url, params=None, headers=None, timeout=None):
+    def fake_get(
+        url: str,
+        *,
+        params: dict[str, Any] | None = None,
+        headers: dict[str, str] | None = None,
+        timeout: float | None = None,
+    ) -> _FakeResponse:
         assert "energy-charts" in url
+        assert params is not None
         assert params["country"] == "de"
         return _resp({"co2eq": [400.0, 420.0, 411.5, None]})
 
@@ -891,12 +998,24 @@ def test_energy_charts_takes_the_latest_non_null_reading() -> None:
 def test_uk_falls_back_to_forecast_within_the_current_half_hour() -> None:
     """NESO publishes `actual` only once a settlement period closes."""
 
-    def fake_get(url, params=None, headers=None, timeout=None):
+    def fake_get(
+        url: str,
+        *,
+        params: dict[str, Any] | None = None,
+        headers: dict[str, str] | None = None,
+        timeout: float | None = None,
+    ) -> _FakeResponse:
         return _resp({"data": [{"intensity": {"forecast": 127, "actual": None}}]})
 
     assert carbon_badge._uk_factor(get=fake_get) == 127.0
 
-    def settled(url, params=None, headers=None, timeout=None):
+    def settled(
+        url: str,
+        *,
+        params: dict[str, Any] | None = None,
+        headers: dict[str, str] | None = None,
+        timeout: float | None = None,
+    ) -> _FakeResponse:
         return _resp({"data": [{"intensity": {"forecast": 127, "actual": 133}}]})
 
     assert carbon_badge._uk_factor(get=settled) == 133.0
@@ -913,12 +1032,20 @@ def test_eia_weights_the_fuel_mix_of_the_newest_hour_only() -> None:
         {"period": "2026-08-08T17", "fueltype": "COL", "value": "10000"},
     ]
 
-    def fake_get(url, params=None, headers=None, timeout=None):
+    def fake_get(
+        url: str,
+        *,
+        params: dict[str, Any] | None = None,
+        headers: dict[str, str] | None = None,
+        timeout: float | None = None,
+    ) -> _FakeResponse:
+        assert params is not None
         assert params["facets[respondent][]"] == "PJM"
         return _resp({"response": {"data": rows}})
 
     got = carbon_badge._eia_factor("PJM", "key", get=fake_get)
     expected = (100 * 820.0 + 100 * 11.0) / 200
+    assert got is not None
     assert round(got, 6) == round(expected, 6)
 
 
@@ -929,7 +1056,13 @@ def test_eia_ignores_negative_generation() -> None:
         {"period": "p", "fueltype": "OTH", "value": "-50"},
     ]
 
-    def fake_get(url, params=None, headers=None, timeout=None):
+    def fake_get(
+        url: str,
+        *,
+        params: dict[str, Any] | None = None,
+        headers: dict[str, str] | None = None,
+        timeout: float | None = None,
+    ) -> _FakeResponse:
         return _resp({"response": {"data": rows}})
 
     assert carbon_badge._eia_factor("PJM", "key", get=fake_get) == 490.0
@@ -937,9 +1070,15 @@ def test_eia_ignores_negative_generation() -> None:
 
 def test_us_regions_need_a_key_and_degrade_without_one() -> None:
     """No key means no US provider — the annual average, not a crash."""
-    calls = []
+    calls: list[str] = []
 
-    def fake_get(url, params=None, headers=None, timeout=None):
+    def fake_get(
+        url: str,
+        *,
+        params: dict[str, Any] | None = None,
+        headers: dict[str, str] | None = None,
+        timeout: float | None = None,
+    ) -> _FakeResponse:
         calls.append(url)
         return _resp({})
 
@@ -950,7 +1089,13 @@ def test_us_regions_need_a_key_and_degrade_without_one() -> None:
 def test_a_failing_provider_never_breaks_the_refresh(caplog: pytest.LogCaptureFixture) -> None:
     """A grid lookup is an optional refinement; it must not fail a badge."""
 
-    def boom(url, params=None, headers=None, timeout=None) -> NoReturn:
+    def boom(
+        url: str,
+        *,
+        params: dict[str, Any] | None = None,
+        headers: dict[str, str] | None = None,
+        timeout: float | None = None,
+    ) -> NoReturn:
         raise RuntimeError("provider down")
 
     with caplog.at_level(logging.WARNING, logger="carbon-badge"):
@@ -961,9 +1106,15 @@ def test_a_failing_provider_never_breaks_the_refresh(caplog: pytest.LogCaptureFi
 def test_resolver_caches_per_region_and_honours_an_explicit_figure() -> None:
     """One request per distinct region per refresh, not one per job — and a
     declared figure skips the providers entirely."""
-    calls = []
+    calls: list[str] = []
 
-    def fake_get(url, params=None, headers=None, timeout=None):
+    def fake_get(
+        url: str,
+        *,
+        params: dict[str, Any] | None = None,
+        headers: dict[str, str] | None = None,
+        timeout: float | None = None,
+    ) -> _FakeResponse:
         calls.append(url)
         return _resp({"data": [{"intensity": {"actual": 100}}]})
 
@@ -1045,7 +1196,7 @@ class TestLoadFactor:
 # --- ci-api -----------------------------------------------------------------
 
 
-def _dt(stamp):
+def _dt(stamp: str) -> datetime:
     return datetime.fromisoformat(stamp.replace("Z", "+00:00"))
 
 
@@ -1053,7 +1204,7 @@ def _now_z():
     return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
 
 
-def _ci_snapshot(generated_at="2026-08-08T18:00:00Z"):
+def _ci_snapshot(generated_at: str = "2026-08-08T18:00:00Z") -> Json:
     return {
         "generated_at": generated_at,
         "countries": {
@@ -1108,9 +1259,15 @@ def test_ci_api_snapshot_is_fetched_once_for_many_regions() -> None:
     """The API allows 1 request per 10s per IP. Resolving several regions with
     a lookup each would 429 on the second; /v1/latest.json is the whole world
     in one object, so N regions stay at one request."""
-    calls = []
+    calls: list[str] = []
 
-    def fake_get(url, params=None, headers=None, timeout=None):
+    def fake_get(
+        url: str,
+        *,
+        params: dict[str, Any] | None = None,
+        headers: dict[str, str] | None = None,
+        timeout: float | None = None,
+    ) -> _FakeResponse:
         calls.append(url)
         return _resp(_ci_snapshot(generated_at=_now_z()))
 
@@ -1123,7 +1280,13 @@ def test_ci_api_snapshot_is_fetched_once_for_many_regions() -> None:
 
 
 def test_ci_api_failure_leaves_the_annual_average_standing(caplog: pytest.LogCaptureFixture) -> None:
-    def boom(url, params=None, headers=None, timeout=None) -> NoReturn:
+    def boom(
+        url: str,
+        *,
+        params: dict[str, Any] | None = None,
+        headers: dict[str, str] | None = None,
+        timeout: float | None = None,
+    ) -> NoReturn:
         raise RuntimeError("ci-api down")
 
     resolve = carbon_badge.RegionFactors(get=boom).factor_for
@@ -1207,7 +1370,7 @@ def test_pue_is_applied_once_and_stays_its_own_constant() -> None:
 # right total while attributing it to the wrong cause is worse than no report.
 
 
-def _named_job(labels, minutes, name, start_offset=0):
+def _named_job(labels: list[str], minutes: float, name: str, start_offset: float = 0) -> Json:
     start = datetime(2026, 8, 1, 0, 0, tzinfo=timezone.utc) + timedelta(minutes=start_offset)
     end = start + timedelta(minutes=minutes)
     return {
@@ -1218,11 +1381,19 @@ def _named_job(labels, minutes, name, start_offset=0):
     }
 
 
-def _serve_named(artifacts, runs, jobs, calls=None):
-    def fake_get(url, params=None, headers=None, timeout=None):
+def _serve_named(
+    artifacts: list[Json], runs: list[Json], jobs: list[Json], calls: list[str] | None = None
+) -> Callable[..., _FakeResponse]:
+    def fake_get(
+        url: str,
+        *,
+        params: dict[str, Any] | None = None,
+        headers: dict[str, str] | None = None,
+        timeout: float | None = None,
+    ) -> _FakeResponse:
         if calls is not None:
             calls.append(url)
-        page = params["page"] if params else 1
+        page = _page(params)
         if "/artifacts" in url:
             return _FakeResponse({"artifacts": artifacts if page == 1 else []})
         if "/jobs" in url:
@@ -1232,7 +1403,7 @@ def _serve_named(artifacts, runs, jobs, calls=None):
     return fake_get
 
 
-def _one_run_repo(marker_seconds, job_minutes):
+def _one_run_repo(marker_seconds: float, job_minutes: float) -> tuple[list[Json], list[Json], list[Json]]:
     """One run, one job. The marker says `marker_seconds`; the API bills
     `job_minutes` — the difference is the setup the marker never saw."""
     now = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
@@ -1382,7 +1553,7 @@ def test_the_slug_is_read_off_the_marker_name() -> None:
         ("///", None),
     ],
 )
-def test_job_names_reduce_to_slugs(name, slug) -> None:
+def test_job_names_reduce_to_slugs(name: str, slug: str) -> None:
     assert carbon_badge.job_slug(name) == slug
 
 
