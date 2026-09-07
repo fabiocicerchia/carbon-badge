@@ -5,80 +5,68 @@ from Conventional Commit messages — don't edit it by hand.
 
 ## [0.6.1](https://github.com/fabiocicerchia/carbon-badge/compare/v0.6.0...v0.6.1) (2026-09-03)
 
-
 ### Bug Fixes
 
-* **record:** count the runner's setup time on hosted runners ([#47](https://github.com/fabiocicerchia/carbon-badge/issues/47)) ([668532c](https://github.com/fabiocicerchia/carbon-badge/commit/668532caaec182e0d0272eb1813d7c5be1b868f9))
-
+- **record:** count the runner's setup time on hosted runners ([#47](https://github.com/fabiocicerchia/carbon-badge/issues/47)) ([668532c](https://github.com/fabiocicerchia/carbon-badge/commit/668532caaec182e0d0272eb1813d7c5be1b868f9))
 
 ### Documentation
 
-* **watts:** rule out PUE double-counting, and label arm/gpu as estimates ([#67](https://github.com/fabiocicerchia/carbon-badge/issues/67)) ([b1e8101](https://github.com/fabiocicerchia/carbon-badge/commit/b1e81014aacb135f6e73cca2c1849569b925a980))
+- **watts:** rule out PUE double-counting, and label arm/gpu as estimates ([#67](https://github.com/fabiocicerchia/carbon-badge/issues/67)) ([b1e8101](https://github.com/fabiocicerchia/carbon-badge/commit/b1e81014aacb135f6e73cca2c1849569b925a980))
 
 ## [0.6.0](https://github.com/fabiocicerchia/carbon-badge/compare/v0.5.0...v0.6.0) (2026-08-30)
 
-
 ### Features
 
-* **watts:** --load-factor for jobs that are not CPU-bound ([#48](https://github.com/fabiocicerchia/carbon-badge/issues/48)) ([35f2702](https://github.com/fabiocicerchia/carbon-badge/commit/35f27023c8aa2b8bd0cd212d464ba50389efea06))
+- **watts:** --load-factor for jobs that are not CPU-bound ([#48](https://github.com/fabiocicerchia/carbon-badge/issues/48)) ([35f2702](https://github.com/fabiocicerchia/carbon-badge/commit/35f27023c8aa2b8bd0cd212d464ba50389efea06))
 
 ## [0.5.0](https://github.com/fabiocicerchia/carbon-badge/compare/v0.4.0...v0.5.0) (2026-08-29)
 
-
 ### Features
 
-* **serve:** add --bind, and stop claiming --serve is on localhost ([#63](https://github.com/fabiocicerchia/carbon-badge/issues/63)) ([4876cea](https://github.com/fabiocicerchia/carbon-badge/commit/4876ceaf86d7d885dad9775f8e685a7268ba6542))
-
+- **serve:** add --bind, and stop claiming --serve is on localhost ([#63](https://github.com/fabiocicerchia/carbon-badge/issues/63)) ([4876cea](https://github.com/fabiocicerchia/carbon-badge/commit/4876ceaf86d7d885dad9775f8e685a7268ba6542))
 
 ### Bug Fixes
 
-* clear 16 of the 23 open security alerts (Trivy pod hardening, pip hash pinning) ([#65](https://github.com/fabiocicerchia/carbon-badge/issues/65)) ([7dc75fa](https://github.com/fabiocicerchia/carbon-badge/commit/7dc75fa0cf4ff254efbe8b6b5beb1712b6551b7f))
+- clear 16 of the 23 open security alerts (Trivy pod hardening, pip hash pinning) ([#65](https://github.com/fabiocicerchia/carbon-badge/issues/65)) ([7dc75fa](https://github.com/fabiocicerchia/carbon-badge/commit/7dc75fa0cf4ff254efbe8b6b5beb1712b6551b7f))
 
 ## [0.4.0](https://github.com/fabiocicerchia/carbon-badge/compare/v0.3.0...v0.4.0) (2026-08-25)
 
-
 ### Features
 
-* **docs:** build the docs site in Actions and drop Read the Docs ([#54](https://github.com/fabiocicerchia/carbon-badge/issues/54)) ([a8a2679](https://github.com/fabiocicerchia/carbon-badge/commit/a8a2679911d5fad6166ec37dafa90ebd8dba9593))
-
+- **docs:** build the docs site in Actions and drop Read the Docs ([#54](https://github.com/fabiocicerchia/carbon-badge/issues/54)) ([a8a2679](https://github.com/fabiocicerchia/carbon-badge/commit/a8a2679911d5fad6166ec37dafa90ebd8dba9593))
 
 ### Bug Fixes
 
-* **ci:** compute the next release PR after the draft is published ([#52](https://github.com/fabiocicerchia/carbon-badge/issues/52)) ([51c4051](https://github.com/fabiocicerchia/carbon-badge/commit/51c4051081240c05a1b7eaa69c661aeb80446238))
+- **ci:** compute the next release PR after the draft is published ([#52](https://github.com/fabiocicerchia/carbon-badge/issues/52)) ([51c4051](https://github.com/fabiocicerchia/carbon-badge/commit/51c4051081240c05a1b7eaa69c661aeb80446238))
 
 ## [0.3.0](https://github.com/fabiocicerchia/carbon-badge/compare/v0.2.1...v0.3.0) (2026-08-24)
 
-
 ### Features
 
-* add ci-api to the keyless live-grid chain ([#44](https://github.com/fabiocicerchia/carbon-badge/issues/44)) ([3f748a1](https://github.com/fabiocicerchia/carbon-badge/commit/3f748a188167afb5a253e2be4a52a882524ea306))
-
+- add ci-api to the keyless live-grid chain ([#44](https://github.com/fabiocicerchia/carbon-badge/issues/44)) ([3f748a1](https://github.com/fabiocicerchia/carbon-badge/commit/3f748a188167afb5a253e2be4a52a882524ea306))
 
 ### Documentation
 
-* **examples:** add drop-in configs for 16 non-GitHub CI systems ([#49](https://github.com/fabiocicerchia/carbon-badge/issues/49)) ([2372c1f](https://github.com/fabiocicerchia/carbon-badge/commit/2372c1f49c03f7adeeb81bd1917cab75fa04ef80))
+- **examples:** add drop-in configs for 16 non-GitHub CI systems ([#49](https://github.com/fabiocicerchia/carbon-badge/issues/49)) ([2372c1f](https://github.com/fabiocicerchia/carbon-badge/commit/2372c1f49c03f7adeeb81bd1917cab75fa04ef80))
 
 ## [0.2.1](https://github.com/fabiocicerchia/carbon-badge/compare/v0.2.0...v0.2.1) (2026-08-13)
 
-
 ### Bug Fixes
 
-* security and code-quality findings ([#40](https://github.com/fabiocicerchia/carbon-badge/issues/40)) ([ca5716c](https://github.com/fabiocicerchia/carbon-badge/commit/ca5716cec9244f9f7e82d2e2af94582a3fd95501))
+- security and code-quality findings ([#40](https://github.com/fabiocicerchia/carbon-badge/issues/40)) ([ca5716c](https://github.com/fabiocicerchia/carbon-badge/commit/ca5716cec9244f9f7e82d2e2af94582a3fd95501))
 
 ## [0.2.0](https://github.com/fabiocicerchia/carbon-badge/compare/v0.1.1...v0.2.0) (2026-08-10)
 
-
 ### Features
 
-* let jobs measure themselves, and recalibrate the wattages ([#26](https://github.com/fabiocicerchia/carbon-badge/issues/26)) ([a8ff95d](https://github.com/fabiocicerchia/carbon-badge/commit/a8ff95d3582a6be214a7ca4f85a81ceb9dab6149))
+- let jobs measure themselves, and recalibrate the wattages ([#26](https://github.com/fabiocicerchia/carbon-badge/issues/26)) ([a8ff95d](https://github.com/fabiocicerchia/carbon-badge/commit/a8ff95d3582a6be214a7ca4f85a81ceb9dab6149))
 
 ## [0.1.1](https://github.com/fabiocicerchia/carbon-badge/compare/v0.1.0...v0.1.1) (2026-08-06)
 
-
 ### Bug Fixes
 
-* **pre-commit:** stop check-yaml failing on Helm templates and multi-doc manifests ([e7bc0c3](https://github.com/fabiocicerchia/carbon-badge/commit/e7bc0c32de937735a52aa8b9c093c661a476f84e))
-* **security:** skip the SARIF upload on private repos ([c9fdc04](https://github.com/fabiocicerchia/carbon-badge/commit/c9fdc04bcc0ee625ed70bf21ca92cee516dce871))
+- **pre-commit:** stop check-yaml failing on Helm templates and multi-doc manifests ([e7bc0c3](https://github.com/fabiocicerchia/carbon-badge/commit/e7bc0c32de937735a52aa8b9c093c661a476f84e))
+- **security:** skip the SARIF upload on private repos ([c9fdc04](https://github.com/fabiocicerchia/carbon-badge/commit/c9fdc04bcc0ee625ed70bf21ca92cee516dce871))
 
 ## [0.1.0]
 
