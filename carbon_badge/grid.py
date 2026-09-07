@@ -325,5 +325,3 @@ def live_region_factor(
             exc,
         )
     return None
-
-

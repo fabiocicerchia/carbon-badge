@@ -171,8 +171,6 @@ def ci_kwh_last_30d(  # noqa: PLR0913 — the repo/token/api trio plus independe
     return CiUsage(kwh, grams, used_markers, total_jobs, measured_kwh, guessed_kwh)
 
 
-
-
 def gitlab_kwh_last_30d(
     project: str,
     token: str | None,
@@ -740,5 +738,3 @@ def main(argv: list[str] | None = None) -> int:
 
 if __name__ == "__main__":
     sys.exit(main())
-
-

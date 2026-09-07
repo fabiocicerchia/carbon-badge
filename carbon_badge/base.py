@@ -195,7 +195,6 @@ DEFAULT_GRID_INTENSITY = 480.0  # gCO2e/kWh
 _ARTIFACT_RE = re.compile(r"^carbon\.v1\.(\d+)\.(\d+)\.(\d+)\.([a-z]+)\.([a-z0-9-]+)\.")
 
 
-
 def carbon_artifact_slug(name: str) -> str | None:
     """The job slug a marker carries, or None.
 
@@ -221,4 +220,3 @@ def job_slug(name: str) -> str | None:
     """
     slug = re.sub(r"[^a-z0-9]+", "-", (name or "").lower()).strip("-")
     return slug or None
-

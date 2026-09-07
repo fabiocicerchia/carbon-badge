@@ -441,5 +441,3 @@ def watts_from_specs(vcpu: int, mem_mb: int, platform: str = "ubuntu") -> float:
     # Rounded so the two routes compare equal rather than differing in float
     # noise, and so the log prints a sane number.
     return apply_load_factor(round(WATTS_BASE + per_vcpu * vcpu + WATTS_PER_GB * (mem_mb / 1024), 2))
-
-

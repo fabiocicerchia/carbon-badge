@@ -315,5 +315,3 @@ def grams_co2e(
 def grams_co2e_kwh(kwh: float, grid_intensity: float = DEFAULT_GRID_INTENSITY) -> float:
     """Convert kWh to gCO2e for the given grid intensity."""
     return kwh * grid_intensity
-
-

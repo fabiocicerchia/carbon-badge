@@ -54,8 +54,6 @@ class RegionFactors:
         return self._cache[region]
 
 
-
-
 # Linear model for a self-reported machine, anchored on the same Eco-CI curve:
 # a 4-vCPU / 16 GiB GitHub runner at 8.18 W machine draw x PUE ~= 9.4 W.
 #   1.2 + 1.6*4 + 0.1125*16 = 9.4 exactly
@@ -85,6 +83,7 @@ class RegionFactors:
 # CCF meters memory separately from compute, whereas the Eco-CI curve is
 # whole-machine draw and already has the memory in it. Raising this term to
 # CCF's would double-count. It is a shape parameter, not a memory coefficient.
+
 
 def parse_carbon_artifact(name: str) -> tuple[float, int, int, str, str] | None:
     """ "carbon.v1.142.4.16384.ubuntu.build" -> (142.0 s, 4 vcpu, 16384 MB, "ubuntu").

@@ -119,8 +119,6 @@ def _run_kwh(  # noqa: PLR0913,PLR0917 — the run, where to fetch it, and the t
     return kwh, jobs, guessed_kwh
 
 
-
-
 def _api_run_detail(
     run: Json, repo: str, token: str | None, api: str, runner_watts: RunnerWatts | None
 ) -> tuple[float, float, int, float, dict[str, Any], dict[str, int]]:
@@ -160,4 +158,3 @@ def _api_run_detail(
             prev = per_job.get(slug, (0.0, 0.0))
             per_job[slug] = (prev[0] + job_kwh, prev[1] + hours * 3600)
     return kwh, seconds, jobs, guessed_kwh, per_job, undeclared
-
