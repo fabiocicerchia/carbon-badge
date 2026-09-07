@@ -26,7 +26,7 @@ export const MAX_SETUP_S = 600;
 // than process.env so it is testable, and treated as self-hosted when absent —
 // the conservative direction, since that leaves the old behaviour in place.
 export function isHosted(env = process.env) {
-  return String(env.RUNNER_ENVIRONMENT || '').toLowerCase() === 'github-hosted';
+  return String(env.RUNNER_ENVIRONMENT || "").toLowerCase() === "github-hosted";
 }
 
 // jobSeconds returns the duration to record.

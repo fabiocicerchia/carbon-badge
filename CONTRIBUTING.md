@@ -7,8 +7,8 @@ Thanks for taking the time to contribute to carbon-badge!
 You need Python 3.10+ and `make`.
 
 1. Fork and clone the repo.
-2. Install dev deps and git hooks: `make setup && make dev`.
-3. Create a branch: `git checkout -b feat/short-description`.
+1. Install dev deps and git hooks: `make setup && make dev`.
+1. Create a branch: `git checkout -b feat/short-description`.
 
 ```sh
 make dev     # editable install with dev dependencies (pytest, ruff, build)
@@ -39,10 +39,10 @@ Releases are automated by [release-please](.github/workflows/release.yml);
 you don't tag or edit the changelog manually.
 
 1. Merge `feat:`/`fix:` PRs into `main` as normal — **no tag is created**.
-2. release-please keeps an open **release PR** ("chore: release X.Y.Z"),
+1. release-please keeps an open **release PR** ("chore: release X.Y.Z"),
    recalculating the next version (in `pyproject.toml`) and `CHANGELOG.md` on
    every merge.
-3. When you're ready to ship, **merge the release PR** — that (and only that)
+1. When you're ready to ship, **merge the release PR** — that (and only that)
    creates the `vX.Y.Z` tag and GitHub Release, and the workflow attaches the
    sdist + wheel (and publishes to PyPI if `PUBLISH_TO_PYPI` is set).
 

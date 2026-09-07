@@ -8,7 +8,7 @@ Every figure here is a constant in `carbon_badge.py` and overridable at runtime.
 
 ## The chain
 
-```
+```text
 job seconds  ×  watts  ÷ 3600 ÷ 1000  =  kWh   ×  gCO2e/kWh  =  gCO2e
 ```
 
@@ -30,10 +30,10 @@ project from SPECpower data
 ([machine-power-data](https://github.com/green-coding-solutions/eco-ci-energy-estimation/tree/main/machine-power-data)):
 
 | CPU load | 4-core EPYC 7763 shared (Linux/Windows) | Mac mini M1 (macOS) |
-|---|---|---|
-| 0% | 1.76 W | 4.45 W |
-| 50% | 5.16 W | 8.90 W |
-| 100% | 8.18 W | 15.53 W |
+| -------- | --------------------------------------- | ------------------- |
+| 0%       | 1.76 W                                  | 4.45 W              |
+| 50%      | 5.16 W                                  | 8.90 W              |
+| 100%     | 8.18 W                                  | 15.53 W             |
 
 These are **machine draw**, so datacentre overhead is applied separately —
 see the next section for how that was confirmed rather than assumed.
@@ -87,13 +87,13 @@ visible and can be changed on its own.
 
 ### The resulting table
 
-| label | working | watts |
-|---|---|---|
-| `ubuntu` | 8.18 × 1.15 | **9.4** |
-| `windows` | 8.18 × 1.15 | **9.4** |
-| `macos` | 15.53 × 1.15 | **17.9** |
-| `arm` | 8.18 × 0.6 × 1.15 | **5.6** *(estimate)* |
-| `gpu` | (8.18 + 70) × 1.15 | **89.9** *(estimate)* |
+| label     | working            | watts                 |
+| --------- | ------------------ | --------------------- |
+| `ubuntu`  | 8.18 × 1.15        | **9.4**               |
+| `windows` | 8.18 × 1.15        | **9.4**               |
+| `macos`   | 15.53 × 1.15       | **17.9**              |
+| `arm`     | 8.18 × 0.6 × 1.15  | **5.6** *(estimate)*  |
+| `gpu`     | (8.18 + 70) × 1.15 | **89.9** *(estimate)* |
 
 The first three rows come from a measured curve; the last two do not, and the
 tool says so at run time — see [the two rows that are
@@ -113,7 +113,7 @@ They are composed here, and a reader cannot tell 9.4 W from 89.9 W apart by
 looking, so the tool says so itself: any run that prices a job on one of them
 prints, on stderr,
 
-```
+```text
 carbon-badge: 12 job(s) priced on the 'gpu' class at 89.9 W, which is an
 estimate: composed from a 4-vCPU host slice plus one T4 at its 70 W board
 limit — a ceiling, not a measured mean. Pass --runner-watts gpu=<watts> to
@@ -184,7 +184,7 @@ disagree with — including the two above.
 A runner recognised by its label and a job that reported its own hardware go
 through the same function, so the same machine costs the same either way:
 
-```
+```text
 watts = 1.2 + per_vcpu × vCPU + 0.1125 × GiB
 
   per_vcpu is derived from the platform's table entry, so at the standard
@@ -209,12 +209,12 @@ memory coefficient.
 Eco-CI measures 1.76 W at idle rising to 8.18 W at load — so doubling the cores
 does not double the wattage:
 
-| runner | proportional (wrong) | affine |
-|---|---|---|
-| 4-core | 9.4 W | 9.4 W |
-| 8-core | 18.8 W | **17.6 W** |
-| 16-core | 37.6 W | **34.0 W** |
-| 64-core | 150.4 W | **132.4 W** |
+| runner  | proportional (wrong) | affine      |
+| ------- | -------------------- | ----------- |
+| 4-core  | 9.4 W                | 9.4 W       |
+| 8-core  | 18.8 W               | **17.6 W**  |
+| 16-core | 37.6 W               | **34.0 W**  |
+| 64-core | 150.4 W              | **132.4 W** |
 
 The label path used to scale proportionally, agreeing with the model only at
 the 4-vCPU point and drifting to 12% by 64 cores — so a repo's figure would
@@ -310,13 +310,13 @@ a day — Germany measured 146 to 634 gCO2eq/kWh across one day — so a live
 figure is worth far more than any refinement to the wattages. Where a free
 source exists for a region, it is used automatically.
 
-| provider | key | resolution | covers |
-|---|---|---|---|
-| [energy-charts.info](https://api.energy-charts.info) (Fraunhofer ISE) | **none** | 15 min | de fr it pl es nl at cz gr hu no |
-| [carbonintensity.org.uk](https://carbonintensity.org.uk) (NESO) | **none** | 30 min | Great Britain |
-| [ci-api](https://ci-api.fabiocicerchia.it) | **none** | hourly | Europe, US balancing authorities, AU and CA zones — the rest fall back |
-| [EIA](https://www.eia.gov/opendata/) | free, register | hourly | United States |
-| Electricity Maps | paid | 5 min | everywhere |
+| provider                                                              | key            | resolution | covers                                                                 |
+| --------------------------------------------------------------------- | -------------- | ---------- | ---------------------------------------------------------------------- |
+| [energy-charts.info](https://api.energy-charts.info) (Fraunhofer ISE) | **none**       | 15 min     | de fr it pl es nl at cz gr hu no                                       |
+| [carbonintensity.org.uk](https://carbonintensity.org.uk) (NESO)       | **none**       | 30 min     | Great Britain                                                          |
+| [ci-api](https://ci-api.fabiocicerchia.it)                            | **none**       | hourly     | Europe, US balancing authorities, AU and CA zones — the rest fall back |
+| [EIA](https://www.eia.gov/opendata/)                                  | free, register | hourly     | United States                                                          |
+| Electricity Maps                                                      | paid           | 5 min      | everywhere                                                             |
 
 Precedence: an explicit `--grid-intensity` or `--grid-region` beats everything,
 then a live provider for the job's region, then the annual average. One request
@@ -432,6 +432,7 @@ The overcount is bounded and the undercount was not, which is what decided it.
 A pre-step interval above ten minutes is treated as a reading that is not
 measuring this job — a warm image, a mislabelled runner, a clock jump — and the
 wall clock is used instead.
+
 ## The flat wattage, and what to do about it
 
 Real draw swings 1.76–8.18 W with CPU load on the same 4-vCPU slice. The
@@ -442,11 +443,11 @@ else. Three options were on the table:
    large: a job that averages 25% CPU is overstated by roughly 3x, and a
    CI suite that is mostly `npm install` and network waiting is exactly that
    job.
-2. **A job-class heuristic** — guess utilisation from the workflow name, the
+1. **A job-class heuristic** — guess utilisation from the workflow name, the
    step names, the duration. Cheap to implement and impossible to defend: it
    would produce a different number for the same machine doing the same work
    depending on what someone called the file.
-3. **An explicit `--load-factor`.** The caller states the average utilisation
+1. **An explicit `--load-factor`.** The caller states the average utilisation
    they know or have measured; the default changes nothing.
 
 **Option 3, with option 1 as the default.** The number is only as good as the
@@ -476,11 +477,11 @@ runs and decomposes the divergence. The decomposition is the point: two totals
 cannot say *why* they differ, and there are three separate reasons they can,
 pulling in different directions.
 
-| term | what it is | is it a bias? |
-| --- | --- | --- |
-| **setup time** | A marker times the instrumented step. The API bills the whole job — runner provisioning, checkout, tool caches, the artifact upload itself. | **Yes.** Energy really spent that the self-reported path cannot see, always one-directional, always understating. |
-| **watts model** | A marker prices itself from its own vCPU and memory through the linear model; the API path prices from the runner *label* through a lookup table. The same job can get two wattages. | No. The two paths know different things, and the marker knows more — the Actions API exposes no CPU or memory for any runner. |
-| **grid factor** | A marker carries the region it ran in and is priced at that grid. A run priced from the API has no region and takes the world average. | No, and it is usually the largest term. GitHub's regions differ by roughly 25×, so this is the biggest available correction and the per-region figure is the better one. |
+| term            | what it is                                                                                                                                                                           | is it a bias?                                                                                                                                                            |
+| --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **setup time**  | A marker times the instrumented step. The API bills the whole job — runner provisioning, checkout, tool caches, the artifact upload itself.                                          | **Yes.** Energy really spent that the self-reported path cannot see, always one-directional, always understating.                                                        |
+| **watts model** | A marker prices itself from its own vCPU and memory through the linear model; the API path prices from the runner *label* through a lookup table. The same job can get two wattages. | No. The two paths know different things, and the marker knows more — the Actions API exposes no CPU or memory for any runner.                                            |
+| **grid factor** | A marker carries the region it ran in and is priced at that grid. A run priced from the API has no region and takes the world average.                                               | No, and it is usually the largest term. GitHub's regions differ by roughly 25×, so this is the biggest available correction and the per-region figure is the better one. |
 
 Only fully self-reported runs are compared. A partly instrumented run would
 show a divergence that is just the missing jobs, which is none of the three
@@ -559,7 +560,6 @@ have.
   `Standard_NC4as_T4_v3` → NVIDIA T4 70 W board limit) even though its *draw*
   is still a ceiling rather than a curve.
 
-
 **2026-08 (b)** — sourced the numbers that had no source, and reconciled
 against greenlint. Nothing about the method changed; three sets of figures
 moved:
@@ -579,7 +579,6 @@ moved:
 
 If you are reading a trend line across this release, that is a measurement
 change, not a reduction.
-
 
 > **Every badge drops about 25% at this release, and nothing got cleaner.**
 > The wattages were too high; correcting them moved every figure at once. If

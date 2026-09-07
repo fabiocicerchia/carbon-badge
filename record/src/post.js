@@ -7,22 +7,22 @@
 // costs one request and downloads nothing.
 //
 //   carbon.v1.<seconds>.<vcpu>.<memMB>.<platform>.<region>.<slug>
-import crypto from 'node:crypto';
-import fs from 'node:fs';
-import http from 'node:http';
-import os from 'node:os';
-import path from 'node:path';
-import * as core from '@actions/core';
-import { DefaultArtifactClient } from '@actions/artifact';
-import { isHosted, jobSeconds } from './duration.js';
+import crypto from "node:crypto";
+import fs from "node:fs";
+import http from "node:http";
+import os from "node:os";
+import path from "node:path";
+import * as core from "@actions/core";
+import { DefaultArtifactClient } from "@actions/artifact";
+import { isHosted, jobSeconds } from "./duration.js";
 
 // CPU and memory alone do not determine draw: the same 4 vCPU / 16 GiB reading
 // means a very different wattage on Apple silicon than on a shared x86 VM, so
 // the reader has to be told which. These names match its power table.
 function platform() {
-  if (os.platform() === 'darwin') return 'macos';
-  if (os.platform() === 'win32') return 'windows';
-  return os.arch() === 'arm64' ? 'arm' : 'ubuntu';
+  if (os.platform() === "darwin") return "macos";
+  if (os.platform() === "win32") return "windows";
+  return os.arch() === "arm64" ? "arm" : "ubuntu";
 }
 
 // Which Azure region this job landed in, from the Instance Metadata Service.
@@ -40,18 +40,18 @@ function azureRegion(timeoutMs = 1000) {
   return new Promise((resolve) => {
     const req = http.request(
       {
-        host: '169.254.169.254',
-        path: '/metadata/instance/compute?api-version=2021-02-01',
-        headers: { Metadata: 'true' },
+        host: "169.254.169.254",
+        path: "/metadata/instance/compute?api-version=2021-02-01",
+        headers: { Metadata: "true" },
         timeout: timeoutMs,
       },
       (res) => {
-        let body = '';
-        res.on('data', (c) => (body += c));
-        res.on('end', () => {
+        let body = "";
+        res.on("data", (c) => (body += c));
+        res.on("end", () => {
           try {
             const loc = JSON.parse(body).location;
-            resolve(/^[a-z0-9-]+$/.test(loc || '') ? loc : null);
+            resolve(/^[a-z0-9-]+$/.test(loc || "") ? loc : null);
           } catch {
             resolve(null);
           }
@@ -59,8 +59,8 @@ function azureRegion(timeoutMs = 1000) {
       },
     );
     // Never let a metadata probe hold up or fail somebody's job.
-    req.on('error', () => resolve(null));
-    req.on('timeout', () => {
+    req.on("error", () => resolve(null));
+    req.on("timeout", () => {
       req.destroy();
       resolve(null);
     });
@@ -75,24 +75,22 @@ function azureRegion(timeoutMs = 1000) {
 // Artifact names may not contain " : < > | * ? \ / and the dot is our field
 // separator, so anything outside [A-Za-z0-9_-] is replaced.
 function slug() {
-  const base = `${process.env.GITHUB_JOB || 'job'}`
-    .replace(/[^A-Za-z0-9_-]/g, '-')
-    .slice(0, 60);
-  return `${base}-${crypto.randomBytes(4).toString('hex')}`;
+  const base = `${process.env.GITHUB_JOB || "job"}`.replace(/[^A-Za-z0-9_-]/g, "-").slice(0, 60);
+  return `${base}-${crypto.randomBytes(4).toString("hex")}`;
 }
 
 function sanitiseRegion(value) {
-  const clean = String(value || '')
+  const clean = String(value || "")
     .toLowerCase()
-    .replace(/[^a-z0-9-]/g, '')
+    .replace(/[^a-z0-9-]/g, "")
     .slice(0, 40);
-  return clean || 'unknown';
+  return clean || "unknown";
 }
 
 async function run() {
-  const started = core.getState('carbonBadgeStart');
+  const started = core.getState("carbonBadgeStart");
   if (!started) {
-    core.warning('carbon-badge: no start state recorded; skipping.');
+    core.warning("carbon-badge: no start state recorded; skipping.");
     return;
   }
 
@@ -106,22 +104,22 @@ async function run() {
 
   // A declared region wins: self-hosted runners are not Azure VMs, so IMDS
   // either does not answer or answers about somebody else's infrastructure.
-  const declared = core.getInput('region');
+  const declared = core.getInput("region");
   const region = sanitiseRegion(declared || (await azureRegion()));
 
   const name = `carbon.v1.${seconds}.${vcpu}.${memMb}.${platform()}.${region}.${slug()}`;
 
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'carbon-badge-'));
-  const file = path.join(dir, 'carbon-badge.txt');
-  fs.writeFileSync(file, 'the measurement is in the artifact name\n');
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "carbon-badge-"));
+  const file = path.join(dir, "carbon-badge.txt");
+  fs.writeFileSync(file, "the measurement is in the artifact name\n");
 
   try {
     await new DefaultArtifactClient().uploadArtifact(name, [file], dir, {
-      retentionDays: Number(core.getInput('retention-days') || 35),
+      retentionDays: Number(core.getInput("retention-days") || 35),
     });
     core.info(
       `carbon-badge: ${seconds}s on ${vcpu} vCPU / ${memMb} MB ` +
-        `(${platform()}, ${region}, ${hosted ? 'hosted: includes setup' : 'self-hosted: step time only'})`,
+        `(${platform()}, ${region}, ${hosted ? "hosted: includes setup" : "self-hosted: step time only"})`,
     );
   } catch (err) {
     // Telemetry must never fail somebody's build.
