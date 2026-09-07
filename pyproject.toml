@@ -48,10 +48,9 @@ select = [
   "E", "W", "F", "I", "N", "UP", "ANN", "ASYNC", "S", "B", "A", "C4", "DTZ",
   "T20", "PT", "RET", "SIM", "PTH", "ERA", "TD", "FIX", "PLR2004", "TRY", "PL", "RUF",
 ]
-ignore = [
-  "ANN401",      # Any in *args/**kwargs — FC-GEN-016's comment rule covers it
-  "TRY003",      # long messages inline; FC-GEN-022 wants them descriptive
-]
+# Nothing is ignored repo-wide. ANN401 has three call sites that forward to
+# BaseHTTPRequestHandler and carry a `# noqa` with the reason; TRY003's messages
+# moved into RunnerWattsError, where the rule wants them.
 
 [tool.ruff.lint.flake8-annotations]
 mypy-init-return = true
@@ -64,4 +63,6 @@ mypy-init-return = true
   "PLR2004",  # an expected value is the literal it compares against
   "ANN001",   # a fixture or a fake's argument, named by the test that builds it
   "ANN202",   # ditto a fake's return: it is whatever the code under test reads
+  "TRY003",   # a fake raising RuntimeError("provider down") does not want a
+              # class of its own -- the message *is* the fixture
 ]

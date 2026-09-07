@@ -391,6 +391,19 @@ _CORES_RE = re.compile(r"(\d+)\s*-?(?:cores?|vcpus?)\b")
 ANY_RUNNER = "*"
 
 
+class RunnerWattsError(ValueError):
+    """A --runner-watts entry that could not be read.
+
+    The message names the offending entry as well as what was wrong with it:
+    the flag takes several entries at once, and "not a number" without the
+    entry leaves the user guessing which one.
+    """
+
+    def __init__(self, entry: str, problem: str) -> None:
+        super().__init__(f"{problem}, in {entry!r}")
+        self.entry = entry
+
+
 def parse_runner_watts(pairs: list[str]) -> RunnerWatts:
     """["180"] -> {"*": 180.0}; ["my-builder=180"] -> {"my-builder": 180.0}.
 
@@ -414,13 +427,13 @@ def parse_runner_watts(pairs: list[str]) -> RunnerWatts:
             label, value = ANY_RUNNER, pair
         label = label.strip().lower()
         if not label:
-            raise ValueError(f"expected LABEL=WATTS or a bare number, got {pair!r}")
+            raise RunnerWattsError(pair, "expected LABEL=WATTS or a bare number")
         try:
             watts = float(value)
         except ValueError:
-            raise ValueError(f"{value!r} is not a number, in {pair!r}") from None
+            raise RunnerWattsError(pair, f"{value!r} is not a number") from None
         if watts <= 0:
-            raise ValueError(f"watts must be positive, got {watts} in {pair!r}")
+            raise RunnerWattsError(pair, f"watts must be positive, got {watts}")
         table[label] = watts
     return table
 
@@ -850,14 +863,14 @@ def _uk_factor(get: Getter = requests.get) -> float | None:
     return float(value) if value is not None else None
 
 
-def _to_float(value: Any) -> float | None:
+def _to_float(value: object) -> float | None:
     """A number from a JSON field, or 0.0 when the field is not one.
 
     EIA sends its figures as JSON strings and occasionally as null; a row that
     does not parse is dropped rather than failing the whole hour.
     """
     try:
-        return float(value or 0)
+        return float(value or 0)  # type: ignore[arg-type]  # str, int, float or None from JSON
     except (TypeError, ValueError):
         return 0.0
 
@@ -1912,9 +1925,11 @@ class BadgeHandler(http.server.BaseHTTPRequestHandler):
         self,
         compute: Callable[[], Json],
         ttl: int,
-        cache: dict[str, Any],
-        *args: Any,
-        **kwargs: Any,
+        cache: dict[str, float | bytes | None],
+        # BaseHTTPRequestHandler's own (request, client_address, server), passed
+        # through untouched — typing them here would restate the stdlib's.
+        *args: Any,  # noqa: ANN401
+        **kwargs: Any,  # noqa: ANN401
     ) -> None:
         self._compute = compute
         self._ttl = ttl
@@ -1936,7 +1951,9 @@ class BadgeHandler(http.server.BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(self._cache["body"])
 
-    def log_message(self, *args: Any) -> None:
+    # Overrides BaseHTTPRequestHandler.log_message(format, *args), which is
+    # variadic by definition — and this one drops the log line anyway.
+    def log_message(self, *args: Any) -> None:  # noqa: ANN401
         pass
 
 
