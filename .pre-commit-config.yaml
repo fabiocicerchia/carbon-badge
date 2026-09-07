@@ -78,6 +78,24 @@ repos:
         # file the linter cannot see), which is noise in a repo of small scripts.
         args: [--severity=warning]
 
+  # Biome rather than prettier: one binary, no plugin matrix, no new entry in
+  # package.json. Run through npx as a local hook — the biomejs/pre-commit
+  # environment installs the wrapper without its platform binary and dies.
+  # The formatter config lives in biome.jsonc; the rules are off there, so this
+  # checks formatting only, which is what holds the 120-column limit in place
+  # (FC-GEN-045).
+  - repo: local
+    hooks:
+      - id: biome
+        name: biome
+        entry: npx --yes @biomejs/biome@2.5.7 ci --files-ignore-unknown=true --no-errors-on-unmatched
+        language: system
+        types_or: [javascript, jsx, ts, tsx, css]
+        # One invocation, not one per batch: npx writes the platform binary on
+        # first use, and a second process spawning it while the first still has
+        # it open dies with ETXTBSY. That is what the CI runs hit.
+        require_serial: true
+
   - repo: https://github.com/hadolint/hadolint
     rev: 2eece55955ced00200be9729e9728cb7dacca505  # v2.15.1
     hooks:
@@ -90,3 +108,9 @@ repos:
     rev: bdc13c1ca39f84ef141bcf34e089fe7fe7dc2f0d  # v0.8.2
     hooks:
       - id: greenlint
+
+  # FC-MD-008 - markdownlint in CI, blocking. Rules live in .markdownlint.jsonc.
+  - repo: https://github.com/DavidAnson/markdownlint-cli2
+    rev: b82a6c8896e491b9cb377a99ff3412131920681b  # v0.23.2
+    hooks:
+      - id: markdownlint-cli2

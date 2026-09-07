@@ -1,6 +1,6 @@
 // Runs where the `uses:` line sits, at the top of the job. All it does is
 // stamp the start time; the measurement happens in post.js, which the runner
 // invokes automatically when the job ends.
-import * as core from '@actions/core';
+import * as core from "@actions/core";
 
-core.saveState('carbonBadgeStart', String(Date.now()));
+core.saveState("carbonBadgeStart", String(Date.now()));

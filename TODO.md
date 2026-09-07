@@ -16,15 +16,15 @@ record of what shipped.
       ([cron-translate#26](https://github.com/fabiocicerchia/cron-translate/pull/26),
       run `31265537416`, 6 jobs):
 
-      | recorded | real | gap |
-      |---|---|---|
-      | 4s | 10s | 6 |
-      | 7s | 10s | 3 |
-      | 8s | 13s | 5 |
-      | 9s | 16s | 7 |
-      | 10s | 17s | 7 |
-      | 15s | 21s | 6 |
-      | **53s** | **87s** | **34s (39%)** |
+| recorded | real    | gap           |
+| -------- | ------- | ------------- |
+| 4s       | 10s     | 6             |
+| 7s       | 10s     | 3             |
+| 8s       | 13s     | 5             |
+| 9s       | 16s     | 7             |
+| 10s      | 17s     | 7             |
+| 15s      | 21s     | 6             |
+| **53s**  | **87s** | **34s (39%)** |
 
       The gap is a near-constant ~5.7 s/job, so the error scales inversely with
       job length: ~39% on these 10-second jobs, ~1% on a ten-minute build. It
