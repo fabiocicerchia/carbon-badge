@@ -32,7 +32,7 @@ Changelog = "https://github.com/fabiocicerchia/carbon-badge/blob/main/CHANGELOG.
 carbon-badge = "carbon_badge:main"
 
 [tool.setuptools]
-py-modules = ["carbon_badge"]
+packages = ["carbon_badge"]
 
 [tool.ruff]
 line-length = 120
