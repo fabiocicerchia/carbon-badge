@@ -1925,7 +1925,7 @@ class BadgeHandler(http.server.BaseHTTPRequestHandler):
         self,
         compute: Callable[[], Json],
         ttl: int,
-        cache: dict[str, float | bytes | None],
+        cache: dict[str, Any],
         # BaseHTTPRequestHandler's own (request, client_address, server), passed
         # through untouched — typing them here would restate the stdlib's.
         *args: Any,  # noqa: ANN401
