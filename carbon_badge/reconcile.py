@@ -6,7 +6,7 @@ from datetime import datetime, timedelta, timezone
 from typing import NamedTuple
 
 from .artifacts import RegionFactors, _expected_markers, artifact_kwh_by_run, list_artifacts, parse_carbon_artifact
-from .base import DEFAULT_GRID_INTENSITY, Json, RECONCILE_EPSILON_G, RunnerWatts, carbon_artifact_slug, log
+from .base import DEFAULT_GRID_INTENSITY, RECONCILE_EPSILON_G, Json, RunnerWatts, carbon_artifact_slug, log
 from .ci import _api_run_detail, _list_runs
 from .power import DEFAULT_RUNNER_POWER_W, grid_factor_for
 

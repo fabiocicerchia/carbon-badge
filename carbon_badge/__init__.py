@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """carbon-badge — estimate a repo's CI carbon footprint and emit a badge.
 
 Sums 30 days of per-job runtime — from jobs that recorded themselves where
@@ -20,25 +19,68 @@ import http.server
 import json
 import logging
 import os
-import re
 import sys
 import time
 from collections.abc import Callable
 from datetime import datetime, timedelta, timezone
-from typing import Any, NamedTuple, Protocol, cast
+from typing import Any
 
 import requests
 
 # One logger for the process. Diagnostics go here; the badge JSON — the tool's
 # actual result — stays on stdout. Configured once in main(); a caller using
 # this module as a library gets logging's own default behaviour.
-from .base import BASELINE_MEM_GB, BASELINE_VCPU, DEFAULT_GRID_INTENSITY, GRAMS_PER_KILOGRAM, Getter, Json, MEM_PER_VCPU_MB, PUE, RECONCILE_EPSILON_G, Response, RunnerWatts, _ARTIFACT_RE, carbon_artifact_slug, job_slug, log
-from .power import ANY_RUNNER, AZURE_REGION_GRID, BADGE_COLOR, CiUsage, DEFAULT_RUNNER_POWER_W, IDLE_FRACTION, RUNNER_POWER_ESTIMATED, RUNNER_POWER_W, RunTotals, RunnerWattsError, WATTS_BASE, WATTS_PER_GB, _CORES_RE, _ESTIMATED_USED, _NO_CORE_SCALING, _declared_watts, _hours, _note_runner_class, _ran, _table_watts, _warn_estimated_classes, apply_load_factor, grid_factor_for, parse_runner_watts, runner_power_w, watts_from_specs
-from .ci import _MAX_PAGES, _PAGE_SIZE, _api_run_detail, _get_pages, _list_runs, _run_kwh, _warn_if_truncated, run_jobs
-from .grid import CI_API_BASE, CI_API_MAX_AGE_S, IPCC_FUEL_G_PER_KWH, _REGION_CI_API, _REGION_EIA_BA, _REGION_ENERGY_CHARTS, _REGION_UK, _ci_api_factor, _ci_api_snapshot, _eia_factor, _energy_charts_factor, _measured_reading, _to_float, _uk_factor, live_region_factor
 from . import power
-from .artifacts import RegionFactors, _expected_markers, artifact_kwh_by_run, list_artifacts, parse_carbon_artifact
-from .reconcile import Divergence, Reconciliation, _marker_seconds_by_run, _pct, _warn_undeclared_runners, format_reconciliation, grams_co2e, grams_co2e_kwh, reconcile_last_30d, rows_by_gap
+from .artifacts import RegionFactors, _expected_markers, artifact_kwh_by_run
+from .artifacts import list_artifacts as list_artifacts
+from .artifacts import parse_carbon_artifact as parse_carbon_artifact
+from .base import BASELINE_MEM_GB as BASELINE_MEM_GB
+from .base import BASELINE_VCPU as BASELINE_VCPU
+from .base import DEFAULT_GRID_INTENSITY, GRAMS_PER_KILOGRAM, Getter, Json, RunnerWatts, log
+from .base import MEM_PER_VCPU_MB as MEM_PER_VCPU_MB
+from .base import PUE as PUE
+from .base import RECONCILE_EPSILON_G as RECONCILE_EPSILON_G
+from .base import Response as Response
+from .base import carbon_artifact_slug as carbon_artifact_slug
+from .base import job_slug as job_slug
+from .ci import _MAX_PAGES, _PAGE_SIZE, _list_runs, _run_kwh
+from .ci import run_jobs as run_jobs
+from .grid import CI_API_BASE as CI_API_BASE
+from .grid import CI_API_MAX_AGE_S as CI_API_MAX_AGE_S
+from .grid import IPCC_FUEL_G_PER_KWH as IPCC_FUEL_G_PER_KWH
+from .grid import _ci_api_factor as _ci_api_factor
+from .grid import _eia_factor as _eia_factor
+from .grid import _energy_charts_factor as _energy_charts_factor
+from .grid import _uk_factor as _uk_factor
+from .grid import live_region_factor as live_region_factor
+from .power import (
+    _ESTIMATED_USED,
+    ANY_RUNNER,
+    BADGE_COLOR,
+    DEFAULT_RUNNER_POWER_W,
+    CiUsage,
+    _warn_estimated_classes,
+    grid_factor_for,
+    parse_runner_watts,
+    runner_power_w,
+)
+from .power import AZURE_REGION_GRID as AZURE_REGION_GRID
+from .power import IDLE_FRACTION as IDLE_FRACTION
+from .power import RUNNER_POWER_ESTIMATED as RUNNER_POWER_ESTIMATED
+from .power import RUNNER_POWER_W as RUNNER_POWER_W
+from .power import WATTS_BASE as WATTS_BASE
+from .power import WATTS_PER_GB as WATTS_PER_GB
+from .power import RunnerWattsError as RunnerWattsError
+from .power import RunTotals as RunTotals
+from .power import apply_load_factor as apply_load_factor
+from .power import watts_from_specs as watts_from_specs
+from .reconcile import Divergence as Divergence
+from .reconcile import Reconciliation as Reconciliation
+from .reconcile import _warn_undeclared_runners, format_reconciliation, grams_co2e, reconcile_last_30d
+from .reconcile import grams_co2e_kwh as grams_co2e_kwh
+from .reconcile import rows_by_gap as rows_by_gap
+
+
 # newly launched region degrades rather than breaks.
 def ci_kwh_last_30d(  # noqa: PLR0913 — the repo/token/api trio plus independent optional knobs
     repo: str,
@@ -698,4 +740,5 @@ def main(argv: list[str] | None = None) -> int:
 
 if __name__ == "__main__":
     sys.exit(main())
+
 

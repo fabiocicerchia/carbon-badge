@@ -7,10 +7,11 @@ from datetime import datetime, timedelta, timezone
 
 import requests
 
-from .base import Getter, Json, RunnerWatts, _ARTIFACT_RE, log
+from .base import _ARTIFACT_RE, Getter, Json, RunnerWatts, log
 from .ci import _get_pages, _warn_if_truncated, run_jobs
 from .grid import _ci_api_snapshot, live_region_factor
 from .power import ANY_RUNNER, RunTotals, _ran, grid_factor_for, watts_from_specs
+
 
 class RegionFactors:
     """Memoised region -> factor, so each distinct region costs one request.

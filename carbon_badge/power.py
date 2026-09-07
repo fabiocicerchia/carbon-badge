@@ -8,7 +8,7 @@ import sys
 from datetime import datetime
 from typing import NamedTuple
 
-from .base import BASELINE_MEM_GB, BASELINE_VCPU, DEFAULT_GRID_INTENSITY, Json, MEM_PER_VCPU_MB, PUE, RunnerWatts
+from .base import BASELINE_MEM_GB, BASELINE_VCPU, DEFAULT_GRID_INTENSITY, MEM_PER_VCPU_MB, PUE, Json, RunnerWatts
 
 AZURE_REGION_GRID = {
     # Nordics and hydro/nuclear-heavy Europe
