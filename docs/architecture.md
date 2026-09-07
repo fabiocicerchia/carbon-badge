@@ -4,7 +4,7 @@ carbon-badge is a single module (`carbon_badge.py`) with a small CLI.
 
 ## Overview
 
-```
+```text
 runs (30d) → per-job seconds (self-reported, else API) → kWh (per-runner W × PUE)
   → gCO2e (grid factor) → badge JSON
 ```
@@ -30,7 +30,7 @@ runs (30d) → per-job seconds (self-reported, else API) → kWh (per-runner W �
 
 ## How the estimate works
 
-```
+```text
 runs (30d) → per-job seconds (self-reported, else API) → kWh (per-runner W × PUE)
   → gCO2e (grid factor)
 ```

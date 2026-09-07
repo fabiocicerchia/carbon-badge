@@ -1,0 +1,21 @@
+{
+  "default": true,
+
+  // FC-MD-001 - semantic line breaks, so a column limit is meaningless here.
+  "MD013": false,
+
+  "MD003": { "style": "atx" },        // FC-MD-002
+  "MD025": true,                      // FC-MD-002 - one H1
+  "MD001": true,                      // FC-MD-002 - no skipped levels
+  "MD040": true,                      // FC-MD-003 - language on every fence
+  "MD004": { "style": "dash" },       // FC-MD-006
+  "MD029": { "style": "one" },        // FC-MD-006
+  "MD034": true,                      // FC-MD-005 - no bare URLs
+
+  // Repeating a heading under a different parent is correct; only siblings clash.
+  "MD024": { "siblings_only": true },
+
+  // details/summary/img/br per TOOLING.md, plus the semantic inline elements
+  // the docs actually use: kbd for keys, sub for subscripts, code in tables.
+  "MD033": { "allowed_elements": ["details", "summary", "img", "br", "kbd", "sub", "code"] }
+}
