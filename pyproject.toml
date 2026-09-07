@@ -21,7 +21,7 @@ classifiers = [
 dependencies = ["requests>=2.31"]
 
 [project.optional-dependencies]
-dev = ["pytest>=8.0", "ruff>=0.4", "build>=1.2"]
+dev = ["pytest>=8.0", "ruff>=0.4", "build>=1.2", "basedpyright>=1.31"]
 
 [project.urls]
 Homepage = "https://github.com/fabiocicerchia/carbon-badge"
@@ -65,4 +65,25 @@ mypy-init-return = true
   "ANN202",   # ditto a fake's return: it is whatever the code under test reads
   "TRY003",   # a fake raising RuntimeError("provider down") does not want a
               # class of its own -- the message *is* the fixture
+  "ANN401",   # a fake response mirrors requests.Response.json(), which is Any
 ]
+
+[tool.basedpyright]
+# FC-PY-003 asks for strict. The point of a type checker in CI is that it knows
+# the types: "unknown" is the finding, not a level of detail to relax away.
+typeCheckingMode = "strict"
+# Matches requires-python, so the checker rejects what the oldest supported
+# interpreter would reject rather than what this machine happens to run.
+pythonVersion = "3.10"
+# Third-party stubs are not this repository's to ship, and a missing one is a
+# packaging fact about someone else's project rather than a defect here.
+reportMissingTypeStubs = false
+# The module is a single file at the repo root, which tests/ imports directly.
+extraPaths = ["."]
+
+# The tests exercise this module's internals on purpose -- the paging cap, the
+# per-provider grid readers, the estimated-class counter -- so reaching for a
+# `_name` there is the test doing its job, not a leak.
+[[tool.basedpyright.executionEnvironments]]
+root = "tests"
+reportPrivateUsage = false
