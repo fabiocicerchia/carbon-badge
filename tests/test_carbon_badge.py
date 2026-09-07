@@ -3,10 +3,12 @@
 import http.server
 import json
 import logging
+import re
 import threading
 import urllib.error
 import urllib.request
 from datetime import datetime, timedelta, timezone
+from typing import NoReturn
 
 import pytest
 
@@ -19,7 +21,7 @@ from carbon_badge import (
 )
 
 
-def test_conversion_math():
+def test_conversion_math() -> None:
     """1000 minutes at the 9.4 W baseline and 480 g/kWh ~= 75 g.
 
     9.4 W is 8.18 W machine draw (Eco-CI's curve for GitHub's 4-core EPYC 7763)
@@ -28,14 +30,14 @@ def test_conversion_math():
     assert round(grams_co2e(1000), 0) == 75
 
 
-def test_offline_estimate_honours_declared_runner_watts():
+def test_offline_estimate_honours_declared_runner_watts() -> None:
     """--minutes used to ignore --runner-watts and always price at 12.5 W, so
     an offline estimate for a 180 W fleet came back 14x low."""
     scaled = grams_co2e(1000) * (180 / carbon_badge.DEFAULT_RUNNER_POWER_W)
     assert round(grams_co2e(1000, watts=180.0), 0) == round(scaled, 0)
 
 
-def test_runner_power_by_type():
+def test_runner_power_by_type() -> None:
     """runner_power_w maps OS labels to their published power draw."""
     assert runner_power_w(["ubuntu-latest"]) == 9.4
     # Same Azure hardware as Linux — GitHub's 2x Windows billing is a price
@@ -50,7 +52,7 @@ def test_runner_power_by_type():
     assert runner_power_w(["some-custom-label"]) is None
 
 
-def test_arm_and_gpu_are_priced_before_their_os():
+def test_arm_and_gpu_are_priced_before_their_os() -> None:
     """ "ubuntu-22.04-arm" contains "ubuntu", so ordering decides this: a
     generic-first table would charge every ARM runner the full x86 rate."""
     assert runner_power_w(["ubuntu-22.04-arm"]) == 5.6
@@ -58,21 +60,21 @@ def test_arm_and_gpu_are_priced_before_their_os():
     assert runner_power_w(["ubuntu-latest"]) == 9.4
 
 
-def test_gpu_is_not_core_scaled_but_arm_is():
+def test_gpu_is_not_core_scaled_but_arm_is() -> None:
     """The accelerator is fixed and dominates, so scaling it by CPU cores would
     double-count it. ARM's figure is a CPU baseline, so it does scale."""
     assert runner_power_w(["ubuntu-latest-16-cores-gpu"]) == 89.9
     assert runner_power_w(["ubuntu-24.04-arm-8-cores"]) == 10.0  # affine, not 2x5.6
 
 
-def test_arm_and_gpu_defaults_are_overridable():
+def test_arm_and_gpu_defaults_are_overridable() -> None:
     """They're defaults, not constants — an A100 box isn't a T4 box."""
     overrides = carbon_badge.parse_runner_watts(["gpu=400", "arm=6"])
     assert runner_power_w(["ubuntu-latest-gpu"], overrides) == 400.0
     assert runner_power_w(["ubuntu-22.04-arm"], overrides) == 6.0
 
 
-def test_core_count_parsed_from_every_common_label_shape():
+def test_core_count_parsed_from_every_common_label_shape() -> None:
     """Only "-N-cores" was matched before, so "linux-x64-16core" — a real
     larger-runner name — was priced as a 2-core box, an 8x undercount."""
     # Affine: a fixed base plus a per-core term, so 16 cores is not 4x a
@@ -82,7 +84,7 @@ def test_core_count_parsed_from_every_common_label_shape():
     assert runner_power_w(["ubuntu-24.04-8vcpu"]) == 17.6
 
 
-def test_bare_number_prices_every_runner():
+def test_bare_number_prices_every_runner() -> None:
     """The low-effort case: one value, set once in the workflow. It beats the
     built-in guess table — the developer knows their runners, the API doesn't."""
     overrides = carbon_badge.parse_runner_watts(["180"])
@@ -92,14 +94,14 @@ def test_bare_number_prices_every_runner():
     assert runner_power_w(["ubuntu-latest"], overrides) == 180.0
 
 
-def test_specific_label_still_beats_the_blanket_figure():
+def test_specific_label_still_beats_the_blanket_figure() -> None:
     """Mixed fleets: the blanket value is the fallback, not the override."""
     overrides = carbon_badge.parse_runner_watts(["180", "gpu=320"])
     assert runner_power_w(["ubuntu-latest-4-cores-gpu"], overrides) == 320.0
     assert runner_power_w(["ubuntu-latest"], overrides) == 180.0
 
 
-def test_runner_watts_overrides_price_custom_and_self_hosted_labels():
+def test_runner_watts_overrides_price_custom_and_self_hosted_labels() -> None:
     """The only way to price a runner whose specs the API never exposes."""
     overrides = carbon_badge.parse_runner_watts(["my-builder=180", "gpu=320"])
     assert runner_power_w(["my-builder"], overrides) == 180.0
@@ -110,14 +112,18 @@ def test_runner_watts_overrides_price_custom_and_self_hosted_labels():
 
 
 @pytest.mark.parametrize("bad", ["no-equals", "=100", "label=", "label=abc", "label=0", "label=-5"])
-def test_parse_runner_watts_rejects_malformed_input(bad):
+def test_parse_runner_watts_rejects_malformed_input(bad) -> None:
     """A typo'd override that silently did nothing would leave the badge wrong
     in exactly the case the user was trying to fix."""
-    with pytest.raises(ValueError):
+    # Every rejection names the input that caused it -- which is the point of
+    # the docstring above: a typo that says nothing is the failure mode.
+    with pytest.raises(ValueError, match=re.escape(repr(bad))):
         carbon_badge.parse_runner_watts([bad])
 
 
-def test_unknown_runners_are_charged_not_skipped(monkeypatch, caplog):
+def test_unknown_runners_are_charged_not_skipped(
+    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
     """Skipping self-hosted scored it as zero, so moving a build onto the
     biggest machine you own improved the badge. It's charged and reported now."""
     now = datetime.now(timezone.utc).isoformat()
@@ -138,10 +144,11 @@ def test_unknown_runners_are_charged_not_skipped(monkeypatch, caplog):
     monkeypatch.setattr(carbon_badge.requests, "get", fake_get)
     with caplog.at_level(logging.WARNING, logger="carbon-badge"):
         carbon_badge.ci_kwh_last_30d("owner/repo", token=None)
-    assert "self-hosted" in caplog.text and "--runner-watts" in caplog.text
+    assert "self-hosted" in caplog.text
+    assert "--runner-watts" in caplog.text
 
 
-def test_badge_passes_no_verdict():
+def test_badge_passes_no_verdict() -> None:
     """One colour whatever the figure. A red-amber-green scale graded project
     size while implying virtue, and on the fleet it was built for every repo
     sat in the bottom band anyway — a constant dressed as a signal."""
@@ -149,16 +156,17 @@ def test_badge_passes_no_verdict():
         assert endpoint_json(grams)["color"] == carbon_badge.BADGE_COLOR
 
 
-def test_format_switches_units():
+def test_format_switches_units() -> None:
     """format_grams switches from g to kg above 1000 gCO2e."""
     assert format_grams(900) == "900 gCO2e/mo"
     assert format_grams(2300) == "2.3 kgCO2e/mo"
 
 
-def test_endpoint_schema():
+def test_endpoint_schema() -> None:
     """endpoint_json emits the Shields.io endpoint fields."""
     data = endpoint_json(120)
-    assert data["schemaVersion"] == 1 and data["label"] == "CI carbon"
+    assert data["schemaVersion"] == 1
+    assert data["label"] == "CI carbon"
 
 
 def _usage(kwh, measured_jobs=0, total_jobs=0, measured_kwh=0.0, guessed_kwh=0.0):
@@ -166,7 +174,9 @@ def _usage(kwh, measured_jobs=0, total_jobs=0, measured_kwh=0.0, guessed_kwh=0.0
     return carbon_badge.CiUsage(kwh, grams, measured_jobs, total_jobs, measured_kwh, guessed_kwh)
 
 
-def test_pagination_cap_is_reported_not_silent(monkeypatch, caplog):
+def test_pagination_cap_is_reported_not_silent(
+    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
     """A cap that silently drops runs understates the badge and reads as a
     quiet month. Same reasoning as the closed-PR search cap."""
     full_page = [{"id": i, "run_started_at": None, "updated_at": None} for i in range(100)]
@@ -178,10 +188,11 @@ def test_pagination_cap_is_reported_not_silent(monkeypatch, caplog):
     with caplog.at_level(logging.WARNING, logger="carbon-badge"):
         runs = carbon_badge._list_runs("o/r", None, "https://api.github.com", "2026-07-09")
     assert len(runs) == 100 * carbon_badge._MAX_PAGES
-    assert "undercount" in caplog.text and "9999" in caplog.text
+    assert "undercount" in caplog.text
+    assert "9999" in caplog.text
 
 
-def test_no_warning_when_everything_was_read(monkeypatch, caplog):
+def test_no_warning_when_everything_was_read(monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture) -> None:
     def fake_get(url, params=None, headers=None, timeout=None):
         return _FakeResponse({"workflow_runs": [{"id": 1}], "total_count": 1})
 
@@ -191,7 +202,7 @@ def test_no_warning_when_everything_was_read(monkeypatch, caplog):
     assert "undercount" not in caplog.text
 
 
-def test_confidence_is_driven_by_energy_not_job_count():
+def test_confidence_is_driven_by_energy_not_job_count() -> None:
     """One long job on an unknown runner undermines the total more than a dozen
     short known ones, so the score weighs energy."""
     # 9 tidy known jobs, 1 huge unmeasured one holding most of the energy.
@@ -202,7 +213,7 @@ def test_confidence_is_driven_by_energy_not_job_count():
     assert carbon_badge.confidence(same_ratio) == "measured"
 
 
-def test_declaring_an_unknown_runner_clears_the_guess(monkeypatch):
+def test_declaring_an_unknown_runner_clears_the_guess(monkeypatch: pytest.MonkeyPatch) -> None:
     """The escape route from "rough": nine short recognised jobs plus one
     ten-hour unrecognised one puts ~97% of the energy on a fallback wattage.
     Declaring that runner removes the guess entirely — and, here, corrects a
@@ -232,7 +243,7 @@ def test_declaring_an_unknown_runner_clears_the_guess(monkeypatch):
     assert declared.kwh > blind.kwh * 10
 
 
-def test_confidence_levels():
+def test_confidence_levels() -> None:
     assert carbon_badge.confidence(_usage(0.0)) == "no CI"
     # Nothing self-reported, but every runner was recognised: durations are
     # real, only the wattages are modelled.
@@ -243,22 +254,20 @@ def test_confidence_levels():
     assert carbon_badge.confidence(_usage(10.0, measured_kwh=7.0, guessed_kwh=3.0)) == "rough"
 
 
-def test_badge_states_its_own_confidence():
+def test_badge_states_its_own_confidence() -> None:
     """ "113 gCO2e/mo" from instrumented jobs and the same string from a wattage
     table are different claims; the badge must not render them identically."""
     assert endpoint_json(120, _usage(1.0, 24, 24, measured_kwh=1.0))["message"] == (
         "120 gCO2e/mo"  # fully measured earns an unqualified figure
     )
-    assert endpoint_json(120, _usage(1.0, 18, 24, measured_kwh=0.5))["message"] == (
-        "120 gCO2e/mo (~18/24 measured)"
-    )
+    assert endpoint_json(120, _usage(1.0, 18, 24, measured_kwh=0.5))["message"] == ("120 gCO2e/mo (~18/24 measured)")
     assert endpoint_json(120, _usage(1.0))["message"] == "120 gCO2e/mo (estimated)"
     assert endpoint_json(120, _usage(1.0, guessed_kwh=0.9))["message"] == ("120 gCO2e/mo (rough)")
     # No provenance available at all (--minutes): stay silent rather than imply.
     assert endpoint_json(120)["message"] == "120 gCO2e/mo"
 
 
-def test_badge_grams_always_cover_all_ci():
+def test_badge_grams_always_cover_all_ci() -> None:
     """The colour and the number reflect *all* CI, measured or inferred — a
     badge that shrank while instrumentation lagged would reward stalling."""
     partly = endpoint_json(1500, _usage(1.0, 5, 50, measured_kwh=0.1))
@@ -269,21 +278,25 @@ def test_badge_grams_always_cover_all_ci():
 
 
 class _FakeResponse:
-    def __init__(self, payload):
+    def __init__(self, payload) -> None:
         self._payload = payload
 
-    def raise_for_status(self):
+    def raise_for_status(self) -> None:
         pass
 
     def json(self):
         return self._payload
 
 
-def test_parse_carbon_artifact():
+def test_parse_carbon_artifact() -> None:
     """The artifact name is the wire format, so parsing it is load-bearing."""
-    assert carbon_badge.parse_carbon_artifact(
-        "carbon.v1.142.4.16384.ubuntu.eastus.build-a1b2c3d4"
-    ) == (142.0, 4, 16384, "ubuntu", "eastus")
+    assert carbon_badge.parse_carbon_artifact("carbon.v1.142.4.16384.ubuntu.eastus.build-a1b2c3d4") == (
+        142.0,
+        4,
+        16384,
+        "ubuntu",
+        "eastus",
+    )
     # The platform is load-bearing: the same specs draw very different power on
     # Apple silicon, so a name without one must not be accepted as v1.
     assert carbon_badge.parse_carbon_artifact("carbon.v1.142.4.16384.build") is None
@@ -297,7 +310,7 @@ def test_parse_carbon_artifact():
     assert carbon_badge.parse_carbon_artifact("") is None
 
 
-def test_the_two_pricing_paths_agree_at_every_size():
+def test_the_two_pricing_paths_agree_at_every_size() -> None:
     """The same machine must cost the same whether it was recognised by its
     label or reported its own hardware — otherwise a repo's figure moves as it
     instruments, with nothing in the world having changed.
@@ -312,17 +325,14 @@ def test_the_two_pricing_paths_agree_at_every_size():
         assert by_label == by_specs, f"{cores} cores: {by_label} vs {by_specs}"
 
 
-def test_every_platform_reproduces_its_table_entry():
+def test_every_platform_reproduces_its_table_entry() -> None:
     """Per-core draw is derived from each table entry rather than hardcoded, so
     the model and the table cannot drift apart when a figure is revised."""
     for platform in ("ubuntu", "windows", "arm", "macos"):
-        assert (
-            carbon_badge.watts_from_specs(4, 16384, platform)
-            == carbon_badge.RUNNER_POWER_W[platform]
-        )
+        assert carbon_badge.watts_from_specs(4, 16384, platform) == carbon_badge.RUNNER_POWER_W[platform]
 
 
-def test_watts_from_specs_is_platform_aware():
+def test_watts_from_specs_is_platform_aware() -> None:
     """The linear model is fitted to x86 shared VMs and does not transfer.
     A Mac mini M1 reporting 3 vCPU / 7 GiB comes out at 6.8 W through it against
     a measured 15.53 W — so a platform-blind self-reported path would have been
@@ -333,12 +343,10 @@ def test_watts_from_specs_is_platform_aware():
     # Doubling the cores at the standard memory ratio, affine not proportional.
     assert carbon_badge.watts_from_specs(8, 32768, "arm") == 10.0
     # x86 still uses the linear model, and defaults to it.
-    assert carbon_badge.watts_from_specs(4, 16384, "ubuntu") == carbon_badge.watts_from_specs(
-        4, 16384
-    )
+    assert carbon_badge.watts_from_specs(4, 16384, "ubuntu") == carbon_badge.watts_from_specs(4, 16384)
 
 
-def test_watts_from_specs_reproduces_the_known_runner():
+def test_watts_from_specs_reproduces_the_known_runner() -> None:
     """Anchored on Eco-CI's curve for the machine GitHub actually uses: a
     4-vCPU / 16 GiB runner at 8.18 W machine draw x 1.15 PUE ~= 9.4 W.
 
@@ -369,17 +377,13 @@ def _serve(artifacts, runs, calls, jobs_per_run=1):
         if "/artifacts" in url:
             return _FakeResponse({"artifacts": artifacts if page == 1 else []})
         if "/jobs" in url:
-            return _FakeResponse(
-                {"jobs": [_job(["ubuntu-latest"], 60)] * jobs_per_run}
-                if page == 1
-                else {"jobs": []}
-            )
+            return _FakeResponse({"jobs": [_job(["ubuntu-latest"], 60)] * jobs_per_run} if page == 1 else {"jobs": []})
         return _FakeResponse({"workflow_runs": runs if page == 1 else []})
 
     return fake_get
 
 
-def test_artifact_kwh_by_run_keys_by_run_and_downloads_nothing(monkeypatch):
+def test_artifact_kwh_by_run_keys_by_run_and_downloads_nothing(monkeypatch: pytest.MonkeyPatch) -> None:
     """Keyed by run because instrumentation lands one workflow at a time, so
     the answer is almost never all-or-nothing."""
     calls = []
@@ -401,14 +405,12 @@ def test_artifact_kwh_by_run_keys_by_run_and_downloads_nothing(monkeypatch):
     assert not any("/jobs" in u or u.endswith("/zip") for u in calls)
 
 
-def test_partial_instrumentation_tops_up_from_the_api(monkeypatch):
+def test_partial_instrumentation_tops_up_from_the_api(monkeypatch: pytest.MonkeyPatch) -> None:
     """The realistic state. Self-reported runs are used as-is; only the rest
     cost a request. Accurate throughout, and cheaper with every workflow you
     instrument — rather than all-or-nothing at some threshold."""
     now = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
-    runs = [
-        {"id": i, "workflow_id": 7, "run_started_at": now, "updated_at": now} for i in (1, 2, 3, 4)
-    ]
+    runs = [{"id": i, "workflow_id": 7, "run_started_at": now, "updated_at": now} for i in (1, 2, 3, 4)]
     artifacts = [
         _artifact("carbon.v1.3600.2.7168.ubuntu.eastus.a", 1),
         _artifact("carbon.v1.3600.2.7168.ubuntu.eastus.b", 2),
@@ -431,13 +433,11 @@ def test_partial_instrumentation_tops_up_from_the_api(monkeypatch):
     assert round(kwh, 9) == round(self_reported + from_api, 9)
 
 
-def test_full_coverage_costs_one_sample_per_workflow(monkeypatch):
+def test_full_coverage_costs_one_sample_per_workflow(monkeypatch: pytest.MonkeyPatch) -> None:
     """Fully instrumented: one sampled run per workflow to establish the job
     count, and nothing else."""
     now = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
-    runs = [
-        {"id": i, "workflow_id": 7, "run_started_at": now, "updated_at": now} for i in (1, 2, 3)
-    ]
+    runs = [{"id": i, "workflow_id": 7, "run_started_at": now, "updated_at": now} for i in (1, 2, 3)]
     artifacts = [_artifact(f"carbon.v1.3600.2.7168.ubuntu.eastus.j{i}", i) for i in (1, 2, 3)]
     calls = []
     monkeypatch.setattr(carbon_badge.requests, "get", _serve(artifacts, runs, calls))
@@ -448,7 +448,7 @@ def test_full_coverage_costs_one_sample_per_workflow(monkeypatch):
     assert (usage.measured_jobs, usage.total_jobs) == (3, 3)
 
 
-def test_ignore_self_reported_does_not_consult_artifacts(monkeypatch):
+def test_ignore_self_reported_does_not_consult_artifacts(monkeypatch: pytest.MonkeyPatch) -> None:
     """--ignore-self-reported must not touch the artifacts listing at all,
     otherwise the two paths cannot be reconciled against each other."""
     now = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
@@ -464,7 +464,7 @@ def test_ignore_self_reported_does_not_consult_artifacts(monkeypatch):
     assert sum(1 for u in calls if "/jobs" in u) == 1
 
 
-def test_expired_and_out_of_window_markers_are_ignored(monkeypatch):
+def test_expired_and_out_of_window_markers_are_ignored(monkeypatch: pytest.MonkeyPatch) -> None:
     """Retention outlives the window, so old markers must not inflate a month."""
     now = datetime.now(timezone.utc)
     fresh = now.isoformat().replace("+00:00", "Z")
@@ -476,19 +476,18 @@ def test_expired_and_out_of_window_markers_are_ignored(monkeypatch):
     ]
     monkeypatch.setattr(carbon_badge.requests, "get", _serve(artifacts, [], []))
     by_run, jobs = carbon_badge.artifact_kwh_by_run("o/r", token=None)
-    assert set(by_run) == {1} and jobs == 1
+    assert set(by_run) == {1}
+    assert jobs == 1
 
 
-def test_declared_watts_still_beat_the_model(monkeypatch):
+def test_declared_watts_still_beat_the_model(monkeypatch: pytest.MonkeyPatch) -> None:
     """Someone who knows their hardware's real draw beats a linear model."""
     monkeypatch.setattr(
         carbon_badge.requests,
         "get",
         _serve([_artifact("carbon.v1.3600.2.7168.ubuntu.eastus.a", 1)], [], []),
     )
-    by_run, _ = carbon_badge.artifact_kwh_by_run(
-        "o/r", token=None, runner_watts={carbon_badge.ANY_RUNNER: 200.0}
-    )
+    by_run, _ = carbon_badge.artifact_kwh_by_run("o/r", token=None, runner_watts={carbon_badge.ANY_RUNNER: 200.0})
     assert round(by_run[1][0], 9) == round(200.0 / 1000, 9)
 
 
@@ -529,7 +528,7 @@ def _job(labels, minutes):
     }
 
 
-def test_gitlab_kwh_charges_self_managed_runners(monkeypatch):
+def test_gitlab_kwh_charges_self_managed_runners(monkeypatch: pytest.MonkeyPatch) -> None:
     """Self-managed runners used to be skipped — scored as zero emissions, the
     same perverse incentive as the GitHub path. Both jobs are charged now."""
     now = datetime.now(timezone.utc).isoformat()
@@ -549,7 +548,7 @@ def test_gitlab_kwh_charges_self_managed_runners(monkeypatch):
     assert carbon_badge.confidence(usage) == "rough"
 
 
-def test_gitlab_runner_watts_matches_on_tags(monkeypatch):
+def test_gitlab_runner_watts_matches_on_tags(monkeypatch: pytest.MonkeyPatch) -> None:
     """Tags and the runner description are GitLab's equivalent of a label."""
     now = datetime.now(timezone.utc).isoformat()
     jobs_page1 = [
@@ -565,15 +564,13 @@ def test_gitlab_runner_watts_matches_on_tags(monkeypatch):
         return _FakeResponse(jobs_page1 if params["page"] == 1 else [])
 
     monkeypatch.setattr(carbon_badge.requests, "get", fake_get)
-    usage = carbon_badge.gitlab_kwh_last_30d(
-        "group/project", token=None, runner_watts={"big-metal": 200.0}
-    )
+    usage = carbon_badge.gitlab_kwh_last_30d("group/project", token=None, runner_watts={"big-metal": 200.0})
     assert round(usage.kwh, 6) == round(200.0 / 1000, 6)
     # Declared, so nothing is guessed — "estimated", not "rough".
     assert carbon_badge.confidence(usage) == "estimated"
 
 
-def test_live_grid_intensity_injected_client():
+def test_live_grid_intensity_injected_client() -> None:
     """live_grid_intensity reads carbonIntensity via the injected `get` callable."""
 
     def fake_get(url, params=None, headers=None, timeout=None):
@@ -583,7 +580,7 @@ def test_live_grid_intensity_injected_client():
     assert carbon_badge.live_grid_intensity("SE", get=fake_get) == 42.5
 
 
-def test_serve_badge_endpoint_caches_and_404s():
+def test_serve_badge_endpoint_caches_and_404s() -> None:
     """badge_handler serves /badge.json from cache within ttl and 404s elsewhere."""
     calls = {"n": 0}
 
@@ -613,7 +610,7 @@ def test_serve_badge_endpoint_caches_and_404s():
         thread.join(timeout=5)
 
 
-def test_a_partly_instrumented_run_does_not_lose_its_other_jobs(monkeypatch):
+def test_a_partly_instrumented_run_does_not_lose_its_other_jobs(monkeypatch: pytest.MonkeyPatch) -> None:
     """The reviewer's case, and the incremental-adoption path this code exists
     to serve: one run, two jobs, only the short one instrumented.
 
@@ -646,7 +643,7 @@ def test_a_partly_instrumented_run_does_not_lose_its_other_jobs(monkeypatch):
     assert carbon_badge.confidence(usage) != "measured"
 
 
-def test_markers_are_not_double_counted_when_a_run_is_topped_up(monkeypatch):
+def test_markers_are_not_double_counted_when_a_run_is_topped_up(monkeypatch: pytest.MonkeyPatch) -> None:
     """Topping up must replace the partial markers, not add to them."""
     now = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
     runs = [{"id": 1, "workflow_id": 7, "run_started_at": now, "updated_at": now}]
@@ -670,7 +667,7 @@ def test_markers_are_not_double_counted_when_a_run_is_topped_up(monkeypatch):
     assert round(usage.kwh, 9) == round(2 * carbon_badge.RUNNER_POWER_W["ubuntu"] / 1000, 9)
 
 
-def test_run_jobs_pages_past_thirty(monkeypatch):
+def test_run_jobs_pages_past_thirty(monkeypatch: pytest.MonkeyPatch) -> None:
     """The API defaults to 30 per page, so a wider matrix was truncated — and
     the confidence ratio is now derived from these counts."""
     pages = {1: [_job(["ubuntu-latest"], 1)] * 100, 2: [_job(["ubuntu-latest"], 1)] * 5}
@@ -683,7 +680,7 @@ def test_run_jobs_pages_past_thirty(monkeypatch):
     assert len(carbon_badge.run_jobs(1, "o/r", token=None)) == 105
 
 
-def test_undeclared_warning_never_suggests_a_command_that_will_not_parse(caplog):
+def test_undeclared_warning_never_suggests_a_command_that_will_not_parse(caplog: pytest.LogCaptureFixture) -> None:
     """The message exists to hand over the fix; a broken flag is worse than an
     honest "cannot suggest one"."""
     with caplog.at_level(logging.WARNING, logger="carbon-badge"):
@@ -695,7 +692,7 @@ def test_undeclared_warning_never_suggests_a_command_that_will_not_parse(caplog)
         carbon_badge.parse_runner_watts([flag.replace("<watts>", "180")])
 
 
-def test_gitlab_honours_a_blanket_override_on_untagged_jobs(monkeypatch):
+def test_gitlab_honours_a_blanket_override_on_untagged_jobs(monkeypatch: pytest.MonkeyPatch) -> None:
     """Untagged is the common GitLab case; an `if tags` guard skipped the
     blanket figure entirely and priced a 180 W fleet at the 9.4 W baseline."""
     now = datetime.now(timezone.utc).isoformat()
@@ -705,13 +702,11 @@ def test_gitlab_honours_a_blanket_override_on_untagged_jobs(monkeypatch):
         return _FakeResponse(jobs_page1 if params["page"] == 1 else [])
 
     monkeypatch.setattr(carbon_badge.requests, "get", fake_get)
-    usage = carbon_badge.gitlab_kwh_last_30d(
-        "group/project", token=None, runner_watts={carbon_badge.ANY_RUNNER: 180.0}
-    )
+    usage = carbon_badge.gitlab_kwh_last_30d("group/project", token=None, runner_watts={carbon_badge.ANY_RUNNER: 180.0})
     assert round(usage.kwh, 6) == round(180.0 / 1000, 6)
 
 
-def test_an_unusually_small_newest_run_cannot_lower_the_bar(monkeypatch):
+def test_an_unusually_small_newest_run_cannot_lower_the_bar(monkeypatch: pytest.MonkeyPatch) -> None:
     """The denominator is one number per workflow applied across a whole month,
     and the sample is the newest instrumented run. If that run happened to be
     small — conditional jobs that did not fire, a narrower matrix — the bar
@@ -758,7 +753,7 @@ def test_an_unusually_small_newest_run_cannot_lower_the_bar(monkeypatch):
     assert round(usage.kwh, 9) == round(7 * carbon_badge.RUNNER_POWER_W["ubuntu"] / 1000, 9)
 
 
-def test_skipped_jobs_do_not_make_completeness_unreachable(monkeypatch):
+def test_skipped_jobs_do_not_make_completeness_unreachable(monkeypatch: pytest.MonkeyPatch) -> None:
     """Real shape, from greenlint's release workflow: one job runs, two are
     skipped by their `if:`. GitHub reports all three with both timestamps set.
 
@@ -797,7 +792,7 @@ def test_skipped_jobs_do_not_make_completeness_unreachable(monkeypatch):
     assert len(queried) == 1
 
 
-def test_skipped_jobs_contribute_no_energy(monkeypatch):
+def test_skipped_jobs_contribute_no_energy(monkeypatch: pytest.MonkeyPatch) -> None:
     """They also carry timestamps, sometimes with completed_at *before*
     started_at, so they must be dropped rather than clamped to zero."""
     now = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
@@ -827,7 +822,7 @@ def test_skipped_jobs_contribute_no_energy(monkeypatch):
     assert round(usage.kwh, 9) == round(carbon_badge.RUNNER_POWER_W["ubuntu"] / 1000, 9)
 
 
-def test_grid_factor_averages_a_day_not_an_instant():
+def test_grid_factor_averages_a_day_not_an_instant() -> None:
     """A single reading is a poor multiplier for a 30-day total. Grids swing
     2-3x daily and the refresh runs on a fixed cron — 02:17 Monday for the
     fleet — so `latest` would price a month at an overnight low and the figure
@@ -844,7 +839,7 @@ def test_grid_factor_averages_a_day_not_an_instant():
     assert not any(c.endswith("latest") for c in calls)
 
 
-def test_grid_factor_falls_back_to_the_instant_reading(caplog):
+def test_grid_factor_falls_back_to_the_instant_reading(caplog: pytest.LogCaptureFixture) -> None:
     """History coverage varies by zone and plan; a token that can only reach
     `latest` must still work, loudly."""
 
@@ -858,7 +853,7 @@ def test_grid_factor_falls_back_to_the_instant_reading(caplog):
     assert "instantaneous" in caplog.text
 
 
-def test_grid_factor_ignores_gaps_in_the_history():
+def test_grid_factor_ignores_gaps_in_the_history() -> None:
     """Electricity Maps returns nulls for hours it has no data for."""
 
     def fake_get(url, params=None, headers=None, timeout=None):
@@ -882,17 +877,18 @@ def _resp(payload):
     return _FakeResponse(payload)
 
 
-def test_energy_charts_takes_the_latest_non_null_reading():
+def test_energy_charts_takes_the_latest_non_null_reading() -> None:
     """15-minute series, and the newest slot is often still null."""
 
     def fake_get(url, params=None, headers=None, timeout=None):
-        assert "energy-charts" in url and params["country"] == "de"
+        assert "energy-charts" in url
+        assert params["country"] == "de"
         return _resp({"co2eq": [400.0, 420.0, 411.5, None]})
 
     assert carbon_badge._energy_charts_factor("de", get=fake_get) == 411.5
 
 
-def test_uk_falls_back_to_forecast_within_the_current_half_hour():
+def test_uk_falls_back_to_forecast_within_the_current_half_hour() -> None:
     """NESO publishes `actual` only once a settlement period closes."""
 
     def fake_get(url, params=None, headers=None, timeout=None):
@@ -906,7 +902,7 @@ def test_uk_falls_back_to_forecast_within_the_current_half_hour():
     assert carbon_badge._uk_factor(get=settled) == 133.0
 
 
-def test_eia_weights_the_fuel_mix_of_the_newest_hour_only():
+def test_eia_weights_the_fuel_mix_of_the_newest_hour_only() -> None:
     """EIA gives generation by fuel, not intensity, so the number is ours:
     generation-weighted IPCC lifecycle factors. Mixing two hours would blend a
     partially reported one into a complete one."""
@@ -926,7 +922,7 @@ def test_eia_weights_the_fuel_mix_of_the_newest_hour_only():
     assert round(got, 6) == round(expected, 6)
 
 
-def test_eia_ignores_negative_generation():
+def test_eia_ignores_negative_generation() -> None:
     """Net-negative rows are storage charging, not a fuel."""
     rows = [
         {"period": "p", "fueltype": "NG", "value": "100"},
@@ -939,7 +935,7 @@ def test_eia_ignores_negative_generation():
     assert carbon_badge._eia_factor("PJM", "key", get=fake_get) == 490.0
 
 
-def test_us_regions_need_a_key_and_degrade_without_one():
+def test_us_regions_need_a_key_and_degrade_without_one() -> None:
     """No key means no US provider — the annual average, not a crash."""
     calls = []
 
@@ -951,10 +947,10 @@ def test_us_regions_need_a_key_and_degrade_without_one():
     assert calls == []
 
 
-def test_a_failing_provider_never_breaks_the_refresh(caplog):
+def test_a_failing_provider_never_breaks_the_refresh(caplog: pytest.LogCaptureFixture) -> None:
     """A grid lookup is an optional refinement; it must not fail a badge."""
 
-    def boom(url, params=None, headers=None, timeout=None):
+    def boom(url, params=None, headers=None, timeout=None) -> NoReturn:
         raise RuntimeError("provider down")
 
     with caplog.at_level(logging.WARNING, logger="carbon-badge"):
@@ -962,7 +958,7 @@ def test_a_failing_provider_never_breaks_the_refresh(caplog):
     assert "live grid lookup failed" in caplog.text
 
 
-def test_resolver_caches_per_region_and_honours_an_explicit_figure():
+def test_resolver_caches_per_region_and_honours_an_explicit_figure() -> None:
     """One request per distinct region per refresh, not one per job — and a
     declared figure skips the providers entirely."""
     calls = []
@@ -981,7 +977,7 @@ def test_resolver_caches_per_region_and_honours_an_explicit_figure():
     assert len(calls) == 1, "an explicit figure must not consult a provider"
 
 
-def test_unknown_region_falls_back_to_the_annual_average():
+def test_unknown_region_falls_back_to_the_annual_average() -> None:
     resolve = carbon_badge.RegionFactors().factor_for
     assert resolve("moonbase1") == carbon_badge.DEFAULT_GRID_INTENSITY
 
@@ -989,20 +985,20 @@ def test_unknown_region_falls_back_to_the_annual_average():
 class TestLoadFactor:
     """--load-factor: what to do about a flat wattage on an I/O-bound job."""
 
-    def setup_method(self):
+    def setup_method(self) -> None:
         carbon_badge.LOAD_FACTOR = 1.0
 
-    def teardown_method(self):
+    def teardown_method(self) -> None:
         carbon_badge.LOAD_FACTOR = 1.0
 
-    def test_default_is_unchanged_behaviour(self):
+    def test_default_is_unchanged_behaviour(self) -> None:
         # The API exposes no utilisation, so full load stays the default: the
         # honest reading of "we do not know" for a number that should not
         # flatter the caller.
         assert carbon_badge.watts_from_specs(4, 16 * 1024) == 9.4
         assert carbon_badge.runner_power_w(["ubuntu-latest"]) == 9.4
 
-    def test_only_the_variable_part_scales(self):
+    def test_only_the_variable_part_scales(self) -> None:
         # A machine at 0% CPU still draws its idle power, so a load factor of
         # zero is not zero watts. A plain multiply would have understated by
         # about the margin the default overstates.
@@ -1011,13 +1007,13 @@ class TestLoadFactor:
         assert idle == pytest.approx(9.4 * carbon_badge.IDLE_FRACTION, abs=0.01)
         assert idle > 0
 
-    def test_a_quarter_load_is_not_a_quarter_of_the_power(self):
+    def test_a_quarter_load_is_not_a_quarter_of_the_power(self) -> None:
         carbon_badge.LOAD_FACTOR = 0.25
         watts = carbon_badge.watts_from_specs(4, 16 * 1024)
         assert watts == pytest.approx(3.87, abs=0.01)
         assert watts > 9.4 * 0.25  # idle floor keeps it above the naive figure
 
-    def test_both_routes_agree_under_a_load_factor(self):
+    def test_both_routes_agree_under_a_load_factor(self) -> None:
         # The invariant the whole power model is built around: the label path
         # and the self-reported path must price the same machine identically,
         # or a repo's figure moves as it instruments.
@@ -1026,14 +1022,11 @@ class TestLoadFactor:
             carbon_badge.BASELINE_VCPU, carbon_badge.BASELINE_MEM_GB * 1024
         )
 
-    def test_macos_scales_too(self):
+    def test_macos_scales_too(self) -> None:
         carbon_badge.LOAD_FACTOR = 0.5
-        assert (
-            carbon_badge.watts_from_specs(8, 16 * 1024, "macos")
-            < carbon_badge.RUNNER_POWER_W["macos"]
-        )
+        assert carbon_badge.watts_from_specs(8, 16 * 1024, "macos") < carbon_badge.RUNNER_POWER_W["macos"]
 
-    def test_declared_runner_watts_scale_as_well(self):
+    def test_declared_runner_watts_scale_as_well(self) -> None:
         # A declared figure is a full-load figure like any other, so it must
         # scale — otherwise --runner-watts and --load-factor would contradict.
         carbon_badge.LOAD_FACTOR = 0.5
@@ -1042,7 +1035,7 @@ class TestLoadFactor:
             100 * (carbon_badge.IDLE_FRACTION + 0.5 * (1 - carbon_badge.IDLE_FRACTION)), abs=0.01
         )
 
-    def test_out_of_range_is_refused(self):
+    def test_out_of_range_is_refused(self) -> None:
         with pytest.raises(SystemExit):
             carbon_badge.main(["owner/repo", "--load-factor", "1.5"])
         with pytest.raises(SystemExit):
@@ -1080,19 +1073,19 @@ def _ci_snapshot(generated_at="2026-08-08T18:00:00Z"):
     }
 
 
-def test_ci_api_reports_consumption_lifecycle_for_a_country():
+def test_ci_api_reports_consumption_lifecycle_for_a_country() -> None:
     got = carbon_badge._ci_api_factor("JP", _ci_snapshot(), now=_dt("2026-08-08T18:10:00Z"))
     # Not 477 (direct) and not 522 (lifecycle): the reported figure carries both
     # the upstream scope and the trade adjustment.
     assert got == 567.0
 
 
-def test_ci_api_zone_falls_back_to_lifecycle():
+def test_ci_api_zone_falls_back_to_lifecycle() -> None:
     got = carbon_badge._ci_api_factor("US/ERCO", _ci_snapshot(), now=_dt("2026-08-08T18:10:00Z"))
     assert got == 425.0
 
 
-def test_ci_api_refuses_an_annual_average():
+def test_ci_api_refuses_an_annual_average() -> None:
     """The API's fallback for a grid with no live feed is a yearly constant —
     which is what AZURE_REGION_GRID already holds. Taking it would print "live
     at 513" for a figure no more live than the table's."""
@@ -1100,7 +1093,7 @@ def test_ci_api_refuses_an_annual_average():
     assert got is None
 
 
-def test_ci_api_refuses_a_missed_pipeline_run():
+def test_ci_api_refuses_a_missed_pipeline_run() -> None:
     """Nothing in the response says it is stale — the objects are static and
     served with no application in the request path — so a missed hourly run
     only shows up as an old generated_at."""
@@ -1111,7 +1104,7 @@ def test_ci_api_refuses_a_missed_pipeline_run():
     assert carbon_badge._ci_api_factor("JP", _ci_snapshot(), now=late) is None
 
 
-def test_ci_api_snapshot_is_fetched_once_for_many_regions():
+def test_ci_api_snapshot_is_fetched_once_for_many_regions() -> None:
     """The API allows 1 request per 10s per IP. Resolving several regions with
     a lookup each would 429 on the second; /v1/latest.json is the whole world
     in one object, so N regions stay at one request."""
@@ -1129,8 +1122,8 @@ def test_ci_api_snapshot_is_fetched_once_for_many_regions():
     assert calls[0].endswith("/v1/latest.json")
 
 
-def test_ci_api_failure_leaves_the_annual_average_standing(caplog):
-    def boom(url, params=None, headers=None, timeout=None):
+def test_ci_api_failure_leaves_the_annual_average_standing(caplog: pytest.LogCaptureFixture) -> None:
+    def boom(url, params=None, headers=None, timeout=None) -> NoReturn:
         raise RuntimeError("ci-api down")
 
     resolve = carbon_badge.RegionFactors(get=boom).factor_for
@@ -1142,7 +1135,7 @@ def test_ci_api_failure_leaves_the_annual_average_standing(caplog):
 # --- estimates are labelled as estimates ------------------------------------
 
 
-def test_the_classes_with_no_measured_curve_are_named_as_such():
+def test_the_classes_with_no_measured_curve_are_named_as_such() -> None:
     """The x86 and macOS rows come from Eco-CI's machine-power-data. `arm` and
     `gpu` do not exist there, so they are composed here — and a reader cannot
     tell 9.4 W from 89.9 W apart by looking."""
@@ -1151,7 +1144,7 @@ def test_the_classes_with_no_measured_curve_are_named_as_such():
         assert key not in carbon_badge.RUNNER_POWER_ESTIMATED
 
 
-def test_pricing_a_job_on_an_estimated_class_says_so_and_names_the_flag():
+def test_pricing_a_job_on_an_estimated_class_says_so_and_names_the_flag() -> None:
     carbon_badge._ESTIMATED_USED.clear()
     runner_power_w(["ubuntu-22.04-arm"])
     runner_power_w(["ubuntu-latest-4-cores-gpu"])
@@ -1159,7 +1152,7 @@ def test_pricing_a_job_on_an_estimated_class_says_so_and_names_the_flag():
     assert carbon_badge._ESTIMATED_USED == {"arm": 1, "gpu": 1}
 
 
-def test_the_warning_names_the_class_the_figure_and_the_replacement(capsys):
+def test_the_warning_names_the_class_the_figure_and_the_replacement(capsys: pytest.CaptureFixture[str]) -> None:
     carbon_badge._ESTIMATED_USED.clear()
     runner_power_w(["ubuntu-24.04-arm"])
     carbon_badge._warn_estimated_classes()
@@ -1171,7 +1164,7 @@ def test_the_warning_names_the_class_the_figure_and_the_replacement(capsys):
     assert "estimate" in err
 
 
-def test_a_declared_figure_is_not_reported_as_an_estimate(capsys):
+def test_a_declared_figure_is_not_reported_as_an_estimate(capsys: pytest.CaptureFixture[str]) -> None:
     """Someone who passed --runner-watts has replaced the estimate; telling
     them their own measurement is a guess would train them to ignore the line."""
     carbon_badge._ESTIMATED_USED.clear()
@@ -1183,7 +1176,7 @@ def test_a_declared_figure_is_not_reported_as_an_estimate(capsys):
     assert capsys.readouterr().err == ""
 
 
-def test_the_self_reported_route_admits_to_the_same_estimate():
+def test_the_self_reported_route_admits_to_the_same_estimate() -> None:
     """Both routes price the same machine the same way, so both have to make
     the same admission — a self-reported arm job is no better founded."""
     carbon_badge._ESTIMATED_USED.clear()
@@ -1192,13 +1185,13 @@ def test_the_self_reported_route_admits_to_the_same_estimate():
     assert carbon_badge._ESTIMATED_USED == {"arm": 1}
 
 
-def test_the_gpu_row_is_the_t4_board_limit_on_top_of_a_host_slice():
+def test_the_gpu_row_is_the_t4_board_limit_on_top_of_a_host_slice() -> None:
     """GitHub's GPU runner is `gpu-t4-4-core`: 4 vCPU plus one Tesla T4, whose
     70 W board limit is why the card needs no supplemental power connector."""
     assert carbon_badge.RUNNER_POWER_W["gpu"] == round((8.18 + 70.0) * carbon_badge.PUE, 1)
 
 
-def test_pue_is_applied_once_and_stays_its_own_constant():
+def test_pue_is_applied_once_and_stays_its_own_constant() -> None:
     """Cloud Energy estimates "the power draw of the whole machine", and
     SPECpower measures at the server's AC inlet — the denominator of PUE — so
     the overhead is not already in the curve. It stays visible and separate."""
@@ -1249,7 +1242,7 @@ def _one_run_repo(marker_seconds, job_minutes):
     return artifacts, runs, jobs
 
 
-def test_a_run_the_marker_and_the_api_agree_on_shows_no_setup_gap(monkeypatch):
+def test_a_run_the_marker_and_the_api_agree_on_shows_no_setup_gap(monkeypatch: pytest.MonkeyPatch) -> None:
     artifacts, runs, jobs = _one_run_repo(600, 10)  # 600 s both ways
     monkeypatch.setattr(carbon_badge.requests, "get", _serve_named(artifacts, runs, jobs))
     rec = carbon_badge.reconcile_last_30d("o/r", token=None)
@@ -1259,7 +1252,7 @@ def test_a_run_the_marker_and_the_api_agree_on_shows_no_setup_gap(monkeypatch):
     assert round(rec.setup_kwh, 12) == 0
 
 
-def test_the_setup_gap_is_the_seconds_the_marker_never_saw(monkeypatch):
+def test_the_setup_gap_is_the_seconds_the_marker_never_saw(monkeypatch: pytest.MonkeyPatch) -> None:
     # The marker times a 10-minute step inside a job the API bills for 15.
     artifacts, runs, jobs = _one_run_repo(600, 15)
     monkeypatch.setattr(carbon_badge.requests, "get", _serve_named(artifacts, runs, jobs))
@@ -1272,7 +1265,7 @@ def test_the_setup_gap_is_the_seconds_the_marker_never_saw(monkeypatch):
     assert round(rec.setup_kwh / rec.api_kwh, 6) == round(300 / 900, 6)
 
 
-def test_a_watts_disagreement_is_not_reported_as_setup_time(monkeypatch):
+def test_a_watts_disagreement_is_not_reported_as_setup_time(monkeypatch: pytest.MonkeyPatch) -> None:
     """Same seconds, two wattages. Attributing that to setup time would tell
     somebody to go and optimise a checkout that is not the problem."""
     artifacts, runs, jobs = _one_run_repo(600, 10)
@@ -1284,7 +1277,7 @@ def test_a_watts_disagreement_is_not_reported_as_setup_time(monkeypatch):
     assert round(rec.model_kwh, 9) == round(rec.api_kwh - rec.marker_kwh, 9)
 
 
-def test_the_grid_gap_is_separated_from_the_energy_gap(monkeypatch):
+def test_the_grid_gap_is_separated_from_the_energy_gap(monkeypatch: pytest.MonkeyPatch) -> None:
     """The largest term, and the one that is not an error: a marker carries the
     region it ran in, a run priced from the API takes the world average.
 
@@ -1304,7 +1297,7 @@ def test_the_grid_gap_is_separated_from_the_energy_gap(monkeypatch):
     assert round(explained, 9) == round(rec.api_grams - rec.marker_grams, 9)
 
 
-def test_an_explicit_grid_figure_removes_the_grid_term(monkeypatch):
+def test_an_explicit_grid_figure_removes_the_grid_term(monkeypatch: pytest.MonkeyPatch) -> None:
     """Both paths priced at one declared factor: nothing left for the grid to
     explain, which is how you isolate the other two terms."""
     artifacts, runs, jobs = _one_run_repo(600, 15)
@@ -1314,7 +1307,7 @@ def test_an_explicit_grid_figure_removes_the_grid_term(monkeypatch):
     assert rec.setup_kwh > 0
 
 
-def test_a_partly_instrumented_run_is_not_compared(monkeypatch):
+def test_a_partly_instrumented_run_is_not_compared(monkeypatch: pytest.MonkeyPatch) -> None:
     """It would show a divergence that is only the missing jobs, which is none
     of the three things this report is about."""
     now = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
@@ -1331,7 +1324,7 @@ def test_a_partly_instrumented_run_is_not_compared(monkeypatch):
     assert "none of them fully self-reported" in carbon_badge.format_reconciliation(rec)
 
 
-def test_jobs_are_matched_by_name_between_the_two_paths(monkeypatch):
+def test_jobs_are_matched_by_name_between_the_two_paths(monkeypatch: pytest.MonkeyPatch) -> None:
     now = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
     runs = [{"id": 1, "workflow_id": 7, "run_started_at": now, "updated_at": now}]
     artifacts = [
@@ -1347,7 +1340,7 @@ def test_jobs_are_matched_by_name_between_the_two_paths(monkeypatch):
     assert rec.rows[0].matched_jobs == 2
 
 
-def test_an_unmatched_job_still_counts_in_its_run(monkeypatch):
+def test_an_unmatched_job_still_counts_in_its_run(monkeypatch: pytest.MonkeyPatch) -> None:
     """Slug matching is best effort — the sanitising happens in the reporting
     action, not here — so a miss must cost the per-job attribution and nothing
     else. Losing the run's energy over a name would be much worse."""
@@ -1358,11 +1351,13 @@ def test_an_unmatched_job_still_counts_in_its_run(monkeypatch):
     monkeypatch.setattr(carbon_badge.requests, "get", _serve_named(artifacts, runs, jobs))
     rec = carbon_badge.reconcile_last_30d("o/r", token=None)
     assert rec.rows[0].matched_jobs == 0
-    assert rec.marker_seconds == 600 and rec.api_seconds == 600
-    assert rec.marker_kwh > 0 and rec.api_kwh > 0
+    assert rec.marker_seconds == 600
+    assert rec.api_seconds == 600
+    assert rec.marker_kwh > 0
+    assert rec.api_kwh > 0
 
 
-def test_the_report_names_all_three_terms(monkeypatch):
+def test_the_report_names_all_three_terms(monkeypatch: pytest.MonkeyPatch) -> None:
     artifacts, runs, jobs = _one_run_repo(600, 15)
     monkeypatch.setattr(carbon_badge.requests, "get", _serve_named(artifacts, runs, jobs))
     text = carbon_badge.format_reconciliation(carbon_badge.reconcile_last_30d("o/r", token=None))
@@ -1372,13 +1367,13 @@ def test_the_report_names_all_three_terms(monkeypatch):
     assert "BIAS" in text
 
 
-def test_the_slug_is_read_off_the_marker_name():
+def test_the_slug_is_read_off_the_marker_name() -> None:
     assert carbon_badge.carbon_artifact_slug("carbon.v1.600.2.7168.ubuntu.eastus.build") == "build"
     assert carbon_badge.carbon_artifact_slug("some-build-output.zip") is None
 
 
 @pytest.mark.parametrize(
-    "name,slug",
+    ("name", "slug"),
     [
         ("build", "build"),
         ("Unit Tests", "unit-tests"),
@@ -1387,11 +1382,11 @@ def test_the_slug_is_read_off_the_marker_name():
         ("///", None),
     ],
 )
-def test_job_names_reduce_to_slugs(name, slug):
+def test_job_names_reduce_to_slugs(name, slug) -> None:
     assert carbon_badge.job_slug(name) == slug
 
 
-def test_reconcile_refuses_the_combinations_that_cannot_work(capsys):
+def test_reconcile_refuses_the_combinations_that_cannot_work(capsys: pytest.CaptureFixture[str]) -> None:
     for argv in (
         ["--repo", "o/r", "--reconcile", "--provider", "gitlab"],
         ["--repo", "o/r", "--reconcile", "--minutes", "100"],
