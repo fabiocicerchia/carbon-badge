@@ -4,7 +4,7 @@ Guidance for Claude Code (and other AI agents) working in this repo.
 
 ## Project
 
-carbon-badge is a single-module Python CLI (`carbon_badge.py`) that estimates a
+carbon-badge is a Python CLI (the `carbon_badge` package) that estimates a
 repo's CI carbon footprint from the GitHub Actions API and emits Shields.io
 endpoint JSON (or an SVG). Entry point: `carbon-badge` → `carbon_badge:main`.
 Python 3.10+, packaged with setuptools (`pyproject.toml`).
