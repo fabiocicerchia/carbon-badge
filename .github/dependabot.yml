@@ -6,6 +6,13 @@ updates:
       interval: weekly
     cooldown:
       default-days: 7
+    groups:
+      # init, analyze and upload-sarif have to move together: CodeQL writes its
+      # configuration in one and reads it back in another, and refuses a
+      # mismatch. Separate PRs merge at different times and break the scan.
+      codeql-action:
+        patterns:
+          - "github/codeql-action*"
   - package-ecosystem: "pip"
     directory: "/"
     schedule:
