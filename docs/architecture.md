@@ -1,6 +1,7 @@
 # Architecture
 
-carbon-badge is a single module (`carbon_badge.py`) with a small CLI.
+carbon-badge is one package (`carbon_badge/`) with a small CLI: base, power, ci,
+grid, artifacts and reconcile, in that dependency order.
 
 ## Overview
 
