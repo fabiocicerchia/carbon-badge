@@ -1,0 +1,122 @@
+.TH CARBON\-BADGE 1 "2026-09" "carbon-badge" "User Commands"
+.SH NAME
+carbon-badge \- carbon cost of a repository's CI, as a badge
+.SH SYNOPSIS
+.B carbon-badge
+.I REPO
+.RI [ options ]
+.SH DESCRIPTION
+Prices a repository's CI minutes as grams of CO2e and emits a badge
+endpoint for it. REPO is
+.I owner/repo
+on GitHub or
+.I group/project
+on GitLab.
+.PP
+Energy is estimated, not measured: neither API exposes runner utilisation or
+size, so the runner's power draw is declared rather than detected. The
+assumptions, and what they cost in accuracy, are documented in the project's
+docs/assumptions.md.
+.SH OPTIONS
+.SS Source
+.TP
+.BI \-\-provider " NAME"
+.B github
+(default) or
+.BR gitlab .
+.TP
+.BI \-\-api " URL"
+Override the API base URL, for GitHub Enterprise or self-hosted GitLab.
+.TP
+.BI \-\-token " TOKEN"
+API token. Prefer
+.I GITHUB_TOKEN
+or
+.I GITLAB_TOKEN
+in the environment, matching
+.BR \-\-provider .
+.TP
+.BI \-\-minutes " N"
+Skip the API and use this many CI minutes. For testing and offline use.
+.SS Grid intensity
+.TP
+.BI \-\-grid\-intensity " G"
+gCO2e per kWh applied to every job. Unset, each job that reported its
+region is priced on that region's grid and the rest fall back to the world
+average. Ignored when
+.B \-\-grid\-region
+is set.
+.TP
+.BI \-\-grid\-region " ZONE"
+Electricity Maps zone, e.g.
+.BR SE ,
+.BR US-CAL-CISO ,
+for live grid intensity.
+.TP
+.BI \-\-electricitymaps\-token " TOKEN"
+Electricity Maps API token, or
+.I ELECTRICITYMAPS_TOKEN
+in the environment.
+.TP
+.BI \-\-eia\-key " KEY"
+EIA API key, or
+.I EIA_API_KEY
+in the environment, to price US regions from their balancing authority's
+live fuel mix. European and UK regions need no key.
+.SS Power model
+.TP
+.BI \-\-runner\-watts " WATTS|LABEL=WATTS"
+Average power draw of the runners. A bare number applies to every job;
+.I LABEL=WATTS
+is repeatable and only needed when runner types are mixed.
+.TP
+.BI \-\-load\-factor " F"
+Average CPU utilisation of these jobs, 0\-1. The default of 1.0 prices
+every job at full load, which overstates an I/O-bound job by up to about
+three times. Only the variable part of the draw scales: at 0 a machine
+still draws its idle power.
+.SS Diagnostics and serving
+.TP
+.B \-\-ignore\-self\-reported
+Query the API for every run, ignoring what jobs recorded about themselves.
+Slower and no more accurate.
+.TP
+.B \-\-reconcile
+Run both paths over the same runs and report where they disagree, split
+into setup time, the watts model and the grid factor. A diagnostic, not a
+badge.
+.TP
+.BI \-\-serve " PORT"
+Serve
+.I /badge.json
+on this port instead of printing once and exiting.
+.TP
+.BI \-\-bind " ADDR"
+Interface for
+.BR \-\-serve .
+The default is what a container needs; use 127.0.0.1 on a shared host.
+.SH EXIT STATUS
+.TP
+.B 0
+A badge was produced.
+.TP
+.B non-zero
+The API could not be reached, or the arguments were rejected.
+.SH EXAMPLES
+.PP
+Price a repository's CI on the local grid:
+.PP
+.RS
+.B carbon-badge fabiocicerchia/greenlint \-\-grid\-region SE
+.RE
+.PP
+Serve the badge endpoint:
+.PP
+.RS
+.B carbon-badge acme/api \-\-serve 8080
+.RE
+.SH SEE ALSO
+.BR greenlint (1).
+Project documentation:
+.UR https://github.com/fabiocicerchia/carbon-badge
+.UE
