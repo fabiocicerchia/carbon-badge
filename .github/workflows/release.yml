@@ -26,6 +26,14 @@ on:
   push:
     branches: [main]
 
+# Two pushes landing seconds apart start two release-pr jobs, and both update
+# refs/heads/release-please--branches--main — the loser dies on "Error updating
+# ref". Queue them rather than cancelling: a release interrupted half-way is
+# worse than a slow one.
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
 permissions:
   contents: read
 
