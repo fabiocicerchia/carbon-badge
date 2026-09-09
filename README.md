@@ -189,6 +189,24 @@ serving it still involves two parties you do not control.
 They also compose: nothing stops a repo running Eco-CI on the workflow it cares
 about and carbon-badge for the fleet-wide rolling number.
 
+## Verifying the image
+
+Every published image is signed with [cosign][cosign], keyless: the identity in
+the signature is the workflow that published it, not a key anybody holds.
+
+```sh
+cosign verify ghcr.io/fabiocicerchia/carbon-badge:latest \
+  --certificate-identity-regexp \
+    'https://github.com/fabiocicerchia/carbon-badge/.github/workflows/.*' \
+  --certificate-oidc-issuer https://token.actions.githubusercontent.com
+```
+
+`no signatures found` means the tag predates signing, not that verification was
+set up wrongly — a wrong identity or issuer says so explicitly. Re-run the
+publish workflow for that tag to sign it.
+
+[cosign]: https://docs.sigstore.dev/
+
 ## Documentation
 
 Full docs live in [`docs/`](docs/). Runnable examples live in [`examples/`](examples/).
