@@ -28,6 +28,7 @@ permissions:
 
 env:
   IMAGE: ghcr.io/${{ github.repository }}
+  DOCKERHUB_IMAGE: docker.io/${{ github.repository }}
 
 jobs:
   publish:
@@ -50,6 +51,12 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Log in to Docker Hub
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f  # v4.6.0
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
       - name: Compute version (strip leading v)
         id: ver
         env:
@@ -64,4 +71,6 @@ jobs:
           push: true
           tags: |
             ${{ env.IMAGE }}:${{ steps.ver.outputs.version }}
+            ${{ env.DOCKERHUB_IMAGE }}:${{ steps.ver.outputs.version }}
             ${{ env.IMAGE }}:latest
+            ${{ env.DOCKERHUB_IMAGE }}:latest
