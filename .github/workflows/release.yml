@@ -158,6 +158,15 @@ jobs:
       # Same configuration as phase 1 — the two invocations must agree.
       - uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7  # v5.0.0
         with:
+          # A release PR opened with GITHUB_TOKEN is authored by
+          # `github-actions[bot]`, which is not a repo collaborator: every
+          # `pull_request` workflow on that branch lands in `action_required`
+          # and waits for a human click, so the release PR never shows a CI
+          # result until someone approves 7 runs by hand. A PAT with
+          # contents+pull-requests write makes the PR author an identity with
+          # write access, and the checks just run. Falls back to GITHUB_TOKEN
+          # so a repo without the secret keeps today's behaviour.
+          token: ${{ secrets.RELEASE_PLEASE_TOKEN || secrets.GITHUB_TOKEN }}
           config-file: release-please-config.json
           manifest-file: .release-please-manifest.json
           skip-github-release: true
