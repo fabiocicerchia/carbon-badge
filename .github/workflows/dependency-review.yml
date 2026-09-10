@@ -1,3 +1,4 @@
+# Managed centrally — edit the shared config, not this copy.
 name: dependency-review
 
 # Blocks PRs that introduce dependencies with known vulnerabilities or
@@ -10,11 +11,15 @@ permissions:
   contents: read
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  group: dependency-review-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
   review:
+    # The action needs GitHub Advanced Security on a private repo. Guarding here
+    # rather than omitting the file on the private tier: one workflow covers
+    # both, and a skipped job reads as "not applicable" instead of failing red.
+    if: ${{ !github.event.repository.private }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1

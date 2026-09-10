@@ -1,9 +1,10 @@
-# Normalize line endings
 * text=auto eol=lf
 
-# Binary files (no diff/merge)
 *.png binary
 *.jpg binary
+*.jpeg binary
 *.gif binary
+*.ico binary
 *.pdf binary
 *.zip binary
+*.gz binary

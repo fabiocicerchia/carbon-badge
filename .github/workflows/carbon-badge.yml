@@ -33,19 +33,15 @@ jobs:
           since=$(date -u -d '7 days ago' +%Y-%m-%dT%H:%M:%SZ)
           # Commits on the default branch only: the gh-pages push this workflow
           # makes would otherwise count as activity and keep it awake forever.
-          n=$(gh api "repos/${GITHUB_REPOSITORY}/commits?sha=${GITHUB_REF_NAME}&since=${since}&per_page=1" --jq 'length')
+          q="sha=${GITHUB_REF_NAME}&since=${since}&per_page=1"
+          n=$(gh api "repos/${GITHUB_REPOSITORY}/commits?${q}" --jq 'length')
           echo "recent=${n}" >> "$GITHUB_OUTPUT"
           [ "${n}" != "0" ] || echo "No commits since ${since} — skipping the refresh."
 
       - if: steps.gate.outputs.recent != '0' || github.event_name == 'workflow_dispatch'
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
 
-      # `./`, not `fabiocicerchia/carbon-badge@main`: the checkout above already
-      # has this action, so the local copy is what should run. It drops the one
-      # mutable action ref in the fleet — every other reference is SHA-pinned —
-      # and means the workflow tests the committed code rather than whatever
-      # `main` resolved to at the time.
       - if: steps.gate.outputs.recent != '0' || github.event_name == 'workflow_dispatch'
-        uses: ./
+        uses: fabiocicerchia/carbon-badge@b3d6e7bd8e8c9a3cda04f5382177a85d2bdb3611  # v0.6.1
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
