@@ -1,8 +1,6 @@
 {
   "Exclude": [
-    "^LICENSE$",
-    "^apply\\-settings\\.sh$",
-    "^check\\-drift\\.sh$"
+    "^LICENSE$"
   ],
   "Disable": {
     "IndentSize": true
