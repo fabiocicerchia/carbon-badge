@@ -129,6 +129,11 @@ jobs:
     permissions:
       contents: read
       packages: write
+      # A called workflow's token is capped by this block: a scope missing
+      # here is `none` inside the callee no matter what the callee declares
+      # for itself. Signing happens in the called workflow, so cosign's OIDC
+      # scope has to be granted here or the release path pushes unsigned.
+      id-token: write
     uses: ./.github/workflows/publish.yml
     with:
       tag: ${{ needs.release-please.outputs.tag_name }}
