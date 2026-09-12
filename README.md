@@ -15,6 +15,28 @@ for sustainability.
 
 ![example](https://img.shields.io/badge/CI%20carbon-1.2%20kgCO2e%2Fmo-informational)
 
+## Features
+
+- Sums 30 days of per-job CI runtime and prices each job at its runner's power
+  draw.
+- Emits **Shields.io endpoint JSON**, so the badge needs nothing beyond your
+  own repo to serve it.
+- Every figure carries its provenance — **measured**, **declared** or
+  **guessed** — and the three words mean the same thing in the code, the log
+  and the badge.
+- [`carbon-badge/record`](record/) lets a job report its own duration, CPU and
+  memory: the only route to *measured*.
+- Recognised GitHub-hosted runner labels count as declared; `runner-watts`
+  declares wattage for your own.
+- An unrecognised runner is **named in the log with the flag that fixes it**,
+  rather than quietly priced as a small machine — the gap between guessed and
+  declared can be 14×.
+- Confidence is weighted by **energy, not job count**, so one long job cannot
+  hide behind a dozen short ones.
+- **No red-amber-green scale.** An absolute monthly total mostly reflects how
+  big a project is, not how wastefully it runs; the only judgement made is
+  about provenance.
+
 ## Install
 
 ```sh
