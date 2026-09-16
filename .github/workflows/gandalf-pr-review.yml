@@ -35,7 +35,7 @@ jobs:
         with:
           fetch-depth: 0 # need base + head + their merge-base for the PR diff
 
-      - uses: fabiocicerchia/gandalf@08ab6976c4159bd56adcb7714f273d25c0e20c08  # v0.12.1
+      - uses: fabiocicerchia/gandalf@786cdda8cdecb3f82fffbc3f85a6909fd7c8153b  # v0.12.2
         with:
           # Code scanning needs GitHub Advanced Security on a private repo.
           # Without it the ingest fails and takes the whole review down with
