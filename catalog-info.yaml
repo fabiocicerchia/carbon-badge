@@ -1,0 +1,23 @@
+# Backstage catalog entry, read by paved's scorecard plugin.
+#
+# Every check paved scores is derived from this file alone — no cluster
+# access, no CI credentials. What is absent here is absent from the score.
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: carbon-badge
+  description: >-
+      GitHub Action that measures the CO₂ footprint of a CI workflow run and posts a green/amber/red badge
+      to your README.
+  annotations:
+    github.com/project-slug: fabiocicerchia/carbon-badge
+    backstage.io/source-location: url:https://github.com/fabiocicerchia/carbon-badge/
+    backstage.io/techdocs-ref: dir:.
+  links:
+    - url: https://github.com/fabiocicerchia/carbon-badge
+      title: Source
+spec:
+  type: library
+  lifecycle: production
+  owner: group:default/kodebeat
+  system: oss-tools
