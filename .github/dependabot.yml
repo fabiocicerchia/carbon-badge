@@ -13,6 +13,9 @@ updates:
       codeql-action:
         patterns:
           - "github/codeql-action*"
+      # Everything else rides in one pull request rather than one each.
+      actions:
+        patterns: ["*"]
   - package-ecosystem: "pip"
     directory: "/"
     schedule:
