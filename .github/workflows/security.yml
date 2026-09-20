@@ -53,8 +53,6 @@ jobs:
           sarif_file: trivy.sarif
 
   codeql:
-    # A github-actions bump cannot introduce a CVE here; dependency-review still runs.
-    if: ${{ !startsWith(github.head_ref, 'dependabot/github_actions/') }}
     name: codeql
     runs-on: ubuntu-latest
     permissions:
