@@ -7,12 +7,7 @@ record of what shipped.
 
 ## Self-reported measurement (`record/`)
 
-- [ ] **Reconcile the two paths on real data.** `docs/getting-started.md`
-      prescribes comparing the default against `--ignore-self-reported`; it has
-      never been run against a repo with meaningful coverage. With the
-      termination paths now all confirmed to record, the setup-time gap above is
-      the only bias left that the comparison should reveal — so it doubles as a
-      check on that measurement.
+Nothing open.
 
 ## Assumptions
 
