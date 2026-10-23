@@ -437,7 +437,7 @@ wall clock is used instead.
 
 Real draw swings 1.76–8.18 W with CPU load on the same 4-vCPU slice. The
 Actions API exposes no utilisation, so the wattage has to come from somewhere
-else. Three options were on the table:
+else. Four options were on the table:
 
 1. **Keep full load and state the bias.** Simple and honest, but the bias is
    large: a job that averages 25% CPU is overstated by roughly 3x, and a
@@ -446,29 +446,63 @@ else. Three options were on the table:
 1. **A job-class heuristic** — guess utilisation from the workflow name, the
    step names, the duration. Cheap to implement and impossible to defend: it
    would produce a different number for the same machine doing the same work
-   depending on what someone called the file.
+   depending on what someone called the file. It also has nothing to be
+   calibrated against — no published distribution says what a job called
+   `lint` averages — so every constant in it would be invented, and the
+   default figure would move from a stated ceiling to an unstated guess.
 1. **An explicit `--load-factor`.** The caller states the average utilisation
-   they know or have measured; the default changes nothing.
+   they know or have measured.
+1. **Measure it where it can be measured.** The recorder already runs inside
+   the job to time it, so it reads the CPU counters too and writes the average
+   utilisation into the marker.
 
-**Option 3, with option 1 as the default.** The number is only as good as the
-utilisation figure behind it, and the tool does not have one — so it prices at
-full load, says so, and gives anyone who *does* have one a way to say it:
+**Option 4 wherever the recorder runs, option 1 where it does not, and option 3
+over both.** The heuristic was the one candidate that would have moved the
+default on the API path, and it was rejected for the reason above: a guess
+presented as a figure is worse than a ceiling presented as one.
+
+The recorder reads busy and idle time from `os.cpus()` over the same interval
+it records as the job's duration — the VM's whole life on a GitHub-hosted
+runner, where uptime is the duration and so the counters since boot are the
+reading, and the stretch since the `uses:` step on a self-hosted one. The
+whole percentage goes into a `carbon.v2` marker:
+
+```text
+carbon.v2.142.4.16384.ubuntu.eastus.37.build-a1b2c3d4   # ... at 37% average CPU
+```
+
+When it cannot take a reading it writes `carbon.v1` with no utilisation, and
+that job is priced at full load as before. A declared figure beats a measured
+one, exactly as `--runner-watts` beats the table:
 
 ```sh
-carbon-badge OWNER/REPO --load-factor 0.25   # measured average CPU utilisation
+carbon-badge OWNER/REPO --load-factor 0.25   # this figure for every job
+carbon-badge OWNER/REPO --load-factor 1      # the full-load ceiling everywhere
 ```
 
 Only the variable part scales. Eco-CI's 1.76 W at idle against 8.18 W at full
-load means **21.5% of the draw is there whatever the job does**, so
-`--load-factor 0` is 2.02 W, not zero, and `--load-factor 0.25` is 3.87 W
-rather than the 2.35 W a plain multiply would give. A flat multiply would have
-replaced an overstatement with an understatement of about the same size.
+load means **21.5% of the draw is there whatever the job does**, so a load of
+0 is 2.02 W, not zero, and 0.25 is 3.87 W rather than the 2.35 W a plain
+multiply would give. A flat multiply would have replaced an overstatement with
+an understatement of about the same size.
 
-**The remaining error, stated plainly:** at the default the figure is a
-*ceiling*. For a CPU-bound build it is close to right; for an I/O-bound or
-mostly-waiting job it is high by up to about 3x. It is never low on this axis.
-That direction is deliberate — a carbon figure that flatters the caller is
-worth less than one that does not.
+**The remaining error, stated plainly:**
+
+- **A job priced from the API is still at the ceiling.** For a CPU-bound build
+  it is close to right; for an I/O-bound or mostly-waiting job it is high by
+  up to about 3x. It is never low on this axis. That direction is deliberate —
+  a carbon figure that flatters the caller is worth less than one that does
+  not. Instrumenting the job with the recorder is how to remove it.
+- **A measured job is as good as a linear curve.** The draw is interpolated
+  straight between Eco-CI's idle and full-load points, and Eco-CI's own curve
+  is not quite straight; the gap is a few tenths of a watt on this slice, in
+  either direction.
+- **CPU time is not all of the draw.** Memory and disk activity that does not
+  show up as CPU time is not counted beyond the idle floor. Small on a shared
+  VM slice, and in the low direction.
+- **On a hosted runner the reading includes boot.** Provisioning is CPU-busy,
+  so a short job reads somewhat higher than its own steps would — the same
+  attribution the duration already makes, and in the high direction.
 
 ## Reconciling the two paths
 
@@ -522,9 +556,10 @@ and its size is still unmeasured. Producing that number is one command
 
 ## Known limits
 
-- **A flat wattage cannot be right.** The default prices at full load and so
-  overstates an I/O-bound job; `--load-factor` is the lever, and the section
-  above is the reasoning.
+- **A job priced from the API is priced at full load.** The API exposes no
+  utilisation, so an uninstrumented I/O-bound job is overstated by up to ~3x.
+  The recorder measures it for every job it runs in; `--load-factor` is the
+  lever for the rest, and the section above is the reasoning.
 - **Shared hardware is an attribution, not a measurement.** A 4-vCPU slice of a
   many-core host has no single true wattage; the Cloud Energy model apportions
   it.
@@ -548,6 +583,15 @@ Treat the output as an order of magnitude and a trend line, not a figure to put
 in a report.
 
 ## Changelog of these assumptions
+
+**2026-10** — the wattage stopped being flat for instrumented jobs.
+
+- **The recorder measures CPU utilisation** and writes it into a `carbon.v2`
+  marker; those jobs are priced at it rather than at full load. An I/O-bound
+  job that averages 25% CPU drops from 9.4 W to 3.87 W. Jobs priced from the
+  API are unchanged, and `--load-factor 1` restores the old figure everywhere.
+  A trend line across this release on an instrumented repo will step down;
+  that is a measurement change, not a reduction.
 
 **2026-09** — no figure changed; two of them gained a provenance they did not
 have.

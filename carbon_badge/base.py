@@ -184,6 +184,10 @@ DEFAULT_GRID_INTENSITY = 480.0  # gCO2e/kWh
 # request per 100 artifacts and downloads nothing.
 #
 #   carbon.v1.<seconds>.<vcpu>.<memMB>.<platform>.<region>.<slug>
+#   carbon.v2.<seconds>.<vcpu>.<memMB>.<platform>.<region>.<cpu%>.<slug>
+#
+# v2 adds the job's measured average CPU utilisation, 0-100. The recorder
+# writes v1 when it could not measure one, so both are read for good.
 #
 # <platform> is one of the RUNNER_POWER_W keys, because CPU and memory alone do
 # not determine draw: the same 4 vCPU / 16 GiB reading means a very different
@@ -193,6 +197,25 @@ DEFAULT_GRID_INTENSITY = 480.0  # gCO2e/kWh
 # " : < > | * ? \ /, which is why the separator is a dot and the job slug is
 # sanitised at the source.
 _ARTIFACT_RE = re.compile(r"^carbon\.v1\.(\d+)\.(\d+)\.(\d+)\.([a-z]+)\.([a-z0-9-]+)\.")
+_PERCENT = 100
+_ARTIFACT_V2_RE = re.compile(r"^carbon\.v2\.(\d+)\.(\d+)\.(\d+)\.([a-z]+)\.([a-z0-9-]+)\.(\d{1,3})\.")
+
+
+def _match_marker(name: str) -> re.Match[str] | None:
+    """The marker's header match, whichever version wrote it."""
+    return _ARTIFACT_RE.match(name or "") or _ARTIFACT_V2_RE.match(name or "")
+
+
+def carbon_artifact_load(name: str) -> float | None:
+    """The measured CPU utilisation a marker carries, 0-1, or None.
+
+    None for a v1 marker and for anything above 100%, which no reading of
+    busy/total time can produce and so marks a marker that was not ours.
+    """
+    head = _ARTIFACT_V2_RE.match(name or "")
+    if not head or int(head.group(6)) > _PERCENT:
+        return None
+    return int(head.group(6)) / _PERCENT
 
 
 def carbon_artifact_slug(name: str) -> str | None:
@@ -202,10 +225,10 @@ def carbon_artifact_slug(name: str) -> str | None:
     every caller of that unpacks five values, and the slug is only ever wanted
     here.
     """
-    head = _ARTIFACT_RE.match(name or "")
+    head = _match_marker(name)
     if not head:
         return None
-    # The regex ends at the dot after the region; the slug is the remainder.
+    # The regex ends at the dot before the slug; the slug is the remainder.
     rest = name[head.end() :]
     return rest or None
 

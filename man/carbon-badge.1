@@ -71,10 +71,13 @@ Average power draw of the runners. A bare number applies to every job;
 is repeatable and only needed when runner types are mixed.
 .TP
 .BI \-\-load\-factor " F"
-Average CPU utilisation of these jobs, 0\-1. The default of 1.0 prices
-every job at full load, which overstates an I/O-bound job by up to about
-three times. Only the variable part of the draw scales: at 0 a machine
-still draws its idle power.
+Average CPU utilisation, 0\-1, applied to every job. Unset, a job that ran
+the recorder is priced at the utilisation it measured, and a job priced
+from the API, which exposes none, at full load \(em which overstates an
+I/O-bound job by up to about three times.
+.B \-\-load\-factor 1
+restores full load everywhere. Only the variable part of the draw scales:
+at 0 a machine still draws its idle power.
 .SS Diagnostics and serving
 .TP
 .B \-\-ignore\-self\-reported

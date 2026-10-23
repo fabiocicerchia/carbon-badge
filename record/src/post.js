@@ -6,7 +6,9 @@
 // returns names in its listing, 100 per request. A month of data therefore
 // costs one request and downloads nothing.
 //
-//   carbon.v1.<seconds>.<vcpu>.<memMB>.<platform>.<region>.<slug>
+//   carbon.v2.<seconds>.<vcpu>.<memMB>.<platform>.<region>.<cpu%>.<slug>
+//
+// or v1, without <cpu%>, when no utilisation could be measured.
 import crypto from "node:crypto";
 import fs from "node:fs";
 import http from "node:http";
@@ -15,6 +17,7 @@ import path from "node:path";
 import * as core from "@actions/core";
 import { DefaultArtifactClient } from "@actions/artifact";
 import { isHosted, jobSeconds } from "./duration.js";
+import { cpuLoadPercent, cpuTimes } from "./load.js";
 
 // CPU and memory alone do not determine draw: the same 4 vCPU / 16 GiB reading
 // means a very different wattage on Apple silicon than on a shared x86 VM, so
@@ -87,6 +90,16 @@ function sanitiseRegion(value) {
   return clean || "unknown";
 }
 
+// The counters main.js saved, or null if it saved none or they do not parse.
+function savedCpu() {
+  try {
+    const saved = JSON.parse(core.getState("carbonBadgeCpu") || "null");
+    return Number.isFinite(saved?.busy) && Number.isFinite(saved?.total) ? saved : null;
+  } catch {
+    return null;
+  }
+}
+
 async function run() {
   const started = core.getState("carbonBadgeStart");
   if (!started) {
@@ -98,7 +111,9 @@ async function run() {
   // provisioning and setup this action cannot see from inside the job. See
   // duration.js.
   const hosted = isHosted();
-  const seconds = jobSeconds(started, Date.now(), os.uptime(), hosted);
+  const uptime = os.uptime();
+  const seconds = jobSeconds(started, Date.now(), uptime, hosted);
+  const load = cpuLoadPercent(savedCpu(), cpuTimes(os.cpus()), hosted && seconds === Math.round(uptime));
   const vcpu = os.cpus().length || 2;
   const memMb = Math.round(os.totalmem() / (1024 * 1024));
 
@@ -107,7 +122,8 @@ async function run() {
   const declared = core.getInput("region");
   const region = sanitiseRegion(declared || (await azureRegion()));
 
-  const name = `carbon.v1.${seconds}.${vcpu}.${memMb}.${platform()}.${region}.${slug()}`;
+  const head = `${seconds}.${vcpu}.${memMb}.${platform()}.${region}`;
+  const name = load === null ? `carbon.v1.${head}.${slug()}` : `carbon.v2.${head}.${load}.${slug()}`;
 
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "carbon-badge-"));
   const file = path.join(dir, "carbon-badge.txt");
@@ -118,7 +134,7 @@ async function run() {
       retentionDays: Number(core.getInput("retention-days") || 35),
     });
     core.info(
-      `carbon-badge: ${seconds}s on ${vcpu} vCPU / ${memMb} MB ` +
+      `carbon-badge: ${seconds}s on ${vcpu} vCPU / ${memMb} MB at ${load === null ? "unmeasured" : `${load}%`} CPU ` +
         `(${platform()}, ${region}, ${hosted ? "hosted: includes setup" : "self-hosted: step time only"})`,
     );
   } catch (err) {

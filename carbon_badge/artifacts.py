@@ -7,7 +7,7 @@ from datetime import datetime, timedelta, timezone
 
 import requests
 
-from .base import _ARTIFACT_RE, Getter, Json, RunnerWatts, log
+from .base import Getter, Json, RunnerWatts, _match_marker, carbon_artifact_load, log
 from .ci import _get_pages, _warn_if_truncated, run_jobs
 from .grid import _ci_api_snapshot, live_region_factor
 from .power import ANY_RUNNER, RunTotals, _ran, grid_factor_for, watts_from_specs
@@ -91,10 +91,10 @@ def parse_carbon_artifact(name: str) -> tuple[float, int, int, str, str] | None:
     None for anything that is not one of ours, so a repo's normal build
     artifacts sitting in the same listing are simply ignored.
     """
-    match = _ARTIFACT_RE.match(name or "")
+    match = _match_marker(name)
     if not match:
         return None
-    seconds, vcpu, mem_mb, platform, region = match.groups()
+    seconds, vcpu, mem_mb, platform, region = match.groups()[:5]
     return (float(seconds), int(vcpu), int(mem_mb), platform, region)
 
 
@@ -179,7 +179,10 @@ def artifact_kwh_by_run(
         seconds, vcpu, mem_mb, platform, region = parsed
         # A declared figure still wins: someone who knows their hardware's real
         # draw beats a linear model of it.
-        watts = blanket if blanket else watts_from_specs(vcpu, mem_mb, platform)
+        # The job's own measured utilisation, when its marker carries one,
+        # replaces the full-load assumption; a --load-factor still beats it.
+        load = carbon_artifact_load(str(artifact.get("name") or ""))
+        watts = blanket if blanket else watts_from_specs(vcpu, mem_mb, platform, load)
         job_kwh = (seconds / 3600) * watts / 1000
         # Each job priced at the grid it actually ran on. GitHub allocates
         # runners across regions whose factors differ by ~25x, so this is the

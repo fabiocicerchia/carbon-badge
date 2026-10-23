@@ -346,9 +346,22 @@ def test_parse_carbon_artifact() -> None:
     # A repo's ordinary artifacts share the listing and must be ignored.
     assert carbon_badge.parse_carbon_artifact("gitleaks-results.sarif") is None
     assert carbon_badge.parse_carbon_artifact("github-pages") is None
-    # A future format must not be silently misread as v1.
+    # A future format must not be silently misread as v1, nor a malformed v2.
+    assert carbon_badge.parse_carbon_artifact("carbon.v3.142.2.7168.ubuntu.eastus.37.build") is None
     assert carbon_badge.parse_carbon_artifact("carbon.v2.142.2.7168.build") is None
     assert carbon_badge.parse_carbon_artifact("") is None
+
+
+def test_v2_markers_carry_a_measured_load() -> None:
+    """v2 inserts the job's CPU utilisation before the slug; v1 has none."""
+    name = "carbon.v2.142.4.16384.ubuntu.eastus.37.build-a1b2c3d4"
+    assert carbon_badge.parse_carbon_artifact(name) == (142.0, 4, 16384, "ubuntu", "eastus")
+    assert carbon_badge.carbon_artifact_load(name) == 0.37
+    # The utilisation field must not leak into the slug the reconciliation keys on.
+    assert carbon_badge.carbon_artifact_slug(name) == "build-a1b2c3d4"
+    assert carbon_badge.carbon_artifact_load("carbon.v1.142.4.16384.ubuntu.eastus.build") is None
+    # Busy/total cannot exceed 100%; such a name is not ours to trust.
+    assert carbon_badge.carbon_artifact_load("carbon.v2.142.4.16384.ubuntu.eastus.250.build") is None
 
 
 def test_the_two_pricing_paths_agree_at_every_size() -> None:
@@ -452,6 +465,27 @@ def test_artifact_kwh_by_run_keys_by_run_and_downloads_nothing(monkeypatch: pyte
     assert round(kwh, 9) == round(1.5 * watts / 1000, 9)  # both jobs summed
     assert count == 2  # and the denominator the partial-run check needs
     assert not any("/jobs" in u or u.endswith("/zip") for u in calls)
+
+
+def test_a_measured_load_prices_the_marker_below_full_load(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A job that measured its utilisation is priced at it, not at the full-load
+    ceiling; one that did not stays at full load; --load-factor beats both."""
+    artifacts = [
+        _artifact("carbon.v2.3600.4.16384.ubuntu.eastus.25.io-bound", 1),
+        _artifact("carbon.v1.3600.4.16384.ubuntu.eastus.unmeasured", 2),
+    ]
+    monkeypatch.setattr(carbon_badge.ci.requests, "get", _serve(artifacts, [], []))
+    try:
+        carbon_badge.power.LOAD_FACTOR = None
+        by_run, _jobs = carbon_badge.artifact_kwh_by_run("o/r", token=None)
+        assert by_run[1].kwh == pytest.approx(3.87 / 1000, abs=1e-5)
+        assert by_run[2].kwh == pytest.approx(9.4 / 1000, abs=1e-5)
+
+        carbon_badge.power.LOAD_FACTOR = 1.0  # the documented way back to the ceiling
+        by_run, _jobs = carbon_badge.artifact_kwh_by_run("o/r", token=None)
+        assert by_run[1].kwh == pytest.approx(9.4 / 1000, abs=1e-5)
+    finally:
+        carbon_badge.power.LOAD_FACTOR = None
 
 
 def test_partial_instrumentation_tops_up_from_the_api(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -1139,15 +1173,15 @@ class TestLoadFactor:
     """--load-factor: what to do about a flat wattage on an I/O-bound job."""
 
     def setup_method(self) -> None:
-        carbon_badge.power.LOAD_FACTOR = 1.0
+        carbon_badge.power.LOAD_FACTOR = None
 
     def teardown_method(self) -> None:
-        carbon_badge.power.LOAD_FACTOR = 1.0
+        carbon_badge.power.LOAD_FACTOR = None
 
-    def test_default_is_unchanged_behaviour(self) -> None:
-        # The API exposes no utilisation, so full load stays the default: the
-        # honest reading of "we do not know" for a number that should not
-        # flatter the caller.
+    def test_default_is_full_load_without_a_measurement(self) -> None:
+        # The API exposes no utilisation, so a job with no measured load is
+        # priced at full load: the honest reading of "we do not know" for a
+        # number that should not flatter the caller.
         assert carbon_badge.watts_from_specs(4, 16 * 1024) == 9.4
         assert carbon_badge.runner_power_w(["ubuntu-latest"]) == 9.4
 
