@@ -94,6 +94,7 @@ def parse_carbon_artifact(name: str) -> tuple[float, int, int, str, str] | None:
     match = _match_marker(name)
     if not match:
         return None
+    # A v2 marker's sixth group is its load, which carbon_artifact_load reads.
     seconds, vcpu, mem_mb, platform, region = match.groups()[:5]
     return (float(seconds), int(vcpu), int(mem_mb), platform, region)
 

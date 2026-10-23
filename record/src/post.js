@@ -113,7 +113,10 @@ async function run() {
   const hosted = isHosted();
   const uptime = os.uptime();
   const seconds = jobSeconds(started, Date.now(), uptime, hosted);
-  const load = cpuLoadPercent(savedCpu(), cpuTimes(os.cpus()), hosted && seconds === Math.round(uptime));
+  // jobSeconds returns the uptime only when it trusted it as the job's length;
+  // only then is boot the start of the CPU interval too.
+  const sinceBoot = hosted && seconds === Math.round(uptime);
+  const load = cpuLoadPercent(savedCpu(), cpuTimes(os.cpus()), sinceBoot);
   const vcpu = os.cpus().length || 2;
   const memMb = Math.round(os.totalmem() / (1024 * 1024));
 

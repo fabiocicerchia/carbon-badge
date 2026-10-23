@@ -196,9 +196,10 @@ DEFAULT_GRID_INTENSITY = 480.0  # gCO2e/kWh
 # Versioned because the name is the wire format. Artifact names may not contain
 # " : < > | * ? \ /, which is why the separator is a dot and the job slug is
 # sanitised at the source.
-_ARTIFACT_RE = re.compile(r"^carbon\.v1\.(\d+)\.(\d+)\.(\d+)\.([a-z]+)\.([a-z0-9-]+)\.")
+_MARKER_HEAD = r"(\d+)\.(\d+)\.(\d+)\.([a-z]+)\.([a-z0-9-]+)\."
+_ARTIFACT_RE = re.compile(r"^carbon\.v1\." + _MARKER_HEAD)
+_ARTIFACT_V2_RE = re.compile(r"^carbon\.v2\." + _MARKER_HEAD + r"(\d{1,3})\.")
 _PERCENT = 100
-_ARTIFACT_V2_RE = re.compile(r"^carbon\.v2\.(\d+)\.(\d+)\.(\d+)\.([a-z]+)\.([a-z0-9-]+)\.(\d{1,3})\.")
 
 
 def _match_marker(name: str) -> re.Match[str] | None:
