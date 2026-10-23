@@ -224,9 +224,9 @@ gitdb==4.0.12 \
     --hash=sha256:5ef71f855d191a3326fcfbc0d5da835f26b13fbcba60c32c21091c349ffdb571 \
     --hash=sha256:67073e15955400952c6565cc3e707c554a4eea2e428946f7a4c162fab9bd9bcf
     # via gitpython
-gitpython==3.1.61 \
-    --hash=sha256:8ab28c9da863cdd9e7d7694ec46cf3e6c9a12d8a30a1acd3447aec11975d530c \
-    --hash=sha256:f51c24d8c0f733a195447385f5774a5dfe8767f5acfd7994a33755644c6ecc95
+gitpython==3.2.1 \
+    --hash=sha256:0f1229ec5c057bdabdeeda8bda4f17bda679ab33dbccc00f24e6a480553c8613 \
+    --hash=sha256:d66b0832aa8755c1a84892937282df0befb16c97e5a64aeebd68be9c5e323f53
     # via mkdocs-git-revision-date-localized-plugin
 idna==3.19 \
     --hash=sha256:5e0811a4383b21dc5838069f801c4fb62113b7447663d2530d2bd6e77b49bf15 \
@@ -348,7 +348,7 @@ mkdocs==1.6.1 \
     --hash=sha256:7b432f01d928c084353ab39c57282f29f92136665bdd6abf7c1ec8d822ef86f2 \
     --hash=sha256:db91759624d1647f3f34aa0c3f327dd2601beae39a366d6e064c03468d35c20e
     # via
-    #   -r docs/requirements.in
+    #   -r requirements.in
     #   mkdocs-git-revision-date-localized-plugin
     #   mkdocs-material
 mkdocs-get-deps==0.2.2 \
@@ -358,16 +358,16 @@ mkdocs-get-deps==0.2.2 \
 mkdocs-git-revision-date-localized-plugin==1.6.0 \
     --hash=sha256:469af4b344a4d493a6402aa92eec87a6138e1dac444e9551c1af06991453954b \
     --hash=sha256:88b2d524d24c49a05cd6c9b1456f7dc0c8fa5e233b09ecf8a1dd12aebc127990
-    # via -r docs/requirements.in
+    # via -r requirements.in
 mkdocs-material==9.7.7 \
     --hash=sha256:8ea9bb1737a5b524a5f9dcf2e1b4ebda8274ae3008aa7845720a97083bef708f \
     --hash=sha256:c0649c065b1b0512d60aad8c10f947f8e455284475239b364b610f2deb4d0855
-    # via -r docs/requirements.in
+    # via -r requirements.in
 mkdocs-material-extensions==1.3.1 \
     --hash=sha256:10c9511cea88f568257f960358a467d12b970e1f7b2c0e5fb2bb48cab1928443 \
     --hash=sha256:adff8b62700b25cb77b53358dad940f3ef973dd6db797907c49e3c2ef3ab4e31
     # via
-    #   -r docs/requirements.in
+    #   -r requirements.in
     #   mkdocs-material
 packaging==26.3 \
     --hash=sha256:94edc256424af38762eb31306eed28beb9f0efc50a8837492c9d6fd6004aed79 \
@@ -395,7 +395,7 @@ pymdown-extensions==12.2 \
     --hash=sha256:02da896c362b548d85123e7a377a40024ea6ea938b4e45ca064e408afd994b64 \
     --hash=sha256:caea66e916b4cfe987b5dabb0a78558e3506988f6353812b0b0288be8f976c16
     # via
-    #   -r docs/requirements.in
+    #   -r requirements.in
     #   mkdocs-material
 python-dateutil==2.9.0.post0 \
     --hash=sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3 \
