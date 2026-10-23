@@ -202,18 +202,22 @@ _ARTIFACT_V2_RE = re.compile(r"^carbon\.v2\.(\d+)\.(\d+)\.(\d+)\.([a-z]+)\.([a-z
 
 
 def _match_marker(name: str) -> re.Match[str] | None:
-    """The marker's header match, whichever version wrote it."""
-    return _ARTIFACT_RE.match(name or "") or _ARTIFACT_V2_RE.match(name or "")
+    """The marker's header match, whichever version wrote it.
+
+    A v2 percentage above 100 is no match at all: no reading of busy/total
+    time can produce one, so the name is not ours, and pricing its job at full
+    load would still count it as recorded coverage.
+    """
+    v2 = _ARTIFACT_V2_RE.match(name or "")
+    if v2:
+        return v2 if int(v2.group(6)) <= _PERCENT else None
+    return _ARTIFACT_RE.match(name or "")
 
 
 def carbon_artifact_load(name: str) -> float | None:
-    """The measured CPU utilisation a marker carries, 0-1, or None.
-
-    None for a v1 marker and for anything above 100%, which no reading of
-    busy/total time can produce and so marks a marker that was not ours.
-    """
-    head = _ARTIFACT_V2_RE.match(name or "")
-    if not head or int(head.group(6)) > _PERCENT:
+    """The measured CPU utilisation a marker carries, 0-1, or None for v1."""
+    head = _match_marker(name)
+    if not head or head.re is not _ARTIFACT_V2_RE:
         return None
     return int(head.group(6)) / _PERCENT
 

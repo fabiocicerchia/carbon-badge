@@ -162,7 +162,7 @@ pick one — for some questions they are simply the better answer.
 
 |                           | Eco-CI                                                                      | carbon-badge                                       |
 | ------------------------- | --------------------------------------------------------------------------- | -------------------------------------------------- |
-| **measures**              | CPU utilisation sampled during the job                                      | job duration, after the fact                       |
+| **measures**              | CPU utilisation sampled during the job                                      | job duration; average CPU where recorded           |
 | **wattage**               | integrated across the load curve                                            | the job's average load if recorded, else full load |
 | **instrumentation**       | required — `start` / `get` / `display` in every job                         | optional; adds accuracy, not required for a number |
 | **granularity**           | per step and per run                                                        | 30-day repo total                                  |

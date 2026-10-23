@@ -94,7 +94,7 @@ def _build_parser() -> argparse.ArgumentParser:
             "average CPU utilisation of these jobs, 0-1, applied to every job. "
             "Unset, a job that ran the recorder is priced at the utilisation it "
             "measured, and a job priced from the API — which exposes none — at "
-            "full load, which overstates an I/O-bound job by up to ~3x. "
+            "full load, which overstates a mostly-waiting job by up to ~4.7x. "
             "--load-factor 1 restores full load everywhere. Only the variable "
             "part of the draw scales: at 0 a machine still draws its idle "
             "power. See docs/assumptions.md"

@@ -381,8 +381,8 @@ WATTS_PER_GB = 0.1125
 # A job that ran the recorder carries its own measured utilisation and is
 # priced at it. The API exposes none, so a job priced from the API stays at the
 # full-load figure — the honest reading of "we do not know" for a tool whose
-# output should not flatter the caller. An I/O-bound job that averages 25% CPU
-# is overstated by roughly 3x on that path.
+# output should not flatter the caller. On that path a job that averages 25%
+# CPU is overstated by about 2.4x, and one that only waits by about 4.7x.
 IDLE_FRACTION = 1.76 / 8.18
 
 # Set once from --load-factor; None when it was not given. Module state rather

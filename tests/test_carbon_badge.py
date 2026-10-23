@@ -360,8 +360,13 @@ def test_v2_markers_carry_a_measured_load() -> None:
     # The utilisation field must not leak into the slug the reconciliation keys on.
     assert carbon_badge.carbon_artifact_slug(name) == "build-a1b2c3d4"
     assert carbon_badge.carbon_artifact_load("carbon.v1.142.4.16384.ubuntu.eastus.build") is None
-    # Busy/total cannot exceed 100%; such a name is not ours to trust.
-    assert carbon_badge.carbon_artifact_load("carbon.v2.142.4.16384.ubuntu.eastus.250.build") is None
+    assert carbon_badge.carbon_artifact_load("carbon.v2.142.4.16384.ubuntu.eastus.100.build") == 1.0
+    # Busy/total cannot exceed 100%; such a name is not ours, so it is not a
+    # marker at all rather than a recorded job priced at full load.
+    bogus = "carbon.v2.142.4.16384.ubuntu.eastus.250.build"
+    assert carbon_badge.carbon_artifact_load(bogus) is None
+    assert carbon_badge.parse_carbon_artifact(bogus) is None
+    assert carbon_badge.carbon_artifact_slug(bogus) is None
 
 
 def test_the_two_pricing_paths_agree_at_every_size() -> None:
@@ -1184,6 +1189,12 @@ class TestLoadFactor:
         # number that should not flatter the caller.
         assert carbon_badge.watts_from_specs(4, 16 * 1024) == 9.4
         assert carbon_badge.runner_power_w(["ubuntu-latest"]) == 9.4
+
+    def test_a_measured_load_prices_macos_too(self) -> None:
+        # Apple hardware is priced off its own table entry, not the vCPU law,
+        # and must still honour the job's measurement.
+        full = carbon_badge.watts_from_specs(3, 7 * 1024, "macos")
+        assert carbon_badge.watts_from_specs(3, 7 * 1024, "macos", 0.25) < full
 
     def test_only_the_variable_part_scales(self) -> None:
         # A machine at 0% CPU still draws its idle power, so a load factor of

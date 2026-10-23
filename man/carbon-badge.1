@@ -74,7 +74,7 @@ is repeatable and only needed when runner types are mixed.
 Average CPU utilisation, 0\-1, applied to every job. Unset, a job that ran
 the recorder is priced at the utilisation it measured, and a job priced
 from the API, which exposes none, at full load \(em which overstates an
-I/O-bound job by up to about three times.
+mostly-waiting job by up to about 4.7 times.
 .B \-\-load\-factor 1
 restores full load everywhere. Only the variable part of the draw scales:
 at 0 a machine still draws its idle power.

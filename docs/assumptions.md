@@ -440,7 +440,7 @@ Actions API exposes no utilisation, so the wattage has to come from somewhere
 else. Four options were on the table:
 
 1. **Keep full load and state the bias.** Simple and honest, but the bias is
-   large: a job that averages 25% CPU is overstated by roughly 3x, and a
+   large: a job that averages 25% CPU is overstated by about 2.4x, and a
    CI suite that is mostly `npm install` and network waiting is exactly that
    job.
 1. **A job-class heuristic** — guess utilisation from the workflow name, the
@@ -490,9 +490,10 @@ an understatement of about the same size.
 
 - **A job priced from the API is still at the ceiling.** For a CPU-bound build
   it is close to right; for an I/O-bound or mostly-waiting job it is high by
-  up to about 3x. It is never low on this axis. That direction is deliberate —
-  a carbon figure that flatters the caller is worth less than one that does
-  not. Instrumenting the job with the recorder is how to remove it.
+  about 2.4x at 25% CPU and up to about 4.7x for one that only waits. It is
+  never low on this axis. That direction is deliberate — a carbon figure that
+  flatters the caller is worth less than one that does not. Instrumenting the
+  job with the recorder is how to remove it.
 - **A measured job is as good as a linear curve.** The draw is interpolated
   straight between Eco-CI's idle and full-load points, and Eco-CI's own curve
   is not quite straight; the gap is a few tenths of a watt on this slice, in
@@ -500,6 +501,10 @@ an understatement of about the same size.
 - **CPU time is not all of the draw.** Memory and disk activity that does not
   show up as CPU time is not counted beyond the idle floor. Small on a shared
   VM slice, and in the low direction.
+- **On a self-hosted runner the reading is the whole machine's.** `os.cpus()`
+  counts every process, so another runner or service on the same host raises
+  the figure a job records. It is in the high direction only, and never above
+  the full-load figure a v1 marker would have been priced at.
 - **On a hosted runner the reading includes boot.** Provisioning is CPU-busy,
   so a short job reads somewhat higher than its own steps would — the same
   attribution the duration already makes, and in the high direction.
@@ -557,7 +562,7 @@ and its size is still unmeasured. Producing that number is one command
 ## Known limits
 
 - **A job priced from the API is priced at full load.** The API exposes no
-  utilisation, so an uninstrumented I/O-bound job is overstated by up to ~3x.
+  utilisation, so an uninstrumented I/O-bound job is overstated by up to ~4.7x.
   The recorder measures it for every job it runs in; `--load-factor` is the
   lever for the rest, and the section above is the reasoning.
 - **Shared hardware is an attribution, not a measurement.** A 4-vCPU slice of a
