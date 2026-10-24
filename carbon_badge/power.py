@@ -378,37 +378,43 @@ WATTS_PER_GB = 0.1125
 # load, so 21.5% of the full-load figure is drawn whatever the job is doing and
 # the remaining 78.5% scales with CPU utilisation.
 #
-# The API exposes no utilisation, so the default remains the full-load figure —
-# the honest reading of "we do not know" for a tool whose output should not
-# flatter the caller. --load-factor lets someone who *does* know say so: an
-# I/O-bound job that averages 25% CPU is overstated by roughly 3x at the
-# default, which is the single largest error left in the model.
+# A job that ran the recorder carries its own measured utilisation and is
+# priced at it. The API exposes none, so a job priced from the API stays at the
+# full-load figure — the honest reading of "we do not know" for a tool whose
+# output should not flatter the caller. On that path a job that averages 25%
+# CPU is overstated by about 2.4x, and one that only waits by about 4.7x.
 IDLE_FRACTION = 1.76 / 8.18
 
-# Set once from --load-factor. Module state rather than a parameter threaded
-# through six call sites: this scales the last step of a calculation every
-# route already shares, and the alternative was a wider diff for no more
-# correctness.
-LOAD_FACTOR: float = 1.0
+# Set once from --load-factor; None when it was not given. Module state rather
+# than a parameter threaded through six call sites: this scales the last step
+# of a calculation every route already shares, and the alternative was a wider
+# diff for no more correctness.
+LOAD_FACTOR: float | None = None
 
 
 def apply_load_factor(watts: float, load_factor: float | None = None) -> float:
-    """Scale a full-load wattage to a stated average CPU utilisation.
+    """Scale a full-load wattage to an average CPU utilisation.
+
+    The figure used, first found: --load-factor, then `load_factor` (a job's
+    measured utilisation), then full load. A declared figure beats a measured
+    one for the same reason --runner-watts beats the table: whoever passed it
+    is overriding the tool on purpose, and `--load-factor 1` is how to get the
+    full-load ceiling back.
 
     Only the variable part scales: a machine at 0% CPU still draws its idle
     power, so a load factor of 0 is not zero watts. That is why this is not a
     plain multiply, which would have made `--load-factor 0.25` understate by
     about the same margin the default overstates.
     """
-    if load_factor is None:
+    if LOAD_FACTOR is not None:
         load_factor = LOAD_FACTOR
-    if load_factor >= 1:
+    if load_factor is None or load_factor >= 1:
         return watts
     load_factor = max(0.0, float(load_factor))
     return round(watts * (IDLE_FRACTION + (1 - IDLE_FRACTION) * load_factor), 2)
 
 
-def watts_from_specs(vcpu: int, mem_mb: int, platform: str = "ubuntu") -> float:
+def watts_from_specs(vcpu: int, mem_mb: int, platform: str = "ubuntu", load_factor: float | None = None) -> float:
     """Power draw from a machine's CPU count, memory and platform.
 
     The single pricing law. Both routes into it — a runner recognised by its
@@ -428,9 +434,12 @@ def watts_from_specs(vcpu: int, mem_mb: int, platform: str = "ubuntu") -> float:
 
     macOS is the exception — dedicated Apple hardware, not a slice of a shared
     host, so its draw does not track a vCPU count at all.
+
+    `load_factor` is the job's measured CPU utilisation, when it has one; see
+    apply_load_factor for what overrides it.
     """
     if platform == "macos":
-        return apply_load_factor(RUNNER_POWER_W["macos"])
+        return apply_load_factor(RUNNER_POWER_W["macos"], load_factor)
     # Both routes price the same machine the same way, so both have to admit to
     # the same estimate — a self-reported arm job is no better founded than a
     # label-matched one.
@@ -440,4 +449,4 @@ def watts_from_specs(vcpu: int, mem_mb: int, platform: str = "ubuntu") -> float:
     per_vcpu = (baseline_w - WATTS_BASE - WATTS_PER_GB * BASELINE_MEM_GB) / BASELINE_VCPU
     # Rounded so the two routes compare equal rather than differing in float
     # noise, and so the log prints a sane number.
-    return apply_load_factor(round(WATTS_BASE + per_vcpu * vcpu + WATTS_PER_GB * (mem_mb / 1024), 2))
+    return apply_load_factor(round(WATTS_BASE + per_vcpu * vcpu + WATTS_PER_GB * (mem_mb / 1024), 2), load_factor)

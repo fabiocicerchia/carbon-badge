@@ -162,8 +162,8 @@ pick one — for some questions they are simply the better answer.
 
 |                           | Eco-CI                                                                      | carbon-badge                                       |
 | ------------------------- | --------------------------------------------------------------------------- | -------------------------------------------------- |
-| **measures**              | CPU utilisation sampled during the job                                      | job duration, after the fact                       |
-| **wattage**               | integrated across the load curve                                            | the full-load figure, flat                         |
+| **measures**              | CPU utilisation sampled during the job                                      | job duration; average CPU where recorded           |
+| **wattage**               | integrated across the load curve                                            | the job's average load if recorded, else full load |
 | **instrumentation**       | required — `start` / `get` / `display` in every job                         | optional; adds accuracy, not required for a number |
 | **granularity**           | per step and per run                                                        | 30-day repo total                                  |
 | **where the number goes** | pushed to `metrics.green-coding.io` by default; `send-data: false` opts out | written to a branch of your repo                   |
@@ -173,15 +173,18 @@ pick one — for some questions they are simply the better answer.
 
 ### The difference that matters
 
-**Eco-CI knows how hard the CPU was working; this tool does not.** It samples
-utilisation into a time series and integrates it against the curve, so a job
-idling at 25% is priced near 4 W and a busy one near 8 W.
+**Eco-CI knows how hard the CPU was working moment to moment; this tool knows
+it at best as one average per job.** Eco-CI samples utilisation into a time
+series and integrates it against the curve, so a job idling at 25% is priced
+near 4 W and a busy one near 8 W.
 
-carbon-badge only ever uses the full-load end of that same curve, because the
+carbon-badge's recorder reads the job's average utilisation and prices it on
+the same curve, which lands in the same place for any job whose load is
+roughly steady. A job priced from the API gets the full-load end, because the
 Actions API exposes no utilisation figure — a retrospective tool cannot recover
 what nobody recorded. On mixed CI, where much of a job is waiting on the
 network, that plausibly **over-reports by 1.5–2×**. It is the largest known
-error in this tool and it is not fixable from the outside.
+error in this tool, and instrumenting the job is the only way to remove it.
 
 ### So which
 

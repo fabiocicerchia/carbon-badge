@@ -88,12 +88,14 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--load-factor",
         type=float,
-        default=1.0,
+        default=None,
         metavar="F",
         help=(
-            "average CPU utilisation of these jobs, 0-1. The API exposes no "
-            "utilisation, so the default (1.0) prices every job at full load — "
-            "which overstates an I/O-bound job by up to ~3x. Only the variable "
+            "average CPU utilisation of these jobs, 0-1, applied to every job. "
+            "Unset, a job that ran the recorder is priced at the utilisation it "
+            "measured, and a job priced from the API — which exposes none — at "
+            "full load, which overstates a mostly-waiting job by up to ~4.7x. "
+            "--load-factor 1 restores full load everywhere. Only the variable "
             "part of the draw scales: at 0 a machine still draws its idle "
             "power. See docs/assumptions.md"
         ),
@@ -150,7 +152,7 @@ def main(argv: list[str] | None = None) -> int:
     parser = _build_parser()
     args = parser.parse_args(argv)
 
-    if not 0 <= args.load_factor <= 1:
+    if args.load_factor is not None and not 0 <= args.load_factor <= 1:
         parser.error("--load-factor must be between 0 and 1")
     # The load factor is a property of the run, read by functions several
     # layers down that take no config object. Threading one through purely to
@@ -159,7 +161,7 @@ def main(argv: list[str] | None = None) -> int:
     # Set on the module that reads it, not on a copy imported here: rebinding a
     # name in this namespace would leave power.LOAD_FACTOR at its default and
     # the flag would quietly do nothing.
-    power.LOAD_FACTOR = float(args.load_factor)
+    power.LOAD_FACTOR = None if args.load_factor is None else float(args.load_factor)
 
     # Validated up front so a typo fails the command rather than surfacing as a
     # traceback from inside estimate() — or, under --serve, on every request.

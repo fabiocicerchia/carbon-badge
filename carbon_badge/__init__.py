@@ -28,6 +28,7 @@ from .base import Getter as Getter
 from .base import Json as Json
 from .base import Response as Response
 from .base import RunnerWatts as RunnerWatts
+from .base import carbon_artifact_load as carbon_artifact_load
 from .base import carbon_artifact_slug as carbon_artifact_slug
 from .base import job_slug as job_slug
 from .base import log as log
@@ -128,6 +129,7 @@ __all__ = [
     "apply_load_factor",
     "artifact_kwh_by_run",
     "badge_handler",
+    "carbon_artifact_load",
     "carbon_artifact_slug",
     "ci_kwh_last_30d",
     "confidence",
