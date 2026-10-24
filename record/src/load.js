@@ -24,11 +24,12 @@ export function cpuTimes(cpus) {
 // when it cannot be trusted — the reader then falls back to full load, which
 // is the conservative direction.
 //
-//   start   cpuTimes() from main.js, or null if no snapshot was saved
-//   now     cpuTimes() in the post step
-//   whole   true when the recorded duration is the VM's uptime
-export function cpuLoadPercent(start, now, whole) {
-  const from = whole ? { busy: 0, total: 0 } : start;
+//   start      cpuTimes() from main.js, or null if no snapshot was saved
+//   now        cpuTimes() in the post step
+//   sinceBoot  true when the recorded duration is the VM's uptime, so the
+//              counters since boot are the reading and start is ignored
+export function cpuLoadPercent(start, now, sinceBoot) {
+  const from = sinceBoot ? { busy: 0, total: 0 } : start;
   if (!from || !now) return null;
   const busy = now.busy - from.busy;
   const total = now.total - from.total;
