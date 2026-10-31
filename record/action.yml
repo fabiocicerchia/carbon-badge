@@ -1,8 +1,9 @@
 name: 'carbon-badge record'
 description: >-
-  Record this job's duration and the machine's real CPU/memory into an artifact
-  name, so the badge refresh reads a month of exact measurements from the
-  artifact listing instead of one API request per run.
+  Record this job's duration, the machine's real CPU/memory and the job's
+  average CPU utilisation into an artifact name, so the badge refresh reads a
+  month of exact measurements from the artifact listing instead of one API
+  request per run.
 author: 'Fabio Cicerchia'
 
 inputs:
