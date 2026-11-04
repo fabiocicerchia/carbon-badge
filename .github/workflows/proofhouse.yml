@@ -55,11 +55,13 @@ jobs:
         # A red verdict is the run most worth recording, so it must not stop the
         # POST below. gandalf-pr-review.yml is where findings gate a change.
         continue-on-error: true
+        env:
+          GANDALF_IMAGE: ghcr.io/fabiocicerchia/gandalf-tools:0.14.0@sha256:9718f0093ac401082bbe2bd2a4f7241e317e56a759525d6951d646bf644e60e3
         run: |
           docker run --rm \
             --user "$(id -u):$(id -g)" -e HOME=/tmp -e PYTHONDONTWRITEBYTECODE=1 \
             -v "${GITHUB_WORKSPACE}:/src" -v "${RUNNER_TEMP}/gandalf:/gandalf:ro" -w /src \
-            ghcr.io/fabiocicerchia/gandalf-tools:0.14.0@sha256:9718f0093ac401082bbe2bd2a4f7241e317e56a759525d6951d646bf644e60e3 \
+            "$GANDALF_IMAGE" \
             sh -c 'git config --global --add safe.directory "*" \
               && PYTHONPATH=/gandalf/src python -m gandalf --no-llm --no-html --out-dir reports'
 
