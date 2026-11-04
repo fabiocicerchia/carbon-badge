@@ -9,7 +9,7 @@ import requests
 from .artifacts import RegionFactors, _expected_markers, artifact_kwh_by_run
 from .base import Getter, Json, RunnerWatts, log
 from .ci import _MAX_PAGES, _PAGE_SIZE, _list_runs, _run_kwh
-from .power import DEFAULT_RUNNER_POWER_W, CiUsage, grid_factor_for, runner_power_w
+from .power import DEFAULT_RUNNER_POWER_W, CiUsage, RunTotals, grid_factor_for, runner_power_w
 from .reconcile import _warn_undeclared_runners
 
 
@@ -49,13 +49,13 @@ def ci_kwh_last_30d(  # noqa: PLR0913 — the repo/token/api trio plus independe
     # pays off from the very first workflow file rather than at some threshold:
     # every job you add removes a request from next week's refresh, and the
     # answer stays correct the whole way through.
-    by_run = {}
+    by_run: dict[int, RunTotals] = {}
     if use_artifacts:
         by_run, _ = artifact_kwh_by_run(repo, token, api, runner_watts, factor_for)
     # How many markers a fully instrumented run of each workflow should have.
     expected: dict[int, int] = _expected_markers(runs, by_run, repo, token, api) if by_run else {}
 
-    kwh, grams, total_jobs, used_markers = 0.0, 0.0, 0, 0
+    kwh, grams, total_jobs, used_markers, trusted = 0.0, 0.0, 0, 0, 0
     measured_kwh, guessed_kwh = 0.0, 0.0
     # A run priced from the API reports no region, so it takes the repo-level
     # factor: no region to look up means no provider to ask. A partly
@@ -75,8 +75,11 @@ def ci_kwh_last_30d(  # noqa: PLR0913 — the repo/token/api trio plus independe
             measured_kwh += entry.kwh
             used_markers += entry.markers
             total_jobs += entry.markers
+            trusted += 1
         else:
-            run_kwh, run_jobs_seen, run_guessed = _run_kwh(run, repo, token, api, runner_watts, undeclared)
+            run_kwh, run_jobs_seen, run_guessed = _run_kwh(
+                run, repo, token, api, runner_watts=runner_watts, undeclared=undeclared
+            )
             kwh += run_kwh
             grams += run_kwh * api_factor
             guessed_kwh += run_guessed
@@ -85,12 +88,6 @@ def ci_kwh_last_30d(  # noqa: PLR0913 — the repo/token/api trio plus independe
         # Counted after the completeness check, not before: a run with a marker
         # is not necessarily a run we could use, and saying otherwise reported
         # full coverage on a half-instrumented workflow.
-        trusted = sum(
-            1
-            for run in runs
-            if (entry := by_run.get(int(run.get("id", 0))))
-            and entry.markers >= expected.get(int(run.get("workflow_id", 0)), 0)
-        )
         log.info(
             "%d/%d run(s) fully self-reported; %d priced from the API. Instrument the remaining jobs to shrink that.",
             trusted,

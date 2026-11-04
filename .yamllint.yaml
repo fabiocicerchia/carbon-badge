@@ -1,0 +1,9 @@
+extends: relaxed
+
+rules:
+  # Actions are pinned by a 40-char SHA with the tag in a trailing comment
+  # (CLAUDE.md), which alone runs past 80. 120 matches ruff in pyproject.toml;
+  # an unbreakable value such as an image digest is allowed past it.
+  line-length:
+    max: 120
+    allow-non-breakable-inline-mappings: true

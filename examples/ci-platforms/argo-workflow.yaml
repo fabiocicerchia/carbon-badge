@@ -26,10 +26,16 @@ spec:
           command: [sh, -c]
           args:
             - >-
-              carbon-badge "{{workflow.parameters.repo}}"
-              --grid-intensity "{{workflow.parameters.grid-intensity}}"
+              carbon-badge "$REPO"
+              --grid-intensity "$GRID_INTENSITY"
               | tee /tmp/badge.json
           env:
+            # Parameters go through env, not into the script text, so a value
+            # can't inject shell.
+            - name: REPO
+              value: "{{workflow.parameters.repo}}"
+            - name: GRID_INTENSITY
+              value: "{{workflow.parameters.grid-intensity}}"
             # A PAT with actions:read on the target repo.
             - name: GITHUB_TOKEN
               valueFrom:

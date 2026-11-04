@@ -96,8 +96,8 @@ def _list_runs(repo: str, token: str | None, api: str, since: str) -> list[Json]
     return runs
 
 
-def _run_kwh(  # noqa: PLR0913,PLR0917 — the run, where to fetch it, and the two tables it charges against
-    run: Json, repo: str, token: str | None, api: str, runner_watts: RunnerWatts | None, undeclared: dict[str, int]
+def _run_kwh(  # noqa: PLR0913 — the run, where to fetch it, and the two tables it charges against
+    run: Json, repo: str, token: str | None, api: str, *, runner_watts: RunnerWatts | None, undeclared: dict[str, int]
 ) -> tuple[float, int, float]:
     """Exact kWh for one run: sum its jobs, each at its own runner's draw.
 
