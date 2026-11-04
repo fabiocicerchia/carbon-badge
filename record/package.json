@@ -15,5 +15,8 @@
   "devDependencies": {
     "esbuild": "^0.28.2"
   },
-  "type": "module"
+  "type": "module",
+  "overrides": {
+    "glob": "^14.0.2"
+  }
 }
