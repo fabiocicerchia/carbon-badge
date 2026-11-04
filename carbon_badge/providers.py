@@ -77,7 +77,9 @@ def ci_kwh_last_30d(  # noqa: PLR0913 — the repo/token/api trio plus independe
             total_jobs += entry.markers
             trusted += 1
         else:
-            run_kwh, run_jobs_seen, run_guessed = _run_kwh(run, repo, token, api, runner_watts, undeclared)
+            run_kwh, run_jobs_seen, run_guessed = _run_kwh(
+                run, repo, token, api, runner_watts=runner_watts, undeclared=undeclared
+            )
             kwh += run_kwh
             grams += run_kwh * api_factor
             guessed_kwh += run_guessed
