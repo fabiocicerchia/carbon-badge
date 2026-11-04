@@ -9,7 +9,7 @@ import requests
 from .artifacts import RegionFactors, _expected_markers, artifact_kwh_by_run
 from .base import Getter, Json, RunnerWatts, log
 from .ci import _MAX_PAGES, _PAGE_SIZE, _list_runs, _run_kwh
-from .power import DEFAULT_RUNNER_POWER_W, CiUsage, grid_factor_for, runner_power_w
+from .power import DEFAULT_RUNNER_POWER_W, CiUsage, RunTotals, grid_factor_for, runner_power_w
 from .reconcile import _warn_undeclared_runners
 
 
@@ -49,7 +49,7 @@ def ci_kwh_last_30d(  # noqa: PLR0913 — the repo/token/api trio plus independe
     # pays off from the very first workflow file rather than at some threshold:
     # every job you add removes a request from next week's refresh, and the
     # answer stays correct the whole way through.
-    by_run = {}
+    by_run: dict[int, RunTotals] = {}
     if use_artifacts:
         by_run, _ = artifact_kwh_by_run(repo, token, api, runner_watts, factor_for)
     # How many markers a fully instrumented run of each workflow should have.

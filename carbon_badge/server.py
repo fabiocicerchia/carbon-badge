@@ -58,14 +58,14 @@ class BadgeHandler(http.server.BaseHTTPRequestHandler):
         pass
 
 
-def badge_handler(compute: Callable[[], Json], ttl: int = 300) -> type[http.server.BaseHTTPRequestHandler]:
+def badge_handler(compute: Callable[[], Json], ttl: int = 300) -> Callable[..., BadgeHandler]:
     """A BadgeHandler bound to one compute() and one shared cache."""
     # `t=None` means "never computed yet" — not 0.0, since time.monotonic()'s
     # epoch is arbitrary (e.g. near-zero shortly after a container boots), so
     # `now - 0.0 > ttl` can be false on the very first request too, leaving
     # cache["body"] permanently empty.
     cache: dict[str, Any] = {"t": None, "body": b""}
-    return functools.partial(BadgeHandler, compute, ttl, cache)  # pyright: ignore[reportReturnType]
+    return functools.partial(BadgeHandler, compute, ttl, cache)
 
 
 # The default has to be every interface: the documented --serve deployment is a
