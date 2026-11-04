@@ -678,10 +678,9 @@ def test_serve_badge_endpoint_caches_and_404s() -> None:
     thread = threading.Thread(target=httpd.serve_forever, daemon=True)
     thread.start()
     try:
-        url = f"http://127.0.0.1:{port}/badge.json"
-        body = urllib.request.urlopen(url, timeout=5).read()  # nosec B310 — fixed http://127.0.0.1 URL
+        body = urllib.request.urlopen(f"http://127.0.0.1:{port}/badge.json", timeout=5).read()  # nosec B310 — fixed http://127.0.0.1 URL
         assert json.loads(body)["label"] == "CI carbon"
-        urllib.request.urlopen(url, timeout=5).read()  # nosec B310
+        urllib.request.urlopen(f"http://127.0.0.1:{port}/badge.json", timeout=5).read()  # nosec B310
         assert calls["n"] == 1  # second hit within ttl served from cache
         with pytest.raises(urllib.error.HTTPError):
             urllib.request.urlopen(f"http://127.0.0.1:{port}/nope", timeout=5)  # nosec B310
