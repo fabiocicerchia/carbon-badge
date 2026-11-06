@@ -72,7 +72,7 @@ def test_documented_serve_command_over_real_http(monkeypatch: pytest.MonkeyPatch
     github_hits: list[str] = []
 
     class FakeGitHub(http.server.BaseHTTPRequestHandler):
-        def do_GET(self) -> None:  # noqa: N802 — http.server's naming
+        def do_GET(self) -> None:
             parsed = urllib.parse.urlsplit(self.path)
             github_hits.append(parsed.path)
             page_one = urllib.parse.parse_qs(parsed.query).get("page", ["1"]) == ["1"]
@@ -95,7 +95,7 @@ def test_documented_serve_command_over_real_http(monkeypatch: pytest.MonkeyPatch
             self.end_headers()
             self.wfile.write(body)
 
-        def log_message(self, *_: Any) -> None:
+        def log_message(self, format: str, *args: Any) -> None:  # noqa: A002
             pass
 
     github = http.server.HTTPServer(("127.0.0.1", 0), FakeGitHub)

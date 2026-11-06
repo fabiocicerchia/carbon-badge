@@ -698,7 +698,7 @@ def test_github_client_over_real_http() -> None:
     jobs = [_job(["ubuntu-latest"], 6) for _ in range(101)]
 
     class FakeGitHub(http.server.BaseHTTPRequestHandler):
-        def do_GET(self) -> None:  # noqa: N802 — http.server's naming
+        def do_GET(self) -> None:
             parsed = urllib.parse.urlsplit(self.path)
             query = urllib.parse.parse_qs(parsed.query)
             seen.append((parsed.path, query, self.headers.get("Authorization")))
@@ -716,7 +716,7 @@ def test_github_client_over_real_http() -> None:
             self.end_headers()
             self.wfile.write(body)
 
-        def log_message(self, *_: Any) -> None:
+        def log_message(self, format: str, *args: Any) -> None:  # noqa: A002
             pass
 
     httpd = http.server.HTTPServer(("127.0.0.1", 0), FakeGitHub)
