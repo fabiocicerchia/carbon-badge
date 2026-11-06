@@ -43,7 +43,6 @@ jobs:
           github-token: ${{ github.token }}
 
       - name: Post to boneyard
-        continue-on-error: true
         env:
           TOKEN: ${{ secrets.BONEYARD_TOKEN }}
           REPORT: ${{ steps.depwatch.outputs.report }}
