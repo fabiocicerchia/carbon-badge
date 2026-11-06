@@ -1610,3 +1610,55 @@ def test_reconcile_refuses_the_combinations_that_cannot_work(capsys: pytest.Capt
     ):
         with pytest.raises(SystemExit):
             carbon_badge.main(argv)
+
+
+# --- end to end ---------------------------------------------------------------
+
+
+def test_cli_prints_the_badge_for_a_github_repo(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """The main journey: `carbon-badge owner/repo` reads the API with the env
+    token and prints Shields endpoint JSON, and nothing else, on stdout."""
+    seen_headers: list[dict[str, str]] = []
+
+    def fake_get(
+        url: str,
+        *,
+        params: dict[str, Any] | None = None,
+        headers: dict[str, str] | None = None,
+        timeout: float | None = None,
+    ) -> _FakeResponse:
+        seen_headers.append(headers or {})
+        page = _page(params)
+        if "/artifacts" in url:
+            return _FakeResponse({"artifacts": []})
+        if "/jobs" in url:
+            return _FakeResponse({"jobs": [_job(["ubuntu-latest"], 60)] if page == 1 else []})
+        return _FakeResponse({"workflow_runs": [{"id": 1}] if page == 1 else []})
+
+    monkeypatch.setenv("GITHUB_TOKEN", "t0ken")
+    monkeypatch.setattr(carbon_badge.ci.requests, "get", fake_get)
+
+    assert carbon_badge.main(["owner/repo", "--grid-intensity", "480"]) == 0
+
+    badge = json.loads(capsys.readouterr().out)
+    assert badge["schemaVersion"] == 1
+    assert badge["label"] == "CI carbon"
+    # One hour on the baseline runner, nothing self-reported.
+    assert badge["message"] == f"{format_grams(grams_co2e(60, 480.0))} (estimated)"
+    assert seen_headers
+    assert all(h.get("Authorization") == "Bearer t0ken" for h in seen_headers)
+
+
+def test_cli_offline_minutes_never_touch_the_network(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    def no_network(*_: Any, **__: Any) -> NoReturn:
+        raise AssertionError("--minutes must not call the API")
+
+    monkeypatch.setattr(carbon_badge.ci.requests, "get", no_network)
+
+    assert carbon_badge.main(["owner/repo", "--minutes", "1000", "--grid-intensity", "480"]) == 0
+
+    assert json.loads(capsys.readouterr().out)["message"] == format_grams(grams_co2e(1000, 480.0))
