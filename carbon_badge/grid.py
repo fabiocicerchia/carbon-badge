@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import cast
 
 import requests
@@ -250,7 +250,7 @@ def _measured_reading(key: str, snapshot: Json | None, now: datetime | None = No
         generated = datetime.fromisoformat(str(stamp).replace("Z", "+00:00"))
     except ValueError:
         return None
-    now = now or datetime.now(timezone.utc)
+    now = now or datetime.now(UTC)
     if (now - generated).total_seconds() > CI_API_MAX_AGE_S:
         return None
     bucket = "zones" if "/" in key else "countries"

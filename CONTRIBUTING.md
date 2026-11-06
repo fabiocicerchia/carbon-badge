@@ -4,7 +4,7 @@ Thanks for taking the time to contribute to carbon-badge!
 
 ## Getting started
 
-You need Python 3.10+ and `make`.
+You need Python 3.11+ and `make`.
 
 1. Fork and clone the repo.
 1. Install dev deps and git hooks: `make setup && make dev`.

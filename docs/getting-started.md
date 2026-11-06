@@ -2,7 +2,7 @@
 
 ## Prerequisites
 
-- Python 3.10+
+- Python 3.11+
 - A GitHub token with read access to the target repo's Actions
   (`GITHUB_TOKEN` in CI, or a PAT with `actions:read`).
 
@@ -277,7 +277,7 @@ a shared host that is worth doing.
 ## Other CI systems
 
 The action wrapper is GitHub-specific; the CLI is not. Anything that can run
-Python 3.10+ and hold a token can refresh the badge:
+Python 3.11+ and hold a token can refresh the badge:
 
 ```sh
 docker run --rm -e GITHUB_TOKEN ghcr.io/fabiocicerchia/carbon-badge:0.2.1 \

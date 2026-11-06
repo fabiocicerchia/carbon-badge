@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 import requests
 
@@ -160,7 +160,7 @@ def artifact_kwh_by_run(
     those". The artifacts listing carries workflow_run.id already, so knowing
     *which* runs are covered is free.
     """
-    cutoff = datetime.now(timezone.utc) - timedelta(days=30)
+    cutoff = datetime.now(UTC) - timedelta(days=30)
     blanket = (runner_watts or {}).get(ANY_RUNNER)
     by_run: dict[int, RunTotals] = {}
     jobs = 0
