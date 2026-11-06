@@ -52,9 +52,9 @@ jobs:
         run: mv .gandalf-src "${RUNNER_TEMP}/gandalf"
 
       - name: Run gandalf
-        # A red verdict is the run most worth recording, so it must not stop the
-        # POST below. gandalf-pr-review.yml is where findings gate a change.
-        continue-on-error: true
+        # A red verdict fails the run, but the POST below still goes out: it is
+        # the run most worth recording. gandalf-pr-review.yml is where findings
+        # gate a change.
         env:
           GANDALF_IMAGE: ghcr.io/fabiocicerchia/gandalf-tools:0.14.0@sha256:9718f0093ac401082bbe2bd2a4f7241e317e56a759525d6951d646bf644e60e3
         run: |
@@ -66,7 +66,10 @@ jobs:
               && PYTHONPATH=/gandalf/src python -m gandalf --no-llm --no-html --out-dir reports'
 
       - name: Post to proofhouse
+        if: ${{ !cancelled() }}
         # Telemetry. A dashboard being down is not this repository's problem.
+        # Kept until app.proofhouse.cloud has an uptime commitment; a gandalf
+        # crash is caught by the step above, not hidden here.
         continue-on-error: true
         env:
           TOKEN: ${{ secrets.PROOFHOUSE_TOKEN }}
