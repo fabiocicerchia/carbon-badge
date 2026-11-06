@@ -103,6 +103,7 @@ def ci_kwh_last_30d(  # noqa: PLR0913 — the repo/token/api trio plus independe
 def gitlab_kwh_last_30d(  # noqa: PLR0913 — the project/token/api trio plus independent optional knobs
     project: str,
     token: str | None,
+    *,
     api: str = "https://gitlab.com/api/v4",
     runner_watts: RunnerWatts | None = None,
     grid_override: float | None = None,

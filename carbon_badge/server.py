@@ -53,10 +53,8 @@ class BadgeHandler(http.server.BaseHTTPRequestHandler):
         self.wfile.write(self._cache["body"])
 
     # Overrides BaseHTTPRequestHandler.log_message(format, *args): the name and
-    # the variadic tail are the base class's, and this one drops the line anyway,
-    # so it needs no instance: static, still reached as self.log_message(...).
-    @staticmethod
-    def log_message(format: str, *args: Any) -> None:  # noqa: A002, ANN401
+    # the variadic tail are the base class's, and this one drops the line anyway.
+    def log_message(self, format: str, *args: Any) -> None:  # noqa: A002, ANN401
         pass
 
 
