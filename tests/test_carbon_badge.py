@@ -8,7 +8,7 @@ import threading
 import urllib.error
 import urllib.request
 from collections.abc import Callable
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from typing import Any, NoReturn
 
 import pytest
@@ -130,7 +130,7 @@ def test_unknown_runners_are_charged_not_skipped(
 ) -> None:
     """Skipping self-hosted scored it as zero, so moving a build onto the
     biggest machine you own improved the badge. It's charged and reported now."""
-    now = datetime.now(timezone.utc).isoformat()
+    now = datetime.now(UTC).isoformat()
     runs = [{"id": 1}]
     jobs = [
         {
@@ -421,7 +421,7 @@ def _artifact(name: str, run_id: int, created: str | None = None, expired: bool 
     return {
         "name": name,
         "workflow_run": {"id": run_id},
-        "created_at": created or datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+        "created_at": created or datetime.now(UTC).isoformat().replace("+00:00", "Z"),
         "expired": expired,
     }
 
@@ -497,7 +497,7 @@ def test_partial_instrumentation_tops_up_from_the_api(monkeypatch: pytest.Monkey
     """The realistic state. Self-reported runs are used as-is; only the rest
     cost a request. Accurate throughout, and cheaper with every workflow you
     instrument — rather than all-or-nothing at some threshold."""
-    now = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+    now = datetime.now(UTC).isoformat().replace("+00:00", "Z")
     runs = [{"id": i, "workflow_id": 7, "run_started_at": now, "updated_at": now} for i in (1, 2, 3, 4)]
     artifacts = [
         _artifact("carbon.v1.3600.2.7168.ubuntu.eastus.a", 1),
@@ -524,7 +524,7 @@ def test_partial_instrumentation_tops_up_from_the_api(monkeypatch: pytest.Monkey
 def test_full_coverage_costs_one_sample_per_workflow(monkeypatch: pytest.MonkeyPatch) -> None:
     """Fully instrumented: one sampled run per workflow to establish the job
     count, and nothing else."""
-    now = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+    now = datetime.now(UTC).isoformat().replace("+00:00", "Z")
     runs = [{"id": i, "workflow_id": 7, "run_started_at": now, "updated_at": now} for i in (1, 2, 3)]
     artifacts = [_artifact(f"carbon.v1.3600.2.7168.ubuntu.eastus.j{i}", i) for i in (1, 2, 3)]
     calls: list[str] = []
@@ -539,7 +539,7 @@ def test_full_coverage_costs_one_sample_per_workflow(monkeypatch: pytest.MonkeyP
 def test_ignore_self_reported_does_not_consult_artifacts(monkeypatch: pytest.MonkeyPatch) -> None:
     """--ignore-self-reported must not touch the artifacts listing at all,
     otherwise the two paths cannot be reconciled against each other."""
-    now = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+    now = datetime.now(UTC).isoformat().replace("+00:00", "Z")
     runs = [{"id": 1, "workflow_id": 7, "run_started_at": now, "updated_at": now}]
     calls: list[str] = []
     monkeypatch.setattr(
@@ -554,7 +554,7 @@ def test_ignore_self_reported_does_not_consult_artifacts(monkeypatch: pytest.Mon
 
 def test_expired_and_out_of_window_markers_are_ignored(monkeypatch: pytest.MonkeyPatch) -> None:
     """Retention outlives the window, so old markers must not inflate a month."""
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     fresh = now.isoformat().replace("+00:00", "Z")
     old = (now - timedelta(days=40)).isoformat().replace("+00:00", "Z")
     artifacts = [
@@ -580,7 +580,7 @@ def test_declared_watts_still_beat_the_model(monkeypatch: pytest.MonkeyPatch) ->
 
 
 def _job(labels: list[str], minutes: float) -> Json:
-    start = datetime(2026, 8, 1, 0, 0, tzinfo=timezone.utc)
+    start = datetime(2026, 8, 1, 0, 0, tzinfo=UTC)
     end = start + timedelta(minutes=minutes)
     return {
         "labels": labels,
@@ -592,7 +592,7 @@ def _job(labels: list[str], minutes: float) -> Json:
 def test_gitlab_kwh_charges_self_managed_runners(monkeypatch: pytest.MonkeyPatch) -> None:
     """Self-managed runners used to be skipped — scored as zero emissions, the
     same perverse incentive as the GitHub path. Both jobs are charged now."""
-    now = datetime.now(timezone.utc).isoformat()
+    now = datetime.now(UTC).isoformat()
     jobs_page1 = [
         {"created_at": now, "duration": 3600, "runner": {"is_shared": True}},
         {"created_at": now, "duration": 3600, "runner": {"is_shared": False}},
@@ -617,7 +617,7 @@ def test_gitlab_kwh_charges_self_managed_runners(monkeypatch: pytest.MonkeyPatch
 
 def test_gitlab_runner_watts_matches_on_tags(monkeypatch: pytest.MonkeyPatch) -> None:
     """Tags and the runner description are GitLab's equivalent of a label."""
-    now = datetime.now(timezone.utc).isoformat()
+    now = datetime.now(UTC).isoformat()
     jobs_page1 = [
         {
             "created_at": now,
@@ -697,7 +697,7 @@ def test_a_partly_instrumented_run_does_not_lose_its_other_jobs(monkeypatch: pyt
     sibling — an 11x undercount that still reported confidence "measured",
     because a marker proves *a* job reported, not that all of them did.
     """
-    now = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+    now = datetime.now(UTC).isoformat().replace("+00:00", "Z")
     runs = [{"id": 1, "workflow_id": 7, "run_started_at": now, "updated_at": now}]
     # The API says this run had two jobs; only one wrote a marker.
     jobs = [_job(["ubuntu-latest"], 60), _job(["ubuntu-latest"], 600)]
@@ -730,7 +730,7 @@ def test_a_partly_instrumented_run_does_not_lose_its_other_jobs(monkeypatch: pyt
 
 def test_markers_are_not_double_counted_when_a_run_is_topped_up(monkeypatch: pytest.MonkeyPatch) -> None:
     """Topping up must replace the partial markers, not add to them."""
-    now = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+    now = datetime.now(UTC).isoformat().replace("+00:00", "Z")
     runs = [{"id": 1, "workflow_id": 7, "run_started_at": now, "updated_at": now}]
     jobs = [_job(["ubuntu-latest"], 60), _job(["ubuntu-latest"], 60)]
 
@@ -793,7 +793,7 @@ def test_undeclared_warning_never_suggests_a_command_that_will_not_parse(caplog:
 def test_gitlab_honours_a_blanket_override_on_untagged_jobs(monkeypatch: pytest.MonkeyPatch) -> None:
     """Untagged is the common GitLab case; an `if tags` guard skipped the
     blanket figure entirely and priced a 180 W fleet at the 9.4 W baseline."""
-    now = datetime.now(timezone.utc).isoformat()
+    now = datetime.now(UTC).isoformat()
     jobs_page1 = [{"created_at": now, "duration": 3600, "runner": {"is_shared": True}}]
 
     def fake_get(
@@ -819,7 +819,7 @@ def test_an_unusually_small_newest_run_cannot_lower_the_bar(monkeypatch: pytest.
     A marker cannot outnumber its run's jobs, so the highest marker count seen
     for the workflow is a free lower bound and the larger of the two wins.
     """
-    now = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+    now = datetime.now(UTC).isoformat().replace("+00:00", "Z")
     # Newest run had a single job. An older one ran three, fully instrumented.
     # The middle one ran three and reported two — the case that must not pass.
     runs = [
@@ -872,7 +872,7 @@ def test_skipped_jobs_do_not_make_completeness_unreachable(monkeypatch: pytest.M
     instrumented workflow still paying an API call every run, forever. That is
     the failure mode where the whole feature stops earning its overhead.
     """
-    now = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+    now = datetime.now(UTC).isoformat().replace("+00:00", "Z")
     runs = [{"id": 1, "workflow_id": 9, "run_started_at": now, "updated_at": now}]
     api_jobs = [
         dict(_job(["ubuntu-latest"], 8), name="release-please", conclusion="success"),
@@ -911,7 +911,7 @@ def test_skipped_jobs_do_not_make_completeness_unreachable(monkeypatch: pytest.M
 def test_skipped_jobs_contribute_no_energy(monkeypatch: pytest.MonkeyPatch) -> None:
     """They also carry timestamps, sometimes with completed_at *before*
     started_at, so they must be dropped rather than clamped to zero."""
-    now = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+    now = datetime.now(UTC).isoformat().replace("+00:00", "Z")
     runs = [{"id": 1, "workflow_id": 9, "run_started_at": now, "updated_at": now}]
     api_jobs = [
         dict(_job(["ubuntu-latest"], 60), name="real", conclusion="success"),
@@ -1247,7 +1247,7 @@ def _dt(stamp: str) -> datetime:
 
 
 def _now_z():
-    return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+    return datetime.now(UTC).isoformat().replace("+00:00", "Z")
 
 
 def _ci_snapshot(generated_at: str = "2026-08-08T18:00:00Z") -> Json:
@@ -1417,7 +1417,7 @@ def test_pue_is_applied_once_and_stays_its_own_constant() -> None:
 
 
 def _named_job(labels: list[str], minutes: float, name: str, start_offset: float = 0) -> Json:
-    start = datetime(2026, 8, 1, 0, 0, tzinfo=timezone.utc) + timedelta(minutes=start_offset)
+    start = datetime(2026, 8, 1, 0, 0, tzinfo=UTC) + timedelta(minutes=start_offset)
     end = start + timedelta(minutes=minutes)
     return {
         "name": name,
@@ -1452,7 +1452,7 @@ def _serve_named(
 def _one_run_repo(marker_seconds: float, job_minutes: float) -> tuple[list[Json], list[Json], list[Json]]:
     """One run, one job. The marker says `marker_seconds`; the API bills
     `job_minutes` — the difference is the setup the marker never saw."""
-    now = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+    now = datetime.now(UTC).isoformat().replace("+00:00", "Z")
     runs = [{"id": 1, "workflow_id": 7, "run_started_at": now, "updated_at": now}]
     artifacts = [_artifact(f"carbon.v1.{marker_seconds}.2.7168.ubuntu.eastus.build", 1)]
     jobs = [_named_job(["ubuntu-latest"], job_minutes, "build")]
@@ -1527,7 +1527,7 @@ def test_an_explicit_grid_figure_removes_the_grid_term(monkeypatch: pytest.Monke
 def test_a_partly_instrumented_run_is_not_compared(monkeypatch: pytest.MonkeyPatch) -> None:
     """It would show a divergence that is only the missing jobs, which is none
     of the three things this report is about."""
-    now = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+    now = datetime.now(UTC).isoformat().replace("+00:00", "Z")
     runs = [{"id": 1, "workflow_id": 7, "run_started_at": now, "updated_at": now}]
     artifacts = [_artifact("carbon.v1.600.2.7168.ubuntu.eastus.build", 1)]  # one of two
     jobs = [
@@ -1542,7 +1542,7 @@ def test_a_partly_instrumented_run_is_not_compared(monkeypatch: pytest.MonkeyPat
 
 
 def test_jobs_are_matched_by_name_between_the_two_paths(monkeypatch: pytest.MonkeyPatch) -> None:
-    now = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+    now = datetime.now(UTC).isoformat().replace("+00:00", "Z")
     runs = [{"id": 1, "workflow_id": 7, "run_started_at": now, "updated_at": now}]
     artifacts = [
         _artifact("carbon.v1.600.2.7168.ubuntu.eastus.build", 1),
@@ -1561,7 +1561,7 @@ def test_an_unmatched_job_still_counts_in_its_run(monkeypatch: pytest.MonkeyPatc
     """Slug matching is best effort — the sanitising happens in the reporting
     action, not here — so a miss must cost the per-job attribution and nothing
     else. Losing the run's energy over a name would be much worse."""
-    now = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+    now = datetime.now(UTC).isoformat().replace("+00:00", "Z")
     runs = [{"id": 1, "workflow_id": 7, "run_started_at": now, "updated_at": now}]
     artifacts = [_artifact("carbon.v1.600.2.7168.ubuntu.eastus.mystery-slug", 1)]
     jobs = [_named_job(["ubuntu-latest"], 10, "build")]

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 import requests
 
@@ -39,7 +39,7 @@ def ci_kwh_last_30d(  # noqa: PLR0913 — the repo/token/api trio plus independe
     the sample size. Approximating here is not viable; collecting the data at
     source is.
     """
-    since = (datetime.now(timezone.utc) - timedelta(days=30)).isoformat()
+    since = (datetime.now(UTC) - timedelta(days=30)).isoformat()
     runs = _list_runs(repo, token, api, since)
     undeclared: dict[str, int] = {}
     factor_for = RegionFactors(eia_key=eia_key, override=grid_override).factor_for
@@ -115,7 +115,7 @@ def gitlab_kwh_last_30d(
     reason as the GitHub path — and matched against --runner-watts by tag or
     runner description, GitLab's equivalent of a label.
     """
-    since = datetime.now(timezone.utc) - timedelta(days=30)
+    since = datetime.now(UTC) - timedelta(days=30)
     headers = {"PRIVATE-TOKEN": token} if token else {}
     project_path = project.replace("/", "%2F")
     kwh = 0.0

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from typing import NamedTuple
 
 from .artifacts import RegionFactors, _expected_markers, artifact_kwh_by_run, list_artifacts, parse_carbon_artifact
@@ -81,7 +81,7 @@ def reconcile_last_30d(  # noqa: PLR0913 — the repo/token/api trio plus indepe
     marker, which is the one thing the normal path exists to avoid. This is a
     diagnostic, not something to put in a badge refresh.
     """
-    since = (datetime.now(timezone.utc) - timedelta(days=30)).isoformat()
+    since = (datetime.now(UTC) - timedelta(days=30)).isoformat()
     runs = _list_runs(repo, token, api, since)
     factor_for = RegionFactors(eia_key=eia_key, override=grid_override).factor_for
     by_run, _ = artifact_kwh_by_run(repo, token, api, runner_watts, factor_for)
@@ -166,7 +166,7 @@ def _marker_seconds_by_run(
     Separate from artifact_kwh_by_run because that one has already priced them,
     and the seconds are what isolates setup time from the wattage models.
     """
-    cutoff = datetime.now(timezone.utc) - timedelta(days=30)
+    cutoff = datetime.now(UTC) - timedelta(days=30)
     out: dict[int, dict[str, float]] = {}
     for artifact in list_artifacts(repo, token, api):
         if artifact.get("expired"):
