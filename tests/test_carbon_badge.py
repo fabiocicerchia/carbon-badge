@@ -6,6 +6,7 @@ import logging
 import re
 import threading
 import urllib.error
+import urllib.parse
 import urllib.request
 from collections.abc import Callable
 from datetime import datetime, timedelta, timezone
@@ -704,6 +705,55 @@ def test_serve_badge_endpoint_caches_and_404s() -> None:
     finally:
         httpd.shutdown()
         thread.join(timeout=5)
+
+
+def test_github_client_over_real_http() -> None:
+    """ci_kwh_last_30d against a local GitHub stand-in, with no fake `get`:
+    real requests encodes the query, sends the token and pages the jobs
+    listing past one full page, so a regression in any of them shows here."""
+    seen: list[tuple[str, dict[str, list[str]], str | None]] = []
+    jobs = [_job(["ubuntu-latest"], 6) for _ in range(101)]
+
+    class FakeGitHub(http.server.BaseHTTPRequestHandler):
+        def do_GET(self) -> None:
+            parsed = urllib.parse.urlsplit(self.path)
+            query = urllib.parse.parse_qs(parsed.query)
+            seen.append((parsed.path, query, self.headers.get("Authorization")))
+            page, size = int(query["page"][0]), int(query["per_page"][0])
+            if parsed.path == "/repos/owner/repo/actions/runs":
+                payload: Json = {"total_count": 1, "workflow_runs": [{"id": 7}] if page == 1 else []}
+            elif parsed.path == "/repos/owner/repo/actions/runs/7/jobs":
+                payload = {"jobs": jobs[(page - 1) * size : page * size]}
+            else:
+                payload = {"artifacts": []}
+            body = json.dumps(payload).encode()
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+        def log_message(self, format: str, *args: Any) -> None:  # noqa: A002
+            pass
+
+    httpd = http.server.HTTPServer(("127.0.0.1", 0), FakeGitHub)
+    thread = threading.Thread(target=httpd.serve_forever, daemon=True)
+    thread.start()
+    try:
+        usage = carbon_badge.ci_kwh_last_30d(
+            "owner/repo", "t0ken", api=f"http://127.0.0.1:{httpd.server_address[1]}", grid_override=480.0
+        )
+    finally:
+        httpd.shutdown()
+        thread.join(timeout=5)
+
+    assert usage.total_jobs == 101
+    assert usage.kwh == pytest.approx(101 * 6 / 60 * carbon_badge.DEFAULT_RUNNER_POWER_W / 1000)
+    assert all(auth == "Bearer t0ken" for _, _, auth in seen)
+    job_pages = [q["page"] for path, q, _ in seen if path.endswith("/jobs")]
+    assert job_pages == [["1"], ["2"]]
+    runs_query = next(q for path, q, _ in seen if path.endswith("/runs"))
+    assert runs_query["created"][0].startswith(">=")
 
 
 def test_a_partly_instrumented_run_does_not_lose_its_other_jobs(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -1628,3 +1678,55 @@ def test_reconcile_refuses_the_combinations_that_cannot_work(capsys: pytest.Capt
     ):
         with pytest.raises(SystemExit):
             carbon_badge.main(argv)
+
+
+# --- end to end ---------------------------------------------------------------
+
+
+def test_cli_prints_the_badge_for_a_github_repo(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """The main journey: `carbon-badge owner/repo` reads the API with the env
+    token and prints Shields endpoint JSON, and nothing else, on stdout."""
+    seen_headers: list[dict[str, str]] = []
+
+    def fake_get(
+        url: str,
+        *,
+        params: dict[str, Any] | None = None,
+        headers: dict[str, str] | None = None,
+        timeout: float | None = None,
+    ) -> _FakeResponse:
+        seen_headers.append(headers or {})
+        page = _page(params)
+        if "/artifacts" in url:
+            return _FakeResponse({"artifacts": []})
+        if "/jobs" in url:
+            return _FakeResponse({"jobs": [_job(["ubuntu-latest"], 60)] if page == 1 else []})
+        return _FakeResponse({"workflow_runs": [{"id": 1}] if page == 1 else []})
+
+    monkeypatch.setenv("GITHUB_TOKEN", "t0ken")
+    monkeypatch.setattr(carbon_badge.ci.requests, "get", fake_get)
+
+    assert carbon_badge.main(["owner/repo", "--grid-intensity", "480"]) == 0
+
+    badge = json.loads(capsys.readouterr().out)
+    assert badge["schemaVersion"] == 1
+    assert badge["label"] == "CI carbon"
+    # One hour on the baseline runner, nothing self-reported.
+    assert badge["message"] == f"{format_grams(grams_co2e(60, 480.0))} (estimated)"
+    assert seen_headers
+    assert all(h.get("Authorization") == "Bearer t0ken" for h in seen_headers)
+
+
+def test_cli_offline_minutes_never_touch_the_network(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    def no_network(*_: Any, **__: Any) -> NoReturn:
+        raise AssertionError("--minutes must not call the API")
+
+    monkeypatch.setattr(carbon_badge.ci.requests, "get", no_network)
+
+    assert carbon_badge.main(["owner/repo", "--minutes", "1000", "--grid-intensity", "480"]) == 0
+
+    assert json.loads(capsys.readouterr().out)["message"] == format_grams(grams_co2e(1000, 480.0))
