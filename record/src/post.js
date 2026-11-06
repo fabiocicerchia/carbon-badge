@@ -72,8 +72,8 @@ function azureRegion(timeoutMs = 1000) {
 }
 
 // Artifact names must be unique within a run, and a matrix produces several
-// jobs sharing one GITHUB_JOB. A random suffix removes the question — nothing
-// reads the slug, it only disambiguates.
+// jobs sharing one GITHUB_JOB. A random suffix removes the question; --reconcile
+// strips it again to match jobs by name, so keep it 8 hex characters.
 //
 // Artifact names may not contain " : < > | * ? \ / and the dot is our field
 // separator, so anything outside [A-Za-z0-9_-] is replaced.
