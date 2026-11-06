@@ -615,6 +615,23 @@ def test_gitlab_kwh_charges_self_managed_runners(monkeypatch: pytest.MonkeyPatch
     assert carbon_badge.confidence(usage) == "rough"
 
 
+def test_gitlab_takes_an_injected_getter() -> None:
+    """The HTTP client is passed in, so the pricing runs without patching requests."""
+    now = datetime.now(timezone.utc).isoformat()
+
+    def fake_get(
+        url: str,
+        *,
+        params: dict[str, Any] | None = None,
+        headers: dict[str, str] | None = None,
+        timeout: float | None = None,
+    ) -> _FakeResponse:
+        return _FakeResponse([{"created_at": now, "duration": 3600}] if _page(params) == 1 else [])
+
+    usage = carbon_badge.gitlab_kwh_last_30d("group/project", token=None, get=fake_get)
+    assert round(usage.kwh, 6) == round(carbon_badge.DEFAULT_RUNNER_POWER_W / 1000, 6)
+
+
 def test_gitlab_runner_watts_matches_on_tags(monkeypatch: pytest.MonkeyPatch) -> None:
     """Tags and the runner description are GitLab's equivalent of a label."""
     now = datetime.now(timezone.utc).isoformat()
