@@ -55,7 +55,7 @@ def ci_kwh_last_30d(  # noqa: PLR0913 — the repo/token/api trio plus independe
     # How many markers a fully instrumented run of each workflow should have.
     expected: dict[int, int] = _expected_markers(runs, by_run, repo, token, api) if by_run else {}
 
-    kwh, grams, total_jobs, used_markers, trusted = 0.0, 0.0, 0, 0, 0
+    kwh, grams, total_jobs, used_markers, self_reported = 0.0, 0.0, 0, 0, 0
     measured_kwh, guessed_kwh = 0.0, 0.0
     # A run priced from the API reports no region, so it takes the repo-level
     # factor: no region to look up means no provider to ask. A partly
@@ -75,7 +75,7 @@ def ci_kwh_last_30d(  # noqa: PLR0913 — the repo/token/api trio plus independe
             measured_kwh += entry.kwh
             used_markers += entry.markers
             total_jobs += entry.markers
-            trusted += 1
+            self_reported += 1
         else:
             run_kwh, run_jobs_seen, run_guessed = _run_kwh(
                 run, repo, token, api, runner_watts=runner_watts, undeclared=undeclared
@@ -90,9 +90,9 @@ def ci_kwh_last_30d(  # noqa: PLR0913 — the repo/token/api trio plus independe
         # full coverage on a half-instrumented workflow.
         log.info(
             "%d/%d run(s) fully self-reported; %d priced from the API. Instrument the remaining jobs to shrink that.",
-            trusted,
+            self_reported,
             len(runs),
-            len(runs) - trusted,
+            len(runs) - self_reported,
         )
     _warn_undeclared_runners(undeclared)
     # used_markers, not every marker read: markers from runs outside the window,
@@ -100,12 +100,14 @@ def ci_kwh_last_30d(  # noqa: PLR0913 — the repo/token/api trio plus independe
     return CiUsage(kwh, grams, used_markers, total_jobs, measured_kwh, guessed_kwh)
 
 
-def gitlab_kwh_last_30d(
+def gitlab_kwh_last_30d(  # noqa: PLR0913 — the project/token/api trio plus independent optional knobs
     project: str,
     token: str | None,
+    *,
     api: str = "https://gitlab.com/api/v4",
     runner_watts: RunnerWatts | None = None,
     grid_override: float | None = None,
+    get: Getter | None = None,
 ) -> CiUsage:
     """Sum kWh across the last 30 days of GitLab CI jobs.
 
@@ -114,7 +116,10 @@ def gitlab_kwh_last_30d(
     are charged at the baseline and reported rather than skipped, for the same
     reason as the GitHub path — and matched against --runner-watts by tag or
     runner description, GitLab's equivalent of a label.
+
+    `get` is injectable; None resolves `requests.get` at call time.
     """
+    get = get or requests.get
     since = datetime.now(UTC) - timedelta(days=30)
     headers = {"PRIVATE-TOKEN": token} if token else {}
     project_path = project.replace("/", "%2F")
@@ -123,7 +128,7 @@ def gitlab_kwh_last_30d(
     page = 1
     guessed_kwh, total_jobs = 0.0, 0
     while page <= _MAX_PAGES:
-        response = requests.get(
+        response = get(
             f"{api}/projects/{project_path}/jobs",
             params={"per_page": _PAGE_SIZE, "page": page},
             headers=headers,

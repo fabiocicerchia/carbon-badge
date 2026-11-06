@@ -7,7 +7,7 @@ from typing import Any
 
 import requests
 
-from .base import Json, RunnerWatts, job_slug, log
+from .base import Getter, Json, RunnerWatts, job_slug, log
 from .power import DEFAULT_RUNNER_POWER_W, _hours, _ran, runner_power_w
 
 _MAX_PAGES = 20
@@ -21,7 +21,7 @@ _PAGE_SIZE = 100
 
 
 def _get_pages(
-    url: str, token: str | None, key: str, params: dict[str, str] | None = None
+    url: str, token: str | None, key: str, params: dict[str, str] | None = None, get: Getter | None = None
 ) -> tuple[list[Json], int | None, bool]:
     """Every item under `key` across pages -> (items, total_count, hit_page_cap).
 
@@ -29,14 +29,18 @@ def _get_pages(
     that have to agree — the requested page size and the short-page test that
     ends the loop — are the ones that would silently disagree if each caller
     kept its own copy. `total_count` is None for a listing that omits it.
+
+    `get` is injectable; None resolves `requests.get` at call time rather than
+    binding it as a default, so patching the module still reaches it.
     """
+    get = get or requests.get
     headers = {"Authorization": f"Bearer {token}"} if token else {}
     items: list[Json] = []
     page = 1
     total: int | None = None
     while page <= _MAX_PAGES:
         query: dict[str, Any] = {**(params or {}), "per_page": _PAGE_SIZE, "page": page}
-        response = requests.get(
+        response = get(
             url,
             params=query,
             headers=headers,
@@ -55,9 +59,11 @@ def _get_pages(
     return items, total, page > _MAX_PAGES
 
 
-def run_jobs(run_id: int | str, repo: str, token: str | None, api: str = "https://api.github.com") -> list[Json]:
+def run_jobs(
+    run_id: int | str, repo: str, token: str | None, api: str = "https://api.github.com", get: Getter | None = None
+) -> list[Json]:
     """Fetch the jobs (with per-job runner labels/timing) for one run."""
-    jobs, _, _ = _get_pages(f"{api}/repos/{repo}/actions/runs/{run_id}/jobs", token, "jobs")
+    jobs, _, _ = _get_pages(f"{api}/repos/{repo}/actions/runs/{run_id}/jobs", token, "jobs", get=get)
     return jobs
 
 
@@ -84,13 +90,14 @@ def _warn_if_truncated(kind: str, fetched: int, total: int | None, hit_page_cap:
     )
 
 
-def _list_runs(repo: str, token: str | None, api: str, since: str) -> list[Json]:
+def _list_runs(repo: str, token: str | None, api: str, since: str, get: Getter | None = None) -> list[Json]:
     """Every run in the window — cheap, 100 per request."""
     runs, total, hit_cap = _get_pages(
         f"{api}/repos/{repo}/actions/runs",
         token,
         "workflow_runs",
         {"created": f">={since}"},
+        get=get,
     )
     _warn_if_truncated("run", len(runs), total, hit_cap)
     return runs
