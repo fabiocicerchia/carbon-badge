@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
+import re
 from datetime import datetime, timedelta, timezone
 from typing import NamedTuple
 
 from .artifacts import RegionFactors, _expected_markers, artifact_kwh_by_run, list_artifacts, parse_carbon_artifact
-from .base import DEFAULT_GRID_INTENSITY, RECONCILE_EPSILON_G, Json, RunnerWatts, carbon_artifact_slug, log
+from .base import DEFAULT_GRID_INTENSITY, RECONCILE_EPSILON_G, Json, RunnerWatts, carbon_artifact_slug, job_slug, log
 from .ci import _api_run_detail, _list_runs
 from .power import DEFAULT_RUNNER_POWER_W, grid_factor_for
 
@@ -181,7 +182,11 @@ def _marker_seconds_by_run(
         if workflow_run.get("id") is None:
             continue
         run_id = int(workflow_run["id"])
-        slug = carbon_artifact_slug(str(artifact.get("name") or "")) or f"?{len(out)}"
+        # post.js writes GITHUB_JOB plus 8 random hex chars, keeping case and
+        # underscores; the API side is job_slug(job name). Strip the suffix and
+        # reduce it the same way, or no marker ever matches a job.
+        raw = carbon_artifact_slug(str(artifact.get("name") or "")) or ""
+        slug = job_slug(re.sub(r"-[0-9a-f]{8}$", "", raw)) or f"?{len(out)}"
         out.setdefault(run_id, {})
         out[run_id][slug] = out[run_id].get(slug, 0.0) + parsed[0]
     return out

@@ -1545,8 +1545,9 @@ def test_jobs_are_matched_by_name_between_the_two_paths(monkeypatch: pytest.Monk
     now = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
     runs = [{"id": 1, "workflow_id": 7, "run_started_at": now, "updated_at": now}]
     artifacts = [
-        _artifact("carbon.v1.600.2.7168.ubuntu.eastus.build", 1),
-        _artifact("carbon.v1.600.2.7168.ubuntu.eastus.unit-tests", 1),
+        # The shape post.js writes: GITHUB_JOB plus a random 8-hex suffix.
+        _artifact("carbon.v1.600.2.7168.ubuntu.eastus.build-a1b2c3d4", 1),
+        _artifact("carbon.v1.600.2.7168.ubuntu.eastus.unit_tests-0f9e8d7c", 1),
     ]
     jobs = [
         _named_job(["ubuntu-latest"], 10, "build"),
