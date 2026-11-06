@@ -22,7 +22,7 @@ import { cpuLoadPercent, cpuTimes } from "./load.js";
 // CPU and memory alone do not determine draw: the same 4 vCPU / 16 GiB reading
 // means a very different wattage on Apple silicon than on a shared x86 VM, so
 // the reader has to be told which. These names match its power table.
-function platform() {
+function powerPlatform() {
   if (os.platform() === "darwin") return "macos";
   if (os.platform() === "win32") return "windows";
   return os.arch() === "arm64" ? "arm" : "ubuntu";
@@ -50,7 +50,7 @@ function azureRegion(timeoutMs = 1000) {
       },
       (res) => {
         let body = "";
-        res.on("data", (c) => (body += c));
+        res.on("data", (chunk) => (body += chunk));
         res.on("end", () => {
           try {
             const loc = JSON.parse(body).location;
@@ -77,7 +77,7 @@ function azureRegion(timeoutMs = 1000) {
 //
 // Artifact names may not contain " : < > | * ? \ / and the dot is our field
 // separator, so anything outside [A-Za-z0-9_-] is replaced.
-function slug() {
+function uniqueJobSlug() {
   const base = `${process.env.GITHUB_JOB || "job"}`.replace(/[^A-Za-z0-9_-]/g, "-").slice(0, 60);
   return `${base}-${crypto.randomBytes(4).toString("hex")}`;
 }
@@ -91,7 +91,7 @@ function sanitiseRegion(value) {
 }
 
 // The counters main.js saved, or null if it saved none or they do not parse.
-function savedCpu() {
+function savedCpuTimes() {
   try {
     const saved = JSON.parse(core.getState("carbonBadgeCpu") || "null");
     return Number.isFinite(saved?.busy) && Number.isFinite(saved?.total) ? saved : null;
@@ -100,7 +100,7 @@ function savedCpu() {
   }
 }
 
-async function run() {
+async function recordJob() {
   const started = core.getState("carbonBadgeStart");
   if (!started) {
     core.warning("carbon-badge: no start state recorded; skipping.");
@@ -116,7 +116,7 @@ async function run() {
   // jobSeconds returns the uptime only when it trusted it as the job's length;
   // only then is boot the start of the CPU interval too.
   const sinceBoot = hosted && seconds === Math.round(uptime);
-  const load = cpuLoadPercent(savedCpu(), cpuTimes(os.cpus()), sinceBoot);
+  const load = cpuLoadPercent(savedCpuTimes(), cpuTimes(os.cpus()), sinceBoot);
   const vcpu = os.cpus().length || 2;
   const memMb = Math.round(os.totalmem() / (1024 * 1024));
 
@@ -125,8 +125,9 @@ async function run() {
   const declared = core.getInput("region");
   const region = sanitiseRegion(declared || (await azureRegion()));
 
-  const head = `${seconds}.${vcpu}.${memMb}.${platform()}.${region}`;
-  const name = load === null ? `carbon.v1.${head}.${slug()}` : `carbon.v2.${head}.${load}.${slug()}`;
+  const fields = `${seconds}.${vcpu}.${memMb}.${powerPlatform()}.${region}`;
+  const name =
+    load === null ? `carbon.v1.${fields}.${uniqueJobSlug()}` : `carbon.v2.${fields}.${load}.${uniqueJobSlug()}`;
 
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "carbon-badge-"));
   const file = path.join(dir, "carbon-badge.txt");
@@ -138,7 +139,7 @@ async function run() {
     });
     core.info(
       `carbon-badge: ${seconds}s on ${vcpu} vCPU / ${memMb} MB at ${load === null ? "unmeasured" : `${load}%`} CPU ` +
-        `(${platform()}, ${region}, ${hosted ? "hosted: includes setup" : "self-hosted: step time only"})`,
+        `(${powerPlatform()}, ${region}, ${hosted ? "hosted: includes setup" : "self-hosted: step time only"})`,
     );
   } catch (err) {
     // Telemetry must never fail somebody's build.
@@ -146,4 +147,4 @@ async function run() {
   }
 }
 
-run();
+recordJob();
