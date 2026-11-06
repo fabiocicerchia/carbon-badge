@@ -100,12 +100,13 @@ def ci_kwh_last_30d(  # noqa: PLR0913 — the repo/token/api trio plus independe
     return CiUsage(kwh, grams, used_markers, total_jobs, measured_kwh, guessed_kwh)
 
 
-def gitlab_kwh_last_30d(
+def gitlab_kwh_last_30d(  # noqa: PLR0913 — the project/token/api trio plus independent optional knobs
     project: str,
     token: str | None,
     api: str = "https://gitlab.com/api/v4",
     runner_watts: RunnerWatts | None = None,
     grid_override: float | None = None,
+    get: Getter | None = None,
 ) -> CiUsage:
     """Sum kWh across the last 30 days of GitLab CI jobs.
 
@@ -114,7 +115,10 @@ def gitlab_kwh_last_30d(
     are charged at the baseline and reported rather than skipped, for the same
     reason as the GitHub path — and matched against --runner-watts by tag or
     runner description, GitLab's equivalent of a label.
+
+    `get` is injectable; None resolves `requests.get` at call time.
     """
+    get = get or requests.get
     since = datetime.now(timezone.utc) - timedelta(days=30)
     headers = {"PRIVATE-TOKEN": token} if token else {}
     project_path = project.replace("/", "%2F")
@@ -123,7 +127,7 @@ def gitlab_kwh_last_30d(
     page = 1
     guessed_kwh, total_jobs = 0.0, 0
     while page <= _MAX_PAGES:
-        response = requests.get(
+        response = get(
             f"{api}/projects/{project_path}/jobs",
             params={"per_page": _PAGE_SIZE, "page": page},
             headers=headers,
