@@ -8,7 +8,7 @@ Feature: Choosing a grid factor for the region a job ran in
     And no live grid reading is available
     And the operator passed grid intensity <explicit>
     When the operator runs an estimate
-    Then the job is multiplied by <factor> gCO2e/kWh
+    Then the job's energy is priced at <factor> gCO2e/kWh
 
     Examples:
       | region        | explicit | factor |

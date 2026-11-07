@@ -86,7 +86,7 @@ Feature: Reconciling the estimate against self-reported measurements
   Scenario Outline: Jobs on unrecognised runners are named with a fix that will parse
     Given <count> job(s) ran on runners labelled <labels> that have no declared wattage
     When the operator runs an estimate or a reconciliation
-    Then stderr warns "<count> job(s) on unrecognised runner '<labels>' charged at the <baseline> W baseline"
+    Then stderr warns "<count> job(s) on unrecognised runner '<labels>' charged at the 9.4 W baseline"
     And the warning ends with "<remedy>"
 
     Examples:

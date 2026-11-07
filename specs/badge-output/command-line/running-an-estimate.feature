@@ -14,7 +14,7 @@ Feature: Running an estimate from the command line
     Examples:
       | watts                     | message       |
       | no figure (default 9.4 W) | 75 gCO2e/mo   |
-      | 180                       | 1440 gCO2e/mo |
+      | 180                       | 1.4 kgCO2e/mo |
 
   @id:badge-output.command-line.009 @rule:badge-output.command-line.grid-region-overrides-intensity @inferred @source:carbon_badge/report.py#estimate @questionable
   Scenario: A named grid region replaces any declared grid intensity with the live figure

@@ -7,7 +7,7 @@ Feature: Combining self-reported and API-priced GitHub runs
 
   @id:measured-data.reconciliation.001 @rule:measured.runs.complete-run-uses-its-own-measurement @verified @source:carbon_badge/providers.py#ci_kwh_last_30d @test:tests/test_carbon_badge.py#test_full_coverage_costs_one_sample_per_workflow @test:tests/test_carbon_badge.py#test_partial_instrumentation_tops_up_from_the_api
   Scenario: A run where every job self-reported is counted from its own measurements
-    Given a workflow whose runs each have 3 jobs
+    Given run 1 is the only run in the window and has 3 jobs
     And every job of run 1 published a carbon artifact
     When the operator runs an estimate for the repository
     Then run 1's energy is the sum of its self-reported measurements
@@ -39,8 +39,7 @@ Feature: Combining self-reported and API-priced GitHub runs
     And the operator declared no grid intensity
     When the operator runs an estimate for the repository
     Then run 1's grams use the grid factor for its reported region
-    And run 2's grams use the default world-average grid factor
-    And with a declared grid intensity of 480 gCO2e/kWh, run 2's grams use 480 instead
+    And run 2's grams use the 480 gCO2e/kWh world-average grid factor
 
   @id:measured-data.reconciliation.005 @rule:measured.runs.coverage-reported-to-operator @inferred @source:carbon_badge/providers.py#ci_kwh_last_30d
   Scenario: The operator is told how many runs fully self-reported

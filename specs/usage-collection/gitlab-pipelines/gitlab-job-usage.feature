@@ -20,7 +20,7 @@ Feature: Estimating GitLab CI usage
     And no runner wattage is declared
     When the operator runs an estimate for the project
     Then both jobs are charged at the default runner wattage
-    And the self-managed runner is listed in the undeclared-runner warning with its --runner-watts fix
+    And the undeclared-runner warning names the untagged self-managed runner and suggests giving it a label or a blanket --runner-watts figure
     And the confidence is "rough"
 
   @id:usage-collection.gitlab-pipelines.003 @rule:gitlab.runners.declared-watts-match-tags-or-description @verified @source:carbon_badge/providers.py#gitlab_kwh_last_30d @test:tests/test_carbon_badge.py#test_gitlab_runner_watts_matches_on_tags @test:tests/test_carbon_badge.py#test_gitlab_honours_a_blanket_override_on_untagged_jobs
@@ -40,5 +40,5 @@ Feature: Estimating GitLab CI usage
   Scenario: Reaching the page limit on GitLab jobs warns that the figure may be an undercount
     Given the project's job list fills every page up to the page limit
     When the operator runs an estimate for the project
-    Then the warning "read <pages> pages of jobs and stopped at the cap; the figure may be an undercount." is shown
+    Then the warning "read 20 pages of jobs and stopped at the cap; the figure may be an undercount." is shown
     And the estimate is still produced from the jobs that were read

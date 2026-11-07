@@ -74,4 +74,3 @@ Feature: Running a carbon estimate from the command line
     When the operator runs carbon-badge for "acme/widgets" with --serve 8080 --bind 127.0.0.1 and --grid-intensity 480
     Then http://127.0.0.1:8080/badge.json answers 200 with Content-Type application/json
     And the served badge has label "CI carbon" and the estimated grams as its message
-    And without --bind the server listens on 0.0.0.0

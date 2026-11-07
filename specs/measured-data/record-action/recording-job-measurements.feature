@@ -7,11 +7,11 @@ Feature: Recording measured job data from inside a GitHub Actions job
 
   @id:measured-data.record-action.001 @rule:measured-data.record.artifact-name-encodes-measurement @verified @source:record/src/post.js#recordJob @test:record/src/action.test.js#main then post names the artifact after the job's measurement @test:record/src/action.test.js#post uploads and finalises the artifact when the backend accepts it
   Scenario Outline: The carbon artifact's name carries the job's measurement
-    Given a job named "<job>" ran for <seconds> seconds on a <platform> runner with <vcpu> vCPU and <mem> MB of memory in region "westeurope"
+    Given a job with job id "<job>" ran for <seconds> seconds on a <platform> runner with <vcpu> vCPU and <mem> MB of memory in region "westeurope"
     And its average CPU utilisation was <utilisation>
     When the job ends
     Then an artifact named "<name>" is published for the run
-    And the name ends with the job name, with characters outside letters, digits, "-" and "_" replaced by "-", followed by 8 random hex characters
+    And the name ends with the job id, with characters outside letters, digits, "-" and "_" replaced by "-", followed by 8 random hex characters
 
     Examples:
       | job         | seconds | platform | vcpu | mem   | utilisation     | name                                                          |
@@ -46,7 +46,7 @@ Feature: Recording measured job data from inside a GitHub Actions job
       | the job ran on a GitHub-hosted runner and its duration is the VM's uptime, so the interval starts at boot | 25 of 100 time units busy                        | 25%                                           |
       | the job's duration is its step time, so the interval starts at the start stamp                            | 100 of 400 time units busy                       | 25%                                           |
       | no CPU snapshot was taken at the start of the job and the duration is step time                           | any reading                                      | unmeasured, and the artifact uses the v1 name |
-      | the job's duration is its step time                                                                       | no movement, or more busy time than elapsed time | unmeasured, and the artifact uses the v1 name |
+      | the job's duration is its step time                                                                       | no movement, or more busy time than total time   | unmeasured, and the artifact uses the v1 name |
 
   @id:measured-data.record-action.004 @rule:measured-data.record.region-declared-or-detected @verified @source:record/src/post.js#recordJob @test:record/src/action.test.js#main then post names the artifact after the job's measurement @questionable
   Scenario Outline: A declared region overrides the detected one, and a region that cannot be found reads as unknown

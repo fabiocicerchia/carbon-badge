@@ -3,7 +3,7 @@ Feature: Pricing the grid from Electricity Maps
   Gives operators who name a grid region a carbon factor that reflects the past day, not whatever moment the scheduled refresh happens to run.
 
   Background:
-    Given the operator runs an estimate with grid region SE
+    Given the operator names the grid region SE
 
   @id:carbon-intensity.live-grid-data.009 @rule:grid.live.uses-24h-mean @verified @source:carbon_badge/providers.py#live_grid_intensity @test:tests/test_carbon_badge.py#test_grid_factor_averages_a_day_not_an_instant @test:tests/test_carbon_badge.py#test_grid_factor_ignores_gaps_in_the_history
   Scenario Outline: The grid factor is the mean of the past 24 hours, skipping hours with no data

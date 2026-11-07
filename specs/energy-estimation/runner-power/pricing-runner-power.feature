@@ -87,7 +87,7 @@ Feature: Pricing a CI runner's power draw
     Given jobs were priced on the built-in <class> figure
     When the operator runs an estimate
     Then stderr says the jobs were priced on the '<class>' class at <watts> W, which is an estimate
-    And stderr names --runner-watts <class>=<watts> and docs/assumptions.md
+    And stderr says to pass "--runner-watts <class>=" followed by the operator's own wattage, and points to docs/assumptions.md
     And no such line appears for that class when the operator declared --runner-watts <class>=...
 
     Examples:
@@ -96,7 +96,7 @@ Feature: Pricing a CI runner's power draw
       | gpu   | 89.9  |
 
   @id:energy-estimation.runner-power.010 @rule:energy.runner-power.estimated-class-job-count @inferred @source:carbon_badge/power.py#_table_watts @questionable
-  Scenario: The unmeasured-class warning counts each job once
+  Scenario: The unmeasured-class warning counts a core-scaled job twice
     Given one job ran on a runner labelled ubuntu-24.04-arm-8-cores
     And no --runner-watts is declared
     When the operator runs an estimate

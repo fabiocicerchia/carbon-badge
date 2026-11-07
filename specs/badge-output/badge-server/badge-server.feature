@@ -27,7 +27,7 @@ Feature: Serving the badge over HTTP
 
   @id:badge-output.badge-server.003 @rule:badge.server.estimate-refresh-interval @verified @source:carbon_badge/server.py#serve @test:tests/test_carbon_badge.py#test_serve_badge_endpoint_caches_and_404s @test:tests/test_docs.py#test_documented_serve_command_over_real_http
   Scenario: The badge is re-estimated at most once every five minutes
-    Given Shields.io fetched the badge less than 5 minutes ago
+    Given the served badge was last estimated less than 5 minutes ago
     When Shields.io requests "/badge.json" again
     Then the body is identical to the previous badge
     And no new request is made to the CI provider

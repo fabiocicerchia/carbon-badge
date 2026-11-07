@@ -72,13 +72,13 @@ Feature: Pricing CI runs from the carbon artifacts their jobs recorded
       | uksouth   | the live UK grid reads 100 gCO2e/kWh              | 100 gCO2e/kWh                                                        |
       | uksouth   | the operator set a grid override of 333 gCO2e/kWh | 333 gCO2e/kWh                                                        |
       | japaneast | the live grid provider is unreachable             | the region's annual average, with a warning that the snapshot failed |
-      | moonbase1 | no grid figure is known for the region            | the default annual average                                           |
+      | moonbase1 | no grid figure is known for the region            | the 480 gCO2e/kWh world average                                      |
 
   @id:measured-data.artifact-reading.007 @rule:measured-data.artifacts.partial-runs-priced-from-api @verified @source:carbon_badge/artifacts.py#_expected_markers @test:tests/test_carbon_badge.py#test_a_partly_instrumented_run_does_not_lose_its_other_jobs @test:tests/test_carbon_badge.py#test_markers_are_not_double_counted_when_a_run_is_topped_up @test:tests/test_carbon_badge.py#test_an_unusually_small_newest_run_cannot_lower_the_bar @test:tests/test_carbon_badge.py#test_skipped_jobs_do_not_make_completeness_unreachable
   Scenario: A run where not every job recorded itself is priced entirely from the API
-    Given runs of the workflow have 3 jobs that actually run, skipped jobs excluded
-    And run 3 recorded markers for only 2 of its 3 jobs
-    And the newest run of the workflow ran a single job
+    Given the newest run of the workflow ran a single job and recorded its marker
+    And an older run of the workflow recorded markers for all 3 of its jobs
+    And run 3 ran 3 jobs, skipped jobs excluded, but recorded markers for only 2 of them
     When the operator refreshes the badge
     Then run 3 is priced from its job listing, not from its 2 markers
     And each of run 3's jobs is counted exactly once
@@ -88,5 +88,5 @@ Feature: Pricing CI runs from the carbon artifacts their jobs recorded
   Scenario: The operator is warned when not every artifact could be read
     Given GitHub reports more artifacts than carbon-badge could read
     When the operator refreshes the badge
-    Then a warning says "only read <read> of <total> artifact(s)" and that the figure is an undercount
+    Then a warning says how many of GitHub's reported artifacts were read and that the figure is an undercount
     And the warning names the cause: either the local page cap or GitHub's 1000-result limit

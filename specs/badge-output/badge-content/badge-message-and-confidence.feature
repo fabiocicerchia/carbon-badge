@@ -35,20 +35,21 @@ Feature: Stating the CI footprint and its confidence on the badge
 
   @id:badge-output.badge-content.003 @rule:badge-output.badge-content.confidence-qualifier @verified @source:carbon_badge/report.py#confidence @test:tests/test_carbon_badge.py#test_badge_states_its_own_confidence @test:tests/test_carbon_badge.py#test_confidence_levels @test:tests/test_carbon_badge.py#test_confidence_is_driven_by_energy_not_job_count
   Scenario Outline: The badge says whether its figure was measured, partly measured, estimated or rough
-    Given a repo with <total> CI jobs in the last 30 days, <self> of which reported their own measurements
+    Given a repo whose CI emitted 120 gCO2e over the last 30 days
+    And it ran <total> CI jobs in that window, <self> of which reported their own measurements
     And <measured> of the CI energy came from self-reported jobs
     And <guessed> of the CI energy was priced on runners nobody declared
     When the operator runs the estimate
-    Then the badge message is "120 gCO2e/mo<suffix>"
+    Then the badge message is "<message>"
 
     Examples:
-      | total | self | measured | guessed | suffix             |
-      | 24    | 24   | 100%     | 0%      |                    |
-      | 24    | 18   | 50%      | 0%      |  (~18/24 measured) |
-      | 24    | 0    | 0%       | 0%      |  (estimated)       |
-      | 24    | 0    | 0%       | 90%     |  (rough)           |
-      | 10    | 9    | 70%      | 30%     |  (rough)           |
-      | 10    | 9    | 99%      | 1%      |                    |
+      | total | self | measured | guessed | message                        |
+      | 24    | 24   | 100%     | 0%      | 120 gCO2e/mo                   |
+      | 24    | 18   | 50%      | 0%      | 120 gCO2e/mo (~18/24 measured) |
+      | 24    | 0    | 0%       | 0%      | 120 gCO2e/mo (estimated)       |
+      | 24    | 0    | 0%       | 90%     | 120 gCO2e/mo (rough)           |
+      | 10    | 9    | 70%      | 30%     | 120 gCO2e/mo (rough)           |
+      | 10    | 9    | 99%      | 1%      | 120 gCO2e/mo                   |
 
   @id:badge-output.badge-content.004 @rule:badge-output.badge-content.grams-cover-all-ci @verified @source:carbon_badge/report.py#endpoint_json @test:tests/test_carbon_badge.py#test_badge_grams_always_cover_all_ci
   Scenario Outline: The footprint covers all CI however much of it was measured
