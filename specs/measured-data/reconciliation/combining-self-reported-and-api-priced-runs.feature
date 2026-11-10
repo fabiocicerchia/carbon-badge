@@ -14,16 +14,6 @@ Feature: Combining self-reported and API-priced GitHub runs
     And its 3 jobs are counted as self-reported
     And the confidence counts read "3/3 job(s) self-reported"
 
-  @id:measured-data.reconciliation.002 @rule:measured.runs.partial-run-priced-wholly-from-api @verified @source:carbon_badge/providers.py#ci_kwh_last_30d @test:tests/test_carbon_badge.py#test_a_partly_instrumented_run_does_not_lose_its_other_jobs @test:tests/test_carbon_badge.py#test_markers_are_not_double_counted_when_a_run_is_topped_up @test:tests/test_carbon_badge.py#test_an_unusually_small_newest_run_cannot_lower_the_bar
-  Scenario: A run where only some jobs self-reported is priced entirely from the API, with no double counting
-    Given a run with a 1-hour job and a 10-hour job on ubuntu-latest
-    And only the 1-hour job published a carbon artifact
-    When the operator runs an estimate for the repository
-    Then the run is charged for 11 hours of ubuntu-latest at the ubuntu wattage
-    And the partial measurement adds nothing to the total
-    And no job of that run counts as self-reported
-    And the confidence is not "measured"
-
   @id:measured-data.reconciliation.003 @rule:measured.runs.ignore-self-reported-prices-everything-from-api @verified @source:carbon_badge/providers.py#ci_kwh_last_30d @test:tests/test_carbon_badge.py#test_ignore_self_reported_does_not_consult_artifacts
   Scenario: Ignoring self-reported data prices every run from the API
     Given run 1 has a self-reported carbon artifact for its only job

@@ -6,22 +6,6 @@ Feature: Pricing CI runs from the carbon artifacts their jobs recorded
     Given the repository's workflows publish carbon artifacts with the recording action
     And carbon-badge reads the repository's artifact listing over the last 30 days
 
-  @id:measured-data.artifact-reading.001 @rule:measured-data.artifacts.only-valid-markers-count @verified @source:carbon_badge/artifacts.py#parse_carbon_artifact @test:tests/test_carbon_badge.py#test_parse_carbon_artifact @test:tests/test_carbon_badge.py#test_v2_markers_carry_a_measured_load @test:tests/test_carbon_badge.py#test_artifact_kwh_by_run_keys_by_run_and_downloads_nothing
-  Scenario Outline: Only well-formed carbon markers count as recorded jobs
-    Given the repository has an artifact named "<artifact name>" from a run in the last 30 days
-    When the operator refreshes the badge
-    Then that artifact is <outcome> as a recorded job
-
-    Examples:
-      | artifact name                                         | outcome     |
-      | carbon.v1.142.4.16384.ubuntu.eastus.build-a1b2c3d4    | counted     |
-      | carbon.v2.142.4.16384.ubuntu.eastus.37.build-a1b2c3d4 | counted     |
-      | carbon.v1.142.4.16384.ubuntu.build                    | not counted |
-      | carbon.v1.142.4.16384.build                           | not counted |
-      | carbon.v3.142.2.7168.ubuntu.eastus.37.build           | not counted |
-      | carbon.v2.142.4.16384.ubuntu.eastus.250.build         | not counted |
-      | gitleaks-results.sarif                                | not counted |
-
   @id:measured-data.artifact-reading.002 @rule:measured-data.artifacts.thirty-day-window @verified @source:carbon_badge/artifacts.py#artifact_kwh_by_run @test:tests/test_carbon_badge.py#test_expired_and_out_of_window_markers_are_ignored
   Scenario: Expired or month-old markers do not count toward the badge
     Given a carbon marker for run 1 created today
@@ -39,19 +23,6 @@ Feature: Pricing CI runs from the carbon artifacts their jobs recorded
     Then run 11 is charged 1.5 hours at the wattage of a 2 vCPU / 7168 MB ubuntu machine, with 2 recorded jobs
     And run 22 is charged 1 hour at that wattage, with 1 recorded job
     And no job listing or artifact download is requested for either run
-
-  @id:measured-data.artifact-reading.004 @rule:measured-data.artifacts.measured-load-scales-energy @verified @source:carbon_badge/artifacts.py#artifact_kwh_by_run @test:tests/test_carbon_badge.py#test_a_measured_load_prices_the_marker_below_full_load
-  Scenario Outline: A job that recorded its CPU load is priced at that load, not at full load
-    Given run 1 recorded a 1-hour job on 4 vCPU / 16384 MB ubuntu with <recorded load>
-    And the operator <load factor setting>
-    When the operator refreshes the badge
-    Then run 1 is charged about <kWh> kWh
-
-    Examples:
-      | recorded load     | load factor setting          | kWh     |
-      | a CPU load of 25% | has not set a load factor    | 0.00387 |
-      | no CPU load       | has not set a load factor    | 0.0094  |
-      | a CPU load of 25% | has set a load factor of 1.0 | 0.0094  |
 
   @id:measured-data.artifact-reading.005 @rule:measured-data.artifacts.declared-blanket-watts-win @verified @source:carbon_badge/artifacts.py#artifact_kwh_by_run @test:tests/test_carbon_badge.py#test_declared_watts_still_beat_the_model @questionable
   Scenario: A wattage declared for every runner overrides the recorded hardware

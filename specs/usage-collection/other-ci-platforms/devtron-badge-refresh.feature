@@ -51,9 +51,3 @@ Feature: Refreshing the carbon badge from a Devtron task
     When the Devtron task runs
     Then the task fails
     And the output file no longer holds the earlier badge and is empty
-
-  @id:usage-collection.other-ci-platforms.006 @rule:ci-platforms.devtron.pinned-image-version @inferred @source:examples/ci-platforms/devtron-task.sh#CARBON_BADGE_IMAGE @questionable
-  Scenario: A Devtron refresh runs carbon-badge 0.2.1 unless the operator picks another image
-    Given CARBON_BADGE_IMAGE is not set
-    When the Devtron task runs
-    Then the estimate is produced by ghcr.io/fabiocicerchia/carbon-badge:0.2.1

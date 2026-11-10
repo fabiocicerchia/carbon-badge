@@ -814,7 +814,15 @@
   "examples/ci-platforms": [],
   "record/src": []
  },
- "retired": [],
+ "retired": [
+  "badge-output.command-line.003",
+  "badge-output.command-line.006",
+  "badge-output.command-line.007",
+  "measured-data.artifact-reading.001",
+  "measured-data.artifact-reading.004",
+  "measured-data.reconciliation.002",
+  "usage-collection.other-ci-platforms.006"
+ ],
  "scenarios": {
   "badge-output.badge-content.001": {
    "file": "specs/badge-output/badge-content/badge-message-and-confidence.feature",
@@ -960,18 +968,6 @@
     "tests/test_carbon_badge.py#test_cli_prints_the_badge_for_a_github_repo"
    ]
   },
-  "badge-output.command-line.003": {
-   "file": "specs/badge-output/command-line/command-line-estimate.feature",
-   "fingerprint": "b89d94c54234",
-   "human": false,
-   "rule": "badge.cli.offline-minutes-skip-api",
-   "source": "carbon_badge/report.py#estimate",
-   "status": "verified",
-   "test": "tests/test_carbon_badge.py#test_cli_offline_minutes_never_touch_the_network",
-   "tests": [
-    "tests/test_carbon_badge.py#test_cli_offline_minutes_never_touch_the_network"
-   ]
-  },
   "badge-output.command-line.004": {
    "file": "specs/badge-output/command-line/command-line-estimate.feature",
    "fingerprint": "429eb1dbf37a",
@@ -991,28 +987,6 @@
    "status": "inferred",
    "test": "",
    "tests": []
-  },
-  "badge-output.command-line.006": {
-   "file": "specs/badge-output/command-line/command-line-estimate.feature",
-   "fingerprint": "429eb1dbf37a",
-   "human": false,
-   "rule": "badge.cli.reconcile-refuses-unsupported-combinations",
-   "source": "carbon_badge/cli.py#main",
-   "status": "inferred",
-   "test": "",
-   "tests": []
-  },
-  "badge-output.command-line.007": {
-   "file": "specs/badge-output/command-line/command-line-estimate.feature",
-   "fingerprint": "429eb1dbf37a",
-   "human": false,
-   "rule": "badge.cli.serve-instead-of-print",
-   "source": "carbon_badge/cli.py#main",
-   "status": "verified",
-   "test": "tests/test_docs.py#test_documented_serve_command_over_real_http",
-   "tests": [
-    "tests/test_docs.py#test_documented_serve_command_over_real_http"
-   ]
   },
   "badge-output.command-line.008": {
    "file": "specs/badge-output/command-line/running-an-estimate.feature",
@@ -1376,20 +1350,6 @@
    "test": "",
    "tests": []
   },
-  "measured-data.artifact-reading.001": {
-   "file": "specs/measured-data/artifact-reading/reading-carbon-artifacts.feature",
-   "fingerprint": "9ba0ff07648b",
-   "human": false,
-   "rule": "measured-data.artifacts.only-valid-markers-count",
-   "source": "carbon_badge/artifacts.py#parse_carbon_artifact",
-   "status": "verified",
-   "test": "tests/test_carbon_badge.py#test_parse_carbon_artifact",
-   "tests": [
-    "tests/test_carbon_badge.py#test_parse_carbon_artifact",
-    "tests/test_carbon_badge.py#test_v2_markers_carry_a_measured_load",
-    "tests/test_carbon_badge.py#test_artifact_kwh_by_run_keys_by_run_and_downloads_nothing"
-   ]
-  },
   "measured-data.artifact-reading.002": {
    "file": "specs/measured-data/artifact-reading/reading-carbon-artifacts.feature",
    "fingerprint": "e06786a5804f",
@@ -1412,18 +1372,6 @@
    "test": "tests/test_carbon_badge.py#test_artifact_kwh_by_run_keys_by_run_and_downloads_nothing",
    "tests": [
     "tests/test_carbon_badge.py#test_artifact_kwh_by_run_keys_by_run_and_downloads_nothing"
-   ]
-  },
-  "measured-data.artifact-reading.004": {
-   "file": "specs/measured-data/artifact-reading/reading-carbon-artifacts.feature",
-   "fingerprint": "e06786a5804f",
-   "human": false,
-   "rule": "measured-data.artifacts.measured-load-scales-energy",
-   "source": "carbon_badge/artifacts.py#artifact_kwh_by_run",
-   "status": "verified",
-   "test": "tests/test_carbon_badge.py#test_a_measured_load_prices_the_marker_below_full_load",
-   "tests": [
-    "tests/test_carbon_badge.py#test_a_measured_load_prices_the_marker_below_full_load"
    ]
   },
   "measured-data.artifact-reading.005": {
@@ -1527,20 +1475,6 @@
    "tests": [
     "tests/test_carbon_badge.py#test_full_coverage_costs_one_sample_per_workflow",
     "tests/test_carbon_badge.py#test_partial_instrumentation_tops_up_from_the_api"
-   ]
-  },
-  "measured-data.reconciliation.002": {
-   "file": "specs/measured-data/reconciliation/combining-self-reported-and-api-priced-runs.feature",
-   "fingerprint": "af81c5954bb2",
-   "human": false,
-   "rule": "measured.runs.partial-run-priced-wholly-from-api",
-   "source": "carbon_badge/providers.py#ci_kwh_last_30d",
-   "status": "verified",
-   "test": "tests/test_carbon_badge.py#test_a_partly_instrumented_run_does_not_lose_its_other_jobs",
-   "tests": [
-    "tests/test_carbon_badge.py#test_a_partly_instrumented_run_does_not_lose_its_other_jobs",
-    "tests/test_carbon_badge.py#test_markers_are_not_double_counted_when_a_run_is_topped_up",
-    "tests/test_carbon_badge.py#test_an_unusually_small_newest_run_cannot_lower_the_bar"
    ]
   },
   "measured-data.reconciliation.003": {
@@ -1894,16 +1828,6 @@
    "human": false,
    "rule": "ci-platforms.devtron.failed-refresh-empties-badge",
    "source": "examples/ci-platforms/devtron-task.sh#docker run",
-   "status": "inferred",
-   "test": "",
-   "tests": []
-  },
-  "usage-collection.other-ci-platforms.006": {
-   "file": "specs/usage-collection/other-ci-platforms/devtron-badge-refresh.feature",
-   "fingerprint": "4a384558864f",
-   "human": false,
-   "rule": "ci-platforms.devtron.pinned-image-version",
-   "source": "examples/ci-platforms/devtron-task.sh#CARBON_BADGE_IMAGE",
    "status": "inferred",
    "test": "",
    "tests": []
