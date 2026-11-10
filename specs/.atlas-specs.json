@@ -1,0 +1,1982 @@
+{
+ "excluded": {
+  "carbon-badge/artifacts": [
+   {
+    "candidate": "Region factors are looked up once per region per refresh, and the CI-API snapshot is fetched once",
+    "covered_by": "",
+    "reason": "INTERNAL_MECHANISM",
+    "source": "carbon_badge/artifacts.py#RegionFactors"
+   },
+   {
+    "candidate": "One job-listing request per instrumented workflow to sample its job count",
+    "covered_by": "",
+    "reason": "INTERNAL_MECHANISM",
+    "source": "carbon_badge/artifacts.py#_expected_markers"
+   },
+   {
+    "candidate": "A failed job-count sample falls back to the highest observed marker count",
+    "covered_by": "",
+    "reason": "INTERNAL_MECHANISM",
+    "source": "carbon_badge/artifacts.py#_expected_markers"
+   },
+   {
+    "candidate": "Artifacts are listed 100 per request with pagination",
+    "covered_by": "",
+    "reason": "INTERNAL_MECHANISM",
+    "source": "carbon_badge/artifacts.py#list_artifacts"
+   },
+   {
+    "candidate": "A marker without a workflow run id is skipped",
+    "covered_by": "",
+    "reason": "TRIVIAL",
+    "source": "carbon_badge/artifacts.py#artifact_kwh_by_run"
+   },
+   {
+    "candidate": "Live region figure is logged at info level next to the annual average",
+    "covered_by": "",
+    "reason": "TRIVIAL",
+    "source": "carbon_badge/artifacts.py#RegionFactors"
+   },
+   {
+    "candidate": "Linear spec-to-watts model constants (comment block)",
+    "covered_by": "measured-data.artifacts.energy-from-recorded-hardware",
+    "reason": "DUPLICATE_OF",
+    "source": "carbon_badge/artifacts.py"
+   }
+  ],
+  "carbon-badge/base": [
+   {
+    "candidate": "PUE constant 1.15 applied to machine draw",
+    "covered_by": "applied and observable in carbon_badge/power.py (runner power models); documented-value check is tests/test_docs.py",
+    "reason": "INTERNAL_MECHANISM",
+    "source": "carbon_badge/base.py#PUE"
+   },
+   {
+    "candidate": "World-average default grid intensity 480 gCO2e/kWh",
+    "covered_by": "fallback is enforced in carbon_badge/power.py grid_factor_for and the --grid-intensity flag in carbon_badge/cli.py",
+    "reason": "INTERNAL_MECHANISM",
+    "source": "carbon_badge/base.py#DEFAULT_GRID_INTENSITY"
+   },
+   {
+    "candidate": "Baseline runner 4 vCPU / 16 GiB and memory-per-vCPU ratio",
+    "covered_by": "used by spec-based wattage in carbon_badge/power.py",
+    "reason": "INTERNAL_MECHANISM",
+    "source": "carbon_badge/base.py#BASELINE_VCPU"
+   },
+   {
+    "candidate": "Badge switches to kg above 1000 g",
+    "covered_by": "constant only; formatting rule belongs to badge-content module",
+    "reason": "INTERNAL_MECHANISM",
+    "source": "carbon_badge/base.py#GRAMS_PER_KILOGRAM"
+   },
+   {
+    "candidate": "Reconciliation rows under 1e-9 g are not printed",
+    "covered_by": "applied in carbon_badge/reconcile.py",
+    "reason": "INTERNAL_MECHANISM",
+    "source": "carbon_badge/base.py#RECONCILE_EPSILON_G"
+   },
+   {
+    "candidate": "API job name reduced to a slug (lowercase, non-alphanumerics to '-')",
+    "covered_by": "per-job matching and per-run fallback are observable in carbon_badge/reconcile.py; asserted by tests/test_carbon_badge.py#test_job_names_reduce_to_slugs",
+    "reason": "INTERNAL_MECHANISM",
+    "source": "carbon_badge/base.py#job_slug"
+   },
+   {
+    "candidate": "Response/Getter protocols and Json/RunnerWatts type aliases",
+    "covered_by": "typing only",
+    "reason": "INTERNAL_MECHANISM",
+    "source": "carbon_badge/base.py#Getter"
+   },
+   {
+    "candidate": "Orphaned comments: the Ember grid-intensity comment sits above Json rather than DEFAULT_GRID_INTENSITY, and the region-table comment ends mid-sentence at line 180 with the table itself living in power.py",
+    "covered_by": "comment drift, no behaviour",
+    "reason": "TRIVIAL",
+    "source": "carbon_badge/base.py#DEFAULT_GRID_INTENSITY"
+   },
+   {
+    "candidate": "A marker with an empty slug (name ending in the region's dot) still counts as measured but has no slug",
+    "covered_by": "edge case the recorder never produces (uniqueJobSlug in record/src/post.js)",
+    "reason": "TRIVIAL",
+    "source": "carbon_badge/base.py#carbon_artifact_slug"
+   }
+  ],
+  "carbon-badge/carbon-badge": [
+   {
+    "candidate": "The package re-exports the public names of its submodules (artifacts, base, ci, cli, grid, power, providers, reconcile, report, server) through __all__, including underscore-prefixed helpers",
+    "covered_by": "",
+    "reason": "INTERNAL_MECHANISM",
+    "source": "carbon_badge/__init__.py#__all__"
+   },
+   {
+    "candidate": "Running `python -m carbon_badge` invokes the same CLI as the `carbon-badge` command and exits with its return code",
+    "covered_by": "",
+    "reason": "INTERNAL_MECHANISM",
+    "source": "carbon_badge/__main__.py#main"
+   },
+   {
+    "candidate": "Module docstring describing the badge (measured / partial / estimated / rough confidence, Shields.io endpoint JSON, 30-day window)",
+    "covered_by": "",
+    "reason": "UNVERIFIABLE",
+    "source": "carbon_badge/__init__.py"
+   }
+  ],
+  "carbon-badge/ci": [
+   {
+    "candidate": "Requests ask for 100 results per page and stop at the first short page",
+    "covered_by": "",
+    "reason": "INTERNAL_MECHANISM",
+    "source": "carbon_badge/ci.py#_get_pages"
+   },
+   {
+    "candidate": "30-second timeout on each GitHub request",
+    "covered_by": "",
+    "reason": "INTERNAL_MECHANISM",
+    "source": "carbon_badge/ci.py#_get_pages"
+   },
+   {
+    "candidate": "An HTTP error from GitHub raises and aborts the listing",
+    "covered_by": "",
+    "reason": "INTERNAL_MECHANISM",
+    "source": "carbon_badge/ci.py#_get_pages"
+   },
+   {
+    "candidate": "The HTTP getter can be injected and is looked up at call time so tests can patch it",
+    "covered_by": "",
+    "reason": "TECH_DEVTOOLING",
+    "source": "carbon_badge/ci.py#_get_pages"
+   },
+   {
+    "candidate": "Per-job breakdown by name slug, summing matrix legs whose names reduce to the same slug, and per-run seconds",
+    "covered_by": "",
+    "reason": "INTERNAL_MECHANISM",
+    "source": "carbon_badge/ci.py#_api_run_detail"
+   },
+   {
+    "candidate": "Truncation warning for the artifact listing",
+    "covered_by": "usage-collection.github-actions.truncation-warned",
+    "reason": "DUPLICATE_OF",
+    "source": "carbon_badge/ci.py#_warn_if_truncated"
+   },
+   {
+    "candidate": "Unknown-runner tallies from each run merged into the caller's total",
+    "covered_by": "",
+    "reason": "INTERNAL_MECHANISM",
+    "source": "carbon_badge/ci.py#_run_kwh"
+   }
+  ],
+  "carbon-badge/cli": [
+   {
+    "candidate": "Help text and argparse surface for every flag (--api, --eia-key, --electricitymaps-token descriptions)",
+    "covered_by": "",
+    "reason": "TRIVIAL",
+    "source": "carbon_badge/cli.py#_build_parser"
+   },
+   {
+    "candidate": "--provider accepts only github or gitlab",
+    "covered_by": "",
+    "reason": "TRIVIAL",
+    "source": "carbon_badge/cli.py#_build_parser"
+   },
+   {
+    "candidate": "--load-factor written onto power.LOAD_FACTOR module global",
+    "covered_by": "",
+    "reason": "INTERNAL_MECHANISM",
+    "source": "carbon_badge/cli.py#main"
+   },
+   {
+    "candidate": "--grid-region fetches live intensity and overrides --grid-intensity",
+    "covered_by": "carbon-intensity/live-grid-data (owned by the providers/report modules)",
+    "reason": "DUPLICATE_OF",
+    "source": "carbon_badge/report.py#estimate"
+   },
+   {
+    "candidate": "--ignore-self-reported forces API pricing for every run",
+    "covered_by": "measured-data/artifact-reading (behaviour lives in the report module)",
+    "reason": "DUPLICATE_OF",
+    "source": "carbon_badge/cli.py#_build_parser"
+   },
+   {
+    "candidate": "--reconcile defaults the API base to https://api.github.com",
+    "covered_by": "",
+    "reason": "TRIVIAL",
+    "source": "carbon_badge/cli.py#main"
+   },
+   {
+    "candidate": "Log line format 'carbon-badge: <message>' on stderr",
+    "covered_by": "",
+    "reason": "INTERNAL_MECHANISM",
+    "source": "carbon_badge/cli.py#main"
+   }
+  ],
+  "carbon-badge/dockerfile": [
+   {
+    "candidate": "Two-stage build: wheel built in a build stage, installed in the runtime stage",
+    "covered_by": "",
+    "reason": "TECH_BUILD",
+    "source": "Dockerfile#build"
+   },
+   {
+    "candidate": "Base images pinned by sha256 digest",
+    "covered_by": "",
+    "reason": "TECH_BUILD",
+    "source": "Dockerfile#FROM"
+   },
+   {
+    "candidate": "Build tooling installed with --require-hashes from requirements-build.txt",
+    "covered_by": "",
+    "reason": "TECH_BUILD",
+    "source": "Dockerfile#build"
+   },
+   {
+    "candidate": "Wheel removed from /tmp after install and pip cache disabled",
+    "covered_by": "",
+    "reason": "TECH_BUILD",
+    "source": "Dockerfile#RUN"
+   },
+   {
+    "candidate": "HEALTHCHECK only confirms the Python interpreter starts (always healthy; does not probe --serve)",
+    "covered_by": "",
+    "reason": "INTERNAL_MECHANISM",
+    "source": "Dockerfile#HEALTHCHECK"
+   },
+   {
+    "candidate": "Working directory /app",
+    "covered_by": "",
+    "reason": "TECH_BUILD",
+    "source": "Dockerfile#WORKDIR"
+   },
+   {
+    "candidate": "Recommendation to run with --read-only root filesystem (comment only, not enforced)",
+    "covered_by": "",
+    "reason": "UNVERIFIABLE",
+    "source": "Dockerfile#USER"
+   }
+  ],
+  "carbon-badge/grid": [
+   {
+    "candidate": "ci-api world snapshot fetched once per refresh regardless of region count (rate limit 1 req/10s)",
+    "covered_by": "",
+    "reason": "INTERNAL_MECHANISM",
+    "source": "carbon_badge/grid.py#_ci_api_snapshot"
+   },
+   {
+    "candidate": "Per-region memoisation so each region costs one request",
+    "covered_by": "",
+    "reason": "INTERNAL_MECHANISM",
+    "source": "carbon_badge/artifacts.py#RegionFactors"
+   },
+   {
+    "candidate": "Energy-Charts takes the latest non-null 15-minute slot",
+    "covered_by": "carbon-intensity.live-grid.provider-chosen-by-region",
+    "reason": "TRIVIAL",
+    "source": "carbon_badge/grid.py#_energy_charts_factor"
+   },
+   {
+    "candidate": "Provider HTTP timeouts (20s/25s) and EIA request parameters",
+    "covered_by": "",
+    "reason": "INTERNAL_MECHANISM",
+    "source": "carbon_badge/grid.py#_eia_factor"
+   },
+   {
+    "candidate": "Unparseable EIA values or unknown fuel types are dropped",
+    "covered_by": "carbon-intensity.live-grid.us-fuel-mix-newest-hour",
+    "reason": "TRIVIAL",
+    "source": "carbon_badge/grid.py#_to_float"
+   },
+   {
+    "candidate": "Explicit --grid-intensity skips all live providers",
+    "covered_by": "enforced in RegionFactors/grid_factor_for, outside this module",
+    "reason": "UNVERIFIABLE",
+    "source": "carbon_badge/artifacts.py#RegionFactors"
+   },
+   {
+    "candidate": "Empty region yields no live factor",
+    "covered_by": "",
+    "reason": "TRIVIAL",
+    "source": "carbon_badge/grid.py#live_region_factor"
+   }
+  ],
+  "carbon-badge/install": [
+   {
+    "candidate": "Script requires bash and is fetched via curl -fsSL from raw.githubusercontent.com (usage comment)",
+    "covered_by": "",
+    "reason": "INTERNAL_MECHANISM",
+    "source": "install.sh#install.sh"
+   },
+   {
+    "candidate": "Unset variables / pipe failures abort the script (set -u, pipefail)",
+    "covered_by": "",
+    "reason": "INTERNAL_MECHANISM",
+    "source": "install.sh#install.sh"
+   },
+   {
+    "candidate": "Python version check before install (none in the script; pip's requires-python would be what refuses)",
+    "covered_by": "",
+    "reason": "UNVERIFIABLE",
+    "source": "install.sh#install.sh"
+   }
+  ],
+  "carbon-badge/makefile": [
+   {
+    "candidate": "make help lists every target with its description",
+    "covered_by": "",
+    "reason": "TECH_BUILD",
+    "source": "Makefile#help"
+   },
+   {
+    "candidate": "make setup installs the pre-commit hook",
+    "covered_by": "",
+    "reason": "TECH_BUILD",
+    "source": "Makefile#setup"
+   },
+   {
+    "candidate": "make install installs the package with pip",
+    "covered_by": "",
+    "reason": "TECH_BUILD",
+    "source": "Makefile#install"
+   },
+   {
+    "candidate": "make dev does an editable install with dev extras",
+    "covered_by": "",
+    "reason": "TECH_BUILD",
+    "source": "Makefile#dev"
+   },
+   {
+    "candidate": "make lint runs every pre-commit hook on all files (CLAUDE.md still says it runs 'ruff check .', which is out of date)",
+    "covered_by": "",
+    "reason": "TECH_BUILD",
+    "source": "Makefile#lint"
+   },
+   {
+    "candidate": "make test runs pytest quietly",
+    "covered_by": "",
+    "reason": "TECH_BUILD",
+    "source": "Makefile#test"
+   },
+   {
+    "candidate": "make build produces an sdist and a wheel",
+    "covered_by": "",
+    "reason": "TECH_BUILD",
+    "source": "Makefile#build"
+   },
+   {
+    "candidate": "make run prints the carbon-badge --help output",
+    "covered_by": "",
+    "reason": "TECH_BUILD",
+    "source": "Makefile#run"
+   },
+   {
+    "candidate": "make format rewrites Python with ruff and JavaScript with pinned Biome 2.5.7",
+    "covered_by": "",
+    "reason": "TECH_BUILD",
+    "source": "Makefile#format"
+   },
+   {
+    "candidate": "make analyze type-checks the package with basedpyright",
+    "covered_by": "",
+    "reason": "TECH_BUILD",
+    "source": "Makefile#analyze"
+   }
+  ],
+  "carbon-badge/power": [
+   {
+    "candidate": "Unknown runner label returns no figure so callers charge the default and warn about undeclared runners",
+    "covered_by": "the operator-visible warning is produced by ci.py/providers.py/reconcile.py, owned by usage-collection and reconciliation modules",
+    "reason": "INTERNAL_MECHANISM",
+    "source": "carbon_badge/power.py#runner_power_w"
+   },
+   {
+    "candidate": "Blank --runner-watts entries are silently skipped",
+    "covered_by": "",
+    "reason": "TRIVIAL",
+    "source": "carbon_badge/power.py#parse_runner_watts"
+   },
+   {
+    "candidate": "Runner labels and declared labels are matched case-insensitively",
+    "covered_by": "",
+    "reason": "TRIVIAL",
+    "source": "carbon_badge/power.py#parse_runner_watts"
+   },
+   {
+    "candidate": "Skipped jobs are excluded from the completeness denominator (_ran)",
+    "covered_by": "observable effect belongs to measured-data/artifact-reading and usage-collection modules",
+    "reason": "INTERNAL_MECHANISM",
+    "source": "carbon_badge/power.py#_ran"
+   },
+   {
+    "candidate": "Job hours computed from timestamps, negative spans clamped to zero (_hours)",
+    "covered_by": "observable effect belongs to energy-estimation/job-duration callers in ci.py",
+    "reason": "INTERNAL_MECHANISM",
+    "source": "carbon_badge/power.py#_hours"
+   },
+   {
+    "candidate": "Badge colour is always 'informational'",
+    "covered_by": "constant only defined here; badge emission lives in the badge-content module",
+    "reason": "UNVERIFIABLE",
+    "source": "carbon_badge/power.py#BADGE_COLOR"
+   },
+   {
+    "candidate": "CiUsage and RunTotals result shapes",
+    "covered_by": "",
+    "reason": "INTERNAL_MECHANISM",
+    "source": "carbon_badge/power.py#CiUsage"
+   },
+   {
+    "candidate": "Estimated-class tally reset per estimate so --serve reports each request on its own",
+    "covered_by": "",
+    "reason": "INTERNAL_MECHANISM",
+    "source": "carbon_badge/power.py#_ESTIMATED_USED"
+   },
+   {
+    "candidate": "Rounding of wattages so label and self-reported routes compare equal",
+    "covered_by": "",
+    "reason": "INTERNAL_MECHANISM",
+    "source": "carbon_badge/power.py#watts_from_specs"
+   }
+  ],
+  "carbon-badge/providers": [
+   {
+    "candidate": "GitHub path makes one jobs request per API-priced run and one sample per workflow",
+    "covered_by": "",
+    "reason": "INTERNAL_MECHANISM",
+    "source": "carbon_badge/providers.py#ci_kwh_last_30d"
+   },
+   {
+    "candidate": "Injectable `get` HTTP client for gitlab_kwh_last_30d and live_grid_intensity",
+    "covered_by": "",
+    "reason": "TECH_DEVTOOLING",
+    "source": "carbon_badge/providers.py#gitlab_kwh_last_30d"
+   },
+   {
+    "candidate": "GitLab token sent as PRIVATE-TOKEN header and project path URL-encoded",
+    "covered_by": "",
+    "reason": "INTERNAL_MECHANISM",
+    "source": "carbon_badge/providers.py#gitlab_kwh_last_30d"
+   },
+   {
+    "candidate": "Electricity Maps token sent as auth-token header",
+    "covered_by": "",
+    "reason": "INTERNAL_MECHANISM",
+    "source": "carbon_badge/providers.py#live_grid_intensity"
+   },
+   {
+    "candidate": "GitLab grams use one repo-wide grid factor and measured is always zero",
+    "covered_by": "",
+    "reason": "TRIVIAL",
+    "source": "carbon_badge/providers.py#gitlab_kwh_last_30d"
+   },
+   {
+    "candidate": "Undeclared GitHub runners priced at fallback and warned (via _run_kwh/_warn_undeclared_runners)",
+    "covered_by": "owned by the ci/reconcile modules",
+    "reason": "DUPLICATE_OF",
+    "source": "carbon_badge/providers.py#ci_kwh_last_30d"
+   },
+   {
+    "candidate": "_mean_reading refuses to average an empty list",
+    "covered_by": "grid.live.falls-back-to-instant-reading",
+    "reason": "INTERNAL_MECHANISM",
+    "source": "carbon_badge/providers.py#_mean_reading"
+   }
+  ],
+  "carbon-badge/reconcile": [
+   {
+    "candidate": "grams_co2e converts runner-minutes to gCO2e for the offline --minutes estimate",
+    "covered_by": "the --minutes badge estimate (carbon_badge/report.py#estimate) is where users see it",
+    "reason": "INTERNAL_MECHANISM",
+    "source": "carbon_badge/reconcile.py#grams_co2e"
+   },
+   {
+    "candidate": "grams_co2e_kwh multiplies kWh by grid intensity",
+    "covered_by": "",
+    "reason": "INTERNAL_MECHANISM",
+    "source": "carbon_badge/reconcile.py#grams_co2e_kwh"
+   },
+   {
+    "candidate": "Expired and older-than-30-day carbon artifacts are ignored when reading marker seconds",
+    "covered_by": "",
+    "reason": "INTERNAL_MECHANISM",
+    "source": "carbon_badge/reconcile.py#_marker_seconds_by_run"
+   },
+   {
+    "candidate": "Reconciliation fetches every run's jobs and every marker (expensive by design)",
+    "covered_by": "",
+    "reason": "INTERNAL_MECHANISM",
+    "source": "carbon_badge/reconcile.py#reconcile_last_30d"
+   },
+   {
+    "candidate": "--grid-region with --reconcile fetches a live intensity and uses it as the declared grid figure",
+    "covered_by": "measured-data.reconciliation.grid-factor-term",
+    "reason": "DUPLICATE_OF",
+    "source": "carbon_badge/cli.py#main"
+   },
+   {
+    "candidate": "Per-run delta percentage reads 0% when the self-reported grams are zero",
+    "covered_by": "",
+    "reason": "TRIVIAL",
+    "source": "carbon_badge/reconcile.py#_pct"
+   },
+   {
+    "candidate": "Divergence / Reconciliation record shapes",
+    "covered_by": "",
+    "reason": "INTERNAL_MECHANISM",
+    "source": "carbon_badge/reconcile.py#Reconciliation"
+   }
+  ],
+  "carbon-badge/report": [
+   {
+    "candidate": "Detail summary line (kWh, effective gCO2e/kWh, self-reported jobs, % on unrecognised runners) logged after the badge",
+    "covered_by": "",
+    "reason": "INTERNAL_MECHANISM",
+    "source": "carbon_badge/report.py#_github_estimate"
+   },
+   {
+    "candidate": "GitLab detail line omits job counts and unrecognised-runner share",
+    "covered_by": "",
+    "reason": "INTERNAL_MECHANISM",
+    "source": "carbon_badge/report.py#_gitlab_estimate"
+   },
+   {
+    "candidate": "Default API base URLs for GitHub and GitLab when --api is not given",
+    "covered_by": "usage-collection modules (github-actions / gitlab-pipelines)",
+    "reason": "DUPLICATE_OF",
+    "source": "carbon_badge/report.py#_github_estimate"
+   },
+   {
+    "candidate": "--ignore-self-reported disables reading carbon artifacts",
+    "covered_by": "measured-data/artifact-reading",
+    "reason": "DUPLICATE_OF",
+    "source": "carbon_badge/report.py#_github_estimate"
+   },
+   {
+    "candidate": "EIA key read from --eia-key or EIA_API_KEY; Electricity Maps token from flag or ELECTRICITYMAPS_TOKEN",
+    "covered_by": "carbon-intensity/live-grid-data",
+    "reason": "DUPLICATE_OF",
+    "source": "carbon_badge/report.py#estimate"
+   },
+   {
+    "candidate": "Warning naming estimated runner classes printed once per estimate",
+    "covered_by": "energy-estimation/runner-power",
+    "reason": "DUPLICATE_OF",
+    "source": "carbon_badge/report.py#estimate"
+   },
+   {
+    "candidate": "Clearing the estimated-class tally at the start of each estimate",
+    "covered_by": "",
+    "reason": "INTERNAL_MECHANISM",
+    "source": "carbon_badge/report.py#estimate"
+   },
+   {
+    "candidate": "Dispatch to GitLab vs GitHub by --provider",
+    "covered_by": "usage-collection/gitlab-pipelines",
+    "reason": "DUPLICATE_OF",
+    "source": "carbon_badge/report.py#estimate"
+   }
+  ],
+  "carbon-badge/server": [
+   {
+    "candidate": "Estimate computed lazily on first request rather than at startup",
+    "covered_by": "",
+    "reason": "INTERNAL_MECHANISM",
+    "source": "carbon_badge/server.py#badge_handler"
+   },
+   {
+    "candidate": "Cache start value None rather than 0.0 because of the monotonic clock epoch",
+    "covered_by": "",
+    "reason": "INTERNAL_MECHANISM",
+    "source": "carbon_badge/server.py#badge_handler"
+   },
+   {
+    "candidate": "Per-request access log lines suppressed; a one-line summary logged on each re-estimate",
+    "covered_by": "",
+    "reason": "TRIVIAL",
+    "source": "carbon_badge/server.py#BadgeHandler"
+   },
+   {
+    "candidate": "Startup log line 'serving /badge.json on ADDR:PORT (ttl Ns)'",
+    "covered_by": "",
+    "reason": "TRIVIAL",
+    "source": "carbon_badge/server.py#serve"
+   },
+   {
+    "candidate": "Non-GET methods get the stdlib 501 response",
+    "covered_by": "",
+    "reason": "TRIVIAL",
+    "source": "carbon_badge/server.py#BadgeHandler"
+   },
+   {
+    "candidate": "--serve 0 falls through to printing the badge once, because 0 is falsy",
+    "covered_by": "",
+    "reason": "TRIVIAL",
+    "source": "carbon_badge/cli.py#main"
+   }
+  ],
+  "docs/stylesheets": [
+   {
+    "candidate": "Docs site uses the green GreenOps accent pair (#34d399 / #059669) for header, links and interactive accents",
+    "covered_by": "",
+    "reason": "TRIVIAL",
+    "source": "docs/stylesheets/extra.css#:root"
+   },
+   {
+    "candidate": "Light and dark (slate) schemes set link colour and a dark background (#0b0f1a) for header and tabs",
+    "covered_by": "",
+    "reason": "TRIVIAL",
+    "source": "docs/stylesheets/extra.css#[data-md-color-scheme=\"slate\"]"
+   },
+   {
+    "candidate": "Text and code use a system font stack, so no web font is downloaded (the no-external-requests guarantee is actually enforced by `theme.font: false` in mkdocs.yml, not by this stylesheet)",
+    "covered_by": "",
+    "reason": "INTERNAL_MECHANISM",
+    "source": "docs/stylesheets/extra.css#:root"
+   },
+   {
+    "candidate": "Translucent blurred header with hairline divider and shadow on scroll; tab link opacity",
+    "covered_by": "",
+    "reason": "TRIVIAL",
+    "source": "docs/stylesheets/extra.css#.md-header"
+   },
+   {
+    "candidate": "Heading weights, letter-spacing and line-height",
+    "covered_by": "",
+    "reason": "TRIVIAL",
+    "source": "docs/stylesheets/extra.css#.md-typeset h1"
+   },
+   {
+    "candidate": "Rounded, bordered code blocks",
+    "covered_by": "",
+    "reason": "TRIVIAL",
+    "source": "docs/stylesheets/extra.css#.md-typeset .highlight"
+   },
+   {
+    "candidate": "Tables styled as bordered cards with uppercase headers (the comment says they scroll on narrow screens, but the rule sets overflow: hidden)",
+    "covered_by": "",
+    "reason": "TRIVIAL",
+    "source": "docs/stylesheets/extra.css#.md-typeset table:not([class])"
+   },
+   {
+    "candidate": "Pill-shaped buttons; primary button has an accent gradient; hover lift with an indigo-tinted shadow that doesn't match the green palette",
+    "covered_by": "",
+    "reason": "TRIVIAL",
+    "source": "docs/stylesheets/extra.css#.md-typeset .md-button"
+   },
+   {
+    "candidate": "Home hero: centred, gradient-filled title, muted tagline, spaced buttons",
+    "covered_by": "",
+    "reason": "TRIVIAL",
+    "source": "docs/stylesheets/extra.css#.md-typeset .hero"
+   },
+   {
+    "candidate": "Feature cards with rounded borders, hover lift, accent border and accent-coloured icons",
+    "covered_by": "",
+    "reason": "TRIVIAL",
+    "source": "docs/stylesheets/extra.css#.md-typeset .grid.cards > ul > li"
+   },
+   {
+    "candidate": "Sidebar nav title and active link weights; footer background, border and muted link colour; smooth scrolling",
+    "covered_by": "",
+    "reason": "TRIVIAL",
+    "source": "docs/stylesheets/extra.css#.md-nav__title"
+   },
+   {
+    "candidate": "Material's placeholder book logo is hidden because the project has no logo",
+    "covered_by": "",
+    "reason": "TRIVIAL",
+    "source": "docs/stylesheets/extra.css#.md-header__button.md-logo"
+   }
+  ],
+  "examples/ci-platforms": [
+   {
+    "candidate": "Script uses a shellcheck directive instead of a shebang because Devtron supplies the interpreter",
+    "covered_by": "",
+    "reason": "TECH_DEVTOOLING",
+    "source": "examples/ci-platforms/devtron-task.sh#header"
+   },
+   {
+    "candidate": "Container-image task variant with the CLI as entrypoint (Args: OWNER/REPO --grid-intensity 56)",
+    "covered_by": "developer-tooling/container-image",
+    "reason": "DUPLICATE_OF",
+    "source": "examples/ci-platforms/devtron-task.sh#header"
+   },
+   {
+    "candidate": "Commented suggestion to copy the badge to a public object store (aws s3 cp)",
+    "covered_by": "",
+    "reason": "UNVERIFIABLE",
+    "source": "examples/ci-platforms/devtron-task.sh#trailer"
+   },
+   {
+    "candidate": "Container removed after the run (--rm)",
+    "covered_by": "",
+    "reason": "INTERNAL_MECHANISM",
+    "source": "examples/ci-platforms/devtron-task.sh#docker run"
+   },
+   {
+    "candidate": "Unset variables other than TARGET_REPO abort the task (set -u)",
+    "covered_by": "",
+    "reason": "TRIVIAL",
+    "source": "examples/ci-platforms/devtron-task.sh#set -eu"
+   }
+  ],
+  "record/src": [
+   {
+    "candidate": "Start time and CPU counters saved as action state between main and post",
+    "covered_by": "",
+    "reason": "INTERNAL_MECHANISM",
+    "source": "record/src/main.js"
+   },
+   {
+    "candidate": "Placeholder file content inside the artifact",
+    "covered_by": "",
+    "reason": "INTERNAL_MECHANISM",
+    "source": "record/src/post.js#recordJob"
+   },
+   {
+    "candidate": "IMDS request details (link-local address, 1 s timeout, api-version)",
+    "covered_by": "",
+    "reason": "INTERNAL_MECHANISM",
+    "source": "record/src/post.js#azureRegion"
+   },
+   {
+    "candidate": "Busy time is user+nice+sys+irq summed over all cores",
+    "covered_by": "",
+    "reason": "INTERNAL_MECHANISM",
+    "source": "record/src/load.js#cpuTimes"
+   },
+   {
+    "candidate": "Clock going backwards floors the duration at 0",
+    "covered_by": "",
+    "reason": "TRIVIAL",
+    "source": "record/src/duration.js#jobSeconds"
+   },
+   {
+    "candidate": "NaN or Infinity uptime falls back to step time",
+    "covered_by": "",
+    "reason": "TRIVIAL",
+    "source": "record/src/duration.js#jobSeconds"
+   },
+   {
+    "candidate": "vCPU falls back to 2 when no CPUs are reported",
+    "covered_by": "",
+    "reason": "TRIVIAL",
+    "source": "record/src/post.js#recordJob"
+   },
+   {
+    "candidate": "Informational log line summarising the recorded measurement",
+    "covered_by": "",
+    "reason": "TRIVIAL",
+    "source": "record/src/post.js#recordJob"
+   },
+   {
+    "candidate": "Hosted runner detection from RUNNER_ENVIRONMENT",
+    "covered_by": "measured-data.record.hosted-duration-includes-setup",
+    "reason": "DUPLICATE_OF",
+    "source": "record/src/duration.js#isHosted"
+   },
+   {
+    "candidate": "Upload passes the run and job backend ids to the artifact service",
+    "covered_by": "",
+    "reason": "INTERNAL_MECHANISM",
+    "source": "record/src/action.test.js"
+   },
+   {
+    "candidate": "End-to-end test harness with a fake artifact results service",
+    "covered_by": "",
+    "reason": "TECH_DEVTOOLING",
+    "source": "record/src/action.test.js"
+   }
+  ]
+ },
+ "lifted": {
+  "carbon-badge/artifacts": [],
+  "carbon-badge/base": [],
+  "carbon-badge/carbon-badge": [],
+  "carbon-badge/ci": [],
+  "carbon-badge/cli": [
+   {
+    "from_source": "carbon_badge/power.py#parse_runner_watts",
+    "rule": "badge.cli.malformed-estimate-flags-refused"
+   }
+  ],
+  "carbon-badge/dockerfile": [
+   {
+    "from_source": "Dockerfile#USER",
+    "rule": "distribution.container-image.runs-as-non-root"
+   }
+  ],
+  "carbon-badge/grid": [],
+  "carbon-badge/install": [],
+  "carbon-badge/makefile": [],
+  "carbon-badge/power": [],
+  "carbon-badge/providers": [],
+  "carbon-badge/reconcile": [],
+  "carbon-badge/report": [],
+  "carbon-badge/server": [],
+  "docs/stylesheets": [],
+  "examples/ci-platforms": [],
+  "record/src": []
+ },
+ "retired": [
+  "badge-output.command-line.003",
+  "badge-output.command-line.006",
+  "badge-output.command-line.007",
+  "measured-data.artifact-reading.001",
+  "measured-data.artifact-reading.004",
+  "measured-data.reconciliation.002",
+  "usage-collection.other-ci-platforms.006"
+ ],
+ "scenarios": {
+  "badge-output.badge-content.001": {
+   "file": "specs/badge-output/badge-content/badge-message-and-confidence.feature",
+   "fingerprint": "7022bbd65285",
+   "human": false,
+   "rule": "badge-output.badge-content.shields-endpoint-contract",
+   "source": "carbon_badge/report.py#endpoint_json",
+   "status": "verified",
+   "test": "tests/test_carbon_badge.py#test_endpoint_schema",
+   "tests": [
+    "tests/test_carbon_badge.py#test_endpoint_schema",
+    "tests/test_carbon_badge.py#test_badge_passes_no_verdict",
+    "tests/test_carbon_badge.py#test_cli_prints_the_badge_for_a_github_repo"
+   ]
+  },
+  "badge-output.badge-content.002": {
+   "file": "specs/badge-output/badge-content/badge-message-and-confidence.feature",
+   "fingerprint": "065bbba43d62",
+   "human": false,
+   "rule": "badge-output.badge-content.grams-per-month-units",
+   "source": "carbon_badge/report.py#format_grams",
+   "status": "verified",
+   "test": "tests/test_carbon_badge.py#test_format_switches_units",
+   "tests": [
+    "tests/test_carbon_badge.py#test_format_switches_units"
+   ]
+  },
+  "badge-output.badge-content.003": {
+   "file": "specs/badge-output/badge-content/badge-message-and-confidence.feature",
+   "fingerprint": "932a87619024",
+   "human": false,
+   "rule": "badge-output.badge-content.confidence-qualifier",
+   "source": "carbon_badge/report.py#confidence",
+   "status": "verified",
+   "test": "tests/test_carbon_badge.py#test_badge_states_its_own_confidence",
+   "tests": [
+    "tests/test_carbon_badge.py#test_badge_states_its_own_confidence",
+    "tests/test_carbon_badge.py#test_confidence_levels",
+    "tests/test_carbon_badge.py#test_confidence_is_driven_by_energy_not_job_count"
+   ]
+  },
+  "badge-output.badge-content.004": {
+   "file": "specs/badge-output/badge-content/badge-message-and-confidence.feature",
+   "fingerprint": "7022bbd65285",
+   "human": false,
+   "rule": "badge-output.badge-content.grams-cover-all-ci",
+   "source": "carbon_badge/report.py#endpoint_json",
+   "status": "verified",
+   "test": "tests/test_carbon_badge.py#test_badge_grams_always_cover_all_ci",
+   "tests": [
+    "tests/test_carbon_badge.py#test_badge_grams_always_cover_all_ci"
+   ]
+  },
+  "badge-output.badge-content.005": {
+   "file": "specs/badge-output/badge-content/badge-message-and-confidence.feature",
+   "fingerprint": "932a87619024",
+   "human": false,
+   "rule": "badge-output.badge-content.no-ci-unqualified",
+   "source": "carbon_badge/report.py#confidence",
+   "status": "inferred",
+   "test": "",
+   "tests": []
+  },
+  "badge-output.badge-server.001": {
+   "file": "specs/badge-output/badge-server/badge-server.feature",
+   "fingerprint": "81368f247f9e",
+   "human": false,
+   "rule": "badge.server.serves-endpoint-json",
+   "source": "carbon_badge/server.py#BadgeHandler",
+   "status": "verified",
+   "test": "tests/test_docs.py#test_documented_serve_command_over_real_http",
+   "tests": [
+    "tests/test_docs.py#test_documented_serve_command_over_real_http",
+    "tests/test_carbon_badge.py#test_serve_badge_endpoint_caches_and_404s"
+   ]
+  },
+  "badge-output.badge-server.002": {
+   "file": "specs/badge-output/badge-server/badge-server.feature",
+   "fingerprint": "81368f247f9e",
+   "human": false,
+   "rule": "badge.server.unknown-path-not-found",
+   "source": "carbon_badge/server.py#BadgeHandler",
+   "status": "verified",
+   "test": "tests/test_carbon_badge.py#test_serve_badge_endpoint_caches_and_404s",
+   "tests": [
+    "tests/test_carbon_badge.py#test_serve_badge_endpoint_caches_and_404s"
+   ]
+  },
+  "badge-output.badge-server.003": {
+   "file": "specs/badge-output/badge-server/badge-server.feature",
+   "fingerprint": "904e4ba394a0",
+   "human": false,
+   "rule": "badge.server.estimate-refresh-interval",
+   "source": "carbon_badge/server.py#serve",
+   "status": "verified",
+   "test": "tests/test_carbon_badge.py#test_serve_badge_endpoint_caches_and_404s",
+   "tests": [
+    "tests/test_carbon_badge.py#test_serve_badge_endpoint_caches_and_404s",
+    "tests/test_docs.py#test_documented_serve_command_over_real_http"
+   ]
+  },
+  "badge-output.badge-server.004": {
+   "file": "specs/badge-output/badge-server/badge-server.feature",
+   "fingerprint": "904e4ba394a0",
+   "human": false,
+   "rule": "badge.server.listen-interface",
+   "source": "carbon_badge/server.py#serve",
+   "status": "inferred",
+   "test": "",
+   "tests": []
+  },
+  "badge-output.badge-server.005": {
+   "file": "specs/badge-output/badge-server/badge-server.feature",
+   "fingerprint": "81368f247f9e",
+   "human": false,
+   "rule": "badge.server.failed-estimate-no-badge",
+   "source": "carbon_badge/server.py#BadgeHandler",
+   "status": "inferred",
+   "test": "",
+   "tests": []
+  },
+  "badge-output.command-line.001": {
+   "file": "specs/badge-output/command-line/command-line-estimate.feature",
+   "fingerprint": "429eb1dbf37a",
+   "human": false,
+   "rule": "badge.cli.prints-endpoint-json",
+   "source": "carbon_badge/cli.py#main",
+   "status": "verified",
+   "test": "tests/test_carbon_badge.py#test_cli_prints_the_badge_for_a_github_repo",
+   "tests": [
+    "tests/test_carbon_badge.py#test_cli_prints_the_badge_for_a_github_repo"
+   ]
+  },
+  "badge-output.command-line.002": {
+   "file": "specs/badge-output/command-line/command-line-estimate.feature",
+   "fingerprint": "429eb1dbf37a",
+   "human": false,
+   "rule": "badge.cli.token-from-flag-or-provider-env",
+   "source": "carbon_badge/cli.py#main",
+   "status": "verified",
+   "test": "tests/test_carbon_badge.py#test_cli_prints_the_badge_for_a_github_repo",
+   "tests": [
+    "tests/test_carbon_badge.py#test_cli_prints_the_badge_for_a_github_repo"
+   ]
+  },
+  "badge-output.command-line.004": {
+   "file": "specs/badge-output/command-line/command-line-estimate.feature",
+   "fingerprint": "429eb1dbf37a",
+   "human": false,
+   "rule": "badge.cli.malformed-estimate-flags-refused",
+   "source": "carbon_badge/cli.py#main",
+   "status": "inferred",
+   "test": "",
+   "tests": []
+  },
+  "badge-output.command-line.005": {
+   "file": "specs/badge-output/command-line/command-line-estimate.feature",
+   "fingerprint": "429eb1dbf37a",
+   "human": false,
+   "rule": "badge.cli.reconcile-prints-report",
+   "source": "carbon_badge/cli.py#main",
+   "status": "inferred",
+   "test": "",
+   "tests": []
+  },
+  "badge-output.command-line.008": {
+   "file": "specs/badge-output/command-line/running-an-estimate.feature",
+   "fingerprint": "b89d94c54234",
+   "human": false,
+   "rule": "badge-output.command-line.offline-minutes-estimate",
+   "source": "carbon_badge/report.py#estimate",
+   "status": "verified",
+   "test": "tests/test_carbon_badge.py#test_cli_offline_minutes_never_touch_the_network",
+   "tests": [
+    "tests/test_carbon_badge.py#test_cli_offline_minutes_never_touch_the_network",
+    "tests/test_carbon_badge.py#test_offline_estimate_honours_declared_runner_watts"
+   ]
+  },
+  "badge-output.command-line.009": {
+   "file": "specs/badge-output/command-line/running-an-estimate.feature",
+   "fingerprint": "b89d94c54234",
+   "human": false,
+   "rule": "badge-output.command-line.grid-region-overrides-intensity",
+   "source": "carbon_badge/report.py#estimate",
+   "status": "inferred",
+   "test": "",
+   "tests": []
+  },
+  "carbon-intensity.live-grid-data.001": {
+   "file": "specs/carbon-intensity/live-grid-data/live-regional-grid-intensity.feature",
+   "fingerprint": "494e85b24575",
+   "human": false,
+   "rule": "carbon-intensity.live-grid.provider-chosen-by-region",
+   "source": "carbon_badge/grid.py#live_region_factor",
+   "status": "verified",
+   "test": "tests/test_carbon_badge.py#test_resolver_caches_per_region_and_honours_an_explicit_figure",
+   "tests": [
+    "tests/test_carbon_badge.py#test_resolver_caches_per_region_and_honours_an_explicit_figure",
+    "tests/test_carbon_badge.py#test_ci_api_snapshot_is_fetched_once_for_many_regions"
+   ]
+  },
+  "carbon-intensity.live-grid-data.002": {
+   "file": "specs/carbon-intensity/live-grid-data/live-regional-grid-intensity.feature",
+   "fingerprint": "015684f29c81",
+   "human": false,
+   "rule": "carbon-intensity.live-grid.gb-forecast-until-settled",
+   "source": "carbon_badge/grid.py#_uk_factor",
+   "status": "verified",
+   "test": "tests/test_carbon_badge.py#test_uk_falls_back_to_forecast_within_the_current_half_hour",
+   "tests": [
+    "tests/test_carbon_badge.py#test_uk_falls_back_to_forecast_within_the_current_half_hour"
+   ]
+  },
+  "carbon-intensity.live-grid-data.003": {
+   "file": "specs/carbon-intensity/live-grid-data/live-regional-grid-intensity.feature",
+   "fingerprint": "d0023c395f4c",
+   "human": false,
+   "rule": "carbon-intensity.live-grid.country-consumption-zone-lifecycle",
+   "source": "carbon_badge/grid.py#_ci_api_factor",
+   "status": "verified",
+   "test": "tests/test_carbon_badge.py#test_ci_api_reports_consumption_lifecycle_for_a_country",
+   "tests": [
+    "tests/test_carbon_badge.py#test_ci_api_reports_consumption_lifecycle_for_a_country",
+    "tests/test_carbon_badge.py#test_ci_api_zone_falls_back_to_lifecycle"
+   ]
+  },
+  "carbon-intensity.live-grid-data.004": {
+   "file": "specs/carbon-intensity/live-grid-data/live-regional-grid-intensity.feature",
+   "fingerprint": "e5d0a646d2e7",
+   "human": false,
+   "rule": "carbon-intensity.live-grid.annual-average-never-reported-as-live",
+   "source": "carbon_badge/grid.py#_measured_reading",
+   "status": "verified",
+   "test": "tests/test_carbon_badge.py#test_ci_api_refuses_an_annual_average",
+   "tests": [
+    "tests/test_carbon_badge.py#test_ci_api_refuses_an_annual_average"
+   ]
+  },
+  "carbon-intensity.live-grid-data.005": {
+   "file": "specs/carbon-intensity/live-grid-data/live-regional-grid-intensity.feature",
+   "fingerprint": "e5d0a646d2e7",
+   "human": false,
+   "rule": "carbon-intensity.live-grid.stale-snapshot-refused",
+   "source": "carbon_badge/grid.py#_measured_reading",
+   "status": "verified",
+   "test": "tests/test_carbon_badge.py#test_ci_api_refuses_a_missed_pipeline_run",
+   "tests": [
+    "tests/test_carbon_badge.py#test_ci_api_refuses_a_missed_pipeline_run"
+   ]
+  },
+  "carbon-intensity.live-grid-data.006": {
+   "file": "specs/carbon-intensity/live-grid-data/live-regional-grid-intensity.feature",
+   "fingerprint": "e2ee78d9ea28",
+   "human": false,
+   "rule": "carbon-intensity.live-grid.us-fuel-mix-newest-hour",
+   "source": "carbon_badge/grid.py#_eia_factor",
+   "status": "verified",
+   "test": "tests/test_carbon_badge.py#test_eia_weights_the_fuel_mix_of_the_newest_hour_only",
+   "tests": [
+    "tests/test_carbon_badge.py#test_eia_weights_the_fuel_mix_of_the_newest_hour_only",
+    "tests/test_carbon_badge.py#test_eia_ignores_negative_generation"
+   ]
+  },
+  "carbon-intensity.live-grid-data.007": {
+   "file": "specs/carbon-intensity/live-grid-data/live-regional-grid-intensity.feature",
+   "fingerprint": "494e85b24575",
+   "human": false,
+   "rule": "carbon-intensity.live-grid.no-live-reading-uses-annual-average",
+   "source": "carbon_badge/grid.py#live_region_factor",
+   "status": "verified",
+   "test": "tests/test_carbon_badge.py#test_us_regions_need_a_key_and_degrade_without_one",
+   "tests": [
+    "tests/test_carbon_badge.py#test_us_regions_need_a_key_and_degrade_without_one",
+    "tests/test_carbon_badge.py#test_unknown_region_falls_back_to_the_annual_average"
+   ]
+  },
+  "carbon-intensity.live-grid-data.008": {
+   "file": "specs/carbon-intensity/live-grid-data/live-regional-grid-intensity.feature",
+   "fingerprint": "494e85b24575",
+   "human": false,
+   "rule": "carbon-intensity.live-grid.provider-failure-never-fails-refresh",
+   "source": "carbon_badge/grid.py#live_region_factor",
+   "status": "verified",
+   "test": "tests/test_carbon_badge.py#test_a_failing_provider_never_breaks_the_refresh",
+   "tests": [
+    "tests/test_carbon_badge.py#test_a_failing_provider_never_breaks_the_refresh",
+    "tests/test_carbon_badge.py#test_ci_api_failure_leaves_the_annual_average_standing"
+   ]
+  },
+  "carbon-intensity.live-grid-data.009": {
+   "file": "specs/carbon-intensity/live-grid-data/live-grid-intensity-electricity-maps.feature",
+   "fingerprint": "2aaaa04303ed",
+   "human": false,
+   "rule": "grid.live.uses-24h-mean",
+   "source": "carbon_badge/providers.py#live_grid_intensity",
+   "status": "verified",
+   "test": "tests/test_carbon_badge.py#test_grid_factor_averages_a_day_not_an_instant",
+   "tests": [
+    "tests/test_carbon_badge.py#test_grid_factor_averages_a_day_not_an_instant",
+    "tests/test_carbon_badge.py#test_grid_factor_ignores_gaps_in_the_history"
+   ]
+  },
+  "carbon-intensity.live-grid-data.010": {
+   "file": "specs/carbon-intensity/live-grid-data/live-grid-intensity-electricity-maps.feature",
+   "fingerprint": "2aaaa04303ed",
+   "human": false,
+   "rule": "grid.live.falls-back-to-instant-reading",
+   "source": "carbon_badge/providers.py#live_grid_intensity",
+   "status": "verified",
+   "test": "tests/test_carbon_badge.py#test_grid_factor_falls_back_to_the_instant_reading",
+   "tests": [
+    "tests/test_carbon_badge.py#test_grid_factor_falls_back_to_the_instant_reading",
+    "tests/test_carbon_badge.py#test_live_grid_intensity_injected_client"
+   ]
+  },
+  "carbon-intensity.regional-factors.001": {
+   "file": "specs/carbon-intensity/regional-factors/regional-grid-factors.feature",
+   "fingerprint": "e75e603fa74f",
+   "human": false,
+   "rule": "carbon.regional-factors.explicit-then-region-then-world",
+   "source": "carbon_badge/power.py#grid_factor_for",
+   "status": "verified",
+   "test": "tests/test_carbon_badge.py#test_unknown_region_falls_back_to_the_annual_average",
+   "tests": [
+    "tests/test_carbon_badge.py#test_unknown_region_falls_back_to_the_annual_average",
+    "tests/test_carbon_badge.py#test_resolver_caches_per_region_and_honours_an_explicit_figure"
+   ]
+  },
+  "developer-tooling.container-image.001": {
+   "file": "specs/developer-tooling/container-image/container-image.feature",
+   "fingerprint": "68e4dee3d8d3",
+   "human": false,
+   "rule": "distribution.container-image.entrypoint-is-cli",
+   "source": "Dockerfile#ENTRYPOINT",
+   "status": "inferred",
+   "test": "",
+   "tests": []
+  },
+  "developer-tooling.container-image.002": {
+   "file": "specs/developer-tooling/container-image/container-image.feature",
+   "fingerprint": "b0e998760f14",
+   "human": false,
+   "rule": "distribution.container-image.runs-as-non-root",
+   "source": "Dockerfile#USER",
+   "status": "inferred",
+   "test": "",
+   "tests": []
+  },
+  "developer-tooling.installation.001": {
+   "file": "specs/developer-tooling/installation/one-line-installer.feature",
+   "fingerprint": "2f9d7ea7bd5b",
+   "human": false,
+   "rule": "install.installer.prefers-pipx-falls-back-to-pip-user",
+   "source": "install.sh#install.sh",
+   "status": "inferred",
+   "test": "",
+   "tests": []
+  },
+  "developer-tooling.installation.002": {
+   "file": "specs/developer-tooling/installation/one-line-installer.feature",
+   "fingerprint": "2f9d7ea7bd5b",
+   "human": false,
+   "rule": "install.installer.failure-aborts-without-success-message",
+   "source": "install.sh#install.sh",
+   "status": "inferred",
+   "test": "",
+   "tests": []
+  },
+  "developer-tooling.installation.003": {
+   "file": "specs/developer-tooling/installation/one-line-installer.feature",
+   "fingerprint": "2f9d7ea7bd5b",
+   "human": false,
+   "rule": "install.installer.installs-unpinned-default-branch",
+   "source": "install.sh#install.sh",
+   "status": "inferred",
+   "test": "",
+   "tests": []
+  },
+  "energy-estimation.cpu-load.001": {
+   "file": "specs/energy-estimation/cpu-load/cpu-load-adjustment.feature",
+   "fingerprint": "50c327290151",
+   "human": false,
+   "rule": "energy.cpu-load.only-variable-draw-scales",
+   "source": "carbon_badge/power.py#apply_load_factor",
+   "status": "inferred",
+   "test": "",
+   "tests": []
+  },
+  "energy-estimation.cpu-load.002": {
+   "file": "specs/energy-estimation/cpu-load/cpu-load-adjustment.feature",
+   "fingerprint": "50c327290151",
+   "human": false,
+   "rule": "energy.cpu-load.declared-load-beats-measured",
+   "source": "carbon_badge/power.py#apply_load_factor",
+   "status": "inferred",
+   "test": "",
+   "tests": []
+  },
+  "energy-estimation.runner-power.001": {
+   "file": "specs/energy-estimation/runner-power/job-by-job-run-pricing.feature",
+   "fingerprint": "b072353f889b",
+   "human": false,
+   "rule": "energy-estimation.runner-power.job-charged-at-own-runner-draw",
+   "source": "carbon_badge/ci.py#_api_run_detail",
+   "status": "verified",
+   "test": "tests/test_carbon_badge.py#test_a_partly_instrumented_run_does_not_lose_its_other_jobs",
+   "tests": [
+    "tests/test_carbon_badge.py#test_a_partly_instrumented_run_does_not_lose_its_other_jobs",
+    "tests/test_carbon_badge.py#test_github_client_over_real_http"
+   ]
+  },
+  "energy-estimation.runner-power.002": {
+   "file": "specs/energy-estimation/runner-power/job-by-job-run-pricing.feature",
+   "fingerprint": "b072353f889b",
+   "human": false,
+   "rule": "energy-estimation.runner-power.unknown-runner-charged-at-baseline",
+   "source": "carbon_badge/ci.py#_api_run_detail",
+   "status": "verified",
+   "test": "tests/test_carbon_badge.py#test_unknown_runners_are_charged_not_skipped",
+   "tests": [
+    "tests/test_carbon_badge.py#test_unknown_runners_are_charged_not_skipped",
+    "tests/test_carbon_badge.py#test_declaring_an_unknown_runner_clears_the_guess"
+   ]
+  },
+  "energy-estimation.runner-power.003": {
+   "file": "specs/energy-estimation/runner-power/job-by-job-run-pricing.feature",
+   "fingerprint": "b072353f889b",
+   "human": false,
+   "rule": "energy-estimation.job-duration.unrun-jobs-not-charged",
+   "source": "carbon_badge/ci.py#_api_run_detail",
+   "status": "verified",
+   "test": "tests/test_carbon_badge.py#test_skipped_jobs_contribute_no_energy",
+   "tests": [
+    "tests/test_carbon_badge.py#test_skipped_jobs_contribute_no_energy"
+   ]
+  },
+  "energy-estimation.runner-power.004": {
+   "file": "specs/energy-estimation/runner-power/pricing-runner-power.feature",
+   "fingerprint": "380169c9fc14",
+   "human": false,
+   "rule": "energy.runner-power.hosted-label-defaults",
+   "source": "carbon_badge/power.py#runner_power_w",
+   "status": "verified",
+   "test": "tests/test_carbon_badge.py#test_runner_power_by_type",
+   "tests": [
+    "tests/test_carbon_badge.py#test_runner_power_by_type",
+    "tests/test_carbon_badge.py#test_arm_and_gpu_are_priced_before_their_os"
+   ]
+  },
+  "energy-estimation.runner-power.005": {
+   "file": "specs/energy-estimation/runner-power/pricing-runner-power.feature",
+   "fingerprint": "971c614f5932",
+   "human": false,
+   "rule": "energy.runner-power.core-count-scales-affinely",
+   "source": "carbon_badge/power.py#_table_watts",
+   "status": "verified",
+   "test": "tests/test_carbon_badge.py#test_core_count_parsed_from_every_common_label_shape",
+   "tests": [
+    "tests/test_carbon_badge.py#test_core_count_parsed_from_every_common_label_shape",
+    "tests/test_carbon_badge.py#test_gpu_is_not_core_scaled_but_arm_is"
+   ]
+  },
+  "energy-estimation.runner-power.006": {
+   "file": "specs/energy-estimation/runner-power/pricing-runner-power.feature",
+   "fingerprint": "4289bc4b2bcb",
+   "human": false,
+   "rule": "energy.runner-power.declared-watts-take-precedence",
+   "source": "carbon_badge/power.py#_declared_watts",
+   "status": "verified",
+   "test": "tests/test_carbon_badge.py#test_bare_number_prices_every_runner",
+   "tests": [
+    "tests/test_carbon_badge.py#test_bare_number_prices_every_runner",
+    "tests/test_carbon_badge.py#test_specific_label_still_beats_the_blanket_figure",
+    "tests/test_carbon_badge.py#test_runner_watts_overrides_price_custom_and_self_hosted_labels",
+    "tests/test_carbon_badge.py#test_arm_and_gpu_defaults_are_overridable"
+   ]
+  },
+  "energy-estimation.runner-power.007": {
+   "file": "specs/energy-estimation/runner-power/pricing-runner-power.feature",
+   "fingerprint": "be6690ac72c3",
+   "human": false,
+   "rule": "energy.runner-power.malformed-declaration-refused",
+   "source": "carbon_badge/power.py#parse_runner_watts",
+   "status": "verified",
+   "test": "tests/test_carbon_badge.py#test_parse_runner_watts_rejects_malformed_input",
+   "tests": [
+    "tests/test_carbon_badge.py#test_parse_runner_watts_rejects_malformed_input"
+   ]
+  },
+  "energy-estimation.runner-power.008": {
+   "file": "specs/energy-estimation/runner-power/pricing-runner-power.feature",
+   "fingerprint": "1628f545f264",
+   "human": false,
+   "rule": "energy.runner-power.self-reported-specs-match-label-pricing",
+   "source": "carbon_badge/power.py#watts_from_specs",
+   "status": "verified",
+   "test": "tests/test_carbon_badge.py#test_watts_from_specs_is_platform_aware",
+   "tests": [
+    "tests/test_carbon_badge.py#test_watts_from_specs_is_platform_aware",
+    "tests/test_carbon_badge.py#test_watts_from_specs_reproduces_the_known_runner"
+   ]
+  },
+  "energy-estimation.runner-power.009": {
+   "file": "specs/energy-estimation/runner-power/pricing-runner-power.feature",
+   "fingerprint": "2d37b03a9254",
+   "human": false,
+   "rule": "energy.runner-power.estimated-classes-disclosed",
+   "source": "carbon_badge/power.py#_warn_estimated_classes",
+   "status": "verified",
+   "test": "tests/test_carbon_badge.py#test_the_warning_names_the_class_the_figure_and_the_replacement",
+   "tests": [
+    "tests/test_carbon_badge.py#test_the_warning_names_the_class_the_figure_and_the_replacement",
+    "tests/test_carbon_badge.py#test_a_declared_figure_is_not_reported_as_an_estimate",
+    "tests/test_carbon_badge.py#test_pricing_a_job_on_an_estimated_class_says_so_and_names_the_flag",
+    "tests/test_carbon_badge.py#test_the_self_reported_route_admits_to_the_same_estimate"
+   ]
+  },
+  "energy-estimation.runner-power.010": {
+   "file": "specs/energy-estimation/runner-power/pricing-runner-power.feature",
+   "fingerprint": "971c614f5932",
+   "human": false,
+   "rule": "energy.runner-power.estimated-class-job-count",
+   "source": "carbon_badge/power.py#_table_watts",
+   "status": "inferred",
+   "test": "",
+   "tests": []
+  },
+  "measured-data.artifact-reading.002": {
+   "file": "specs/measured-data/artifact-reading/reading-carbon-artifacts.feature",
+   "fingerprint": "e06786a5804f",
+   "human": false,
+   "rule": "measured-data.artifacts.thirty-day-window",
+   "source": "carbon_badge/artifacts.py#artifact_kwh_by_run",
+   "status": "verified",
+   "test": "tests/test_carbon_badge.py#test_expired_and_out_of_window_markers_are_ignored",
+   "tests": [
+    "tests/test_carbon_badge.py#test_expired_and_out_of_window_markers_are_ignored"
+   ]
+  },
+  "measured-data.artifact-reading.003": {
+   "file": "specs/measured-data/artifact-reading/reading-carbon-artifacts.feature",
+   "fingerprint": "e06786a5804f",
+   "human": false,
+   "rule": "measured-data.artifacts.energy-from-recorded-hardware",
+   "source": "carbon_badge/artifacts.py#artifact_kwh_by_run",
+   "status": "verified",
+   "test": "tests/test_carbon_badge.py#test_artifact_kwh_by_run_keys_by_run_and_downloads_nothing",
+   "tests": [
+    "tests/test_carbon_badge.py#test_artifact_kwh_by_run_keys_by_run_and_downloads_nothing"
+   ]
+  },
+  "measured-data.artifact-reading.005": {
+   "file": "specs/measured-data/artifact-reading/reading-carbon-artifacts.feature",
+   "fingerprint": "e06786a5804f",
+   "human": false,
+   "rule": "measured-data.artifacts.declared-blanket-watts-win",
+   "source": "carbon_badge/artifacts.py#artifact_kwh_by_run",
+   "status": "verified",
+   "test": "tests/test_carbon_badge.py#test_declared_watts_still_beat_the_model",
+   "tests": [
+    "tests/test_carbon_badge.py#test_declared_watts_still_beat_the_model"
+   ]
+  },
+  "measured-data.artifact-reading.006": {
+   "file": "specs/measured-data/artifact-reading/reading-carbon-artifacts.feature",
+   "fingerprint": "19df256ea2bc",
+   "human": false,
+   "rule": "measured-data.artifacts.priced-at-recorded-region",
+   "source": "carbon_badge/artifacts.py#RegionFactors",
+   "status": "verified",
+   "test": "tests/test_carbon_badge.py#test_resolver_caches_per_region_and_honours_an_explicit_figure",
+   "tests": [
+    "tests/test_carbon_badge.py#test_resolver_caches_per_region_and_honours_an_explicit_figure",
+    "tests/test_carbon_badge.py#test_ci_api_failure_leaves_the_annual_average_standing",
+    "tests/test_carbon_badge.py#test_unknown_region_falls_back_to_the_annual_average"
+   ]
+  },
+  "measured-data.artifact-reading.007": {
+   "file": "specs/measured-data/artifact-reading/reading-carbon-artifacts.feature",
+   "fingerprint": "92505ab17a55",
+   "human": false,
+   "rule": "measured-data.artifacts.partial-runs-priced-from-api",
+   "source": "carbon_badge/artifacts.py#_expected_markers",
+   "status": "verified",
+   "test": "tests/test_carbon_badge.py#test_a_partly_instrumented_run_does_not_lose_its_other_jobs",
+   "tests": [
+    "tests/test_carbon_badge.py#test_a_partly_instrumented_run_does_not_lose_its_other_jobs",
+    "tests/test_carbon_badge.py#test_markers_are_not_double_counted_when_a_run_is_topped_up",
+    "tests/test_carbon_badge.py#test_an_unusually_small_newest_run_cannot_lower_the_bar",
+    "tests/test_carbon_badge.py#test_skipped_jobs_do_not_make_completeness_unreachable"
+   ]
+  },
+  "measured-data.artifact-reading.008": {
+   "file": "specs/measured-data/artifact-reading/reading-carbon-artifacts.feature",
+   "fingerprint": "addd55506686",
+   "human": false,
+   "rule": "measured-data.artifacts.truncated-listing-warned",
+   "source": "carbon_badge/artifacts.py#list_artifacts",
+   "status": "inferred",
+   "test": "",
+   "tests": []
+  },
+  "measured-data.artifact-reading.009": {
+   "file": "specs/measured-data/artifact-reading/carbon-marker-format.feature",
+   "fingerprint": "d03d21f0863f",
+   "human": false,
+   "rule": "measured.markers.v1-and-v2-recognised",
+   "source": "carbon_badge/base.py#_match_marker",
+   "status": "verified",
+   "test": "tests/test_carbon_badge.py#test_parse_carbon_artifact",
+   "tests": [
+    "tests/test_carbon_badge.py#test_parse_carbon_artifact",
+    "tests/test_carbon_badge.py#test_v2_markers_carry_a_measured_load",
+    "tests/test_carbon_badge.py#test_the_slug_is_read_off_the_marker_name"
+   ]
+  },
+  "measured-data.artifact-reading.010": {
+   "file": "specs/measured-data/artifact-reading/carbon-marker-format.feature",
+   "fingerprint": "d03d21f0863f",
+   "human": false,
+   "rule": "measured.markers.foreign-names-ignored",
+   "source": "carbon_badge/base.py#_match_marker",
+   "status": "verified",
+   "test": "tests/test_carbon_badge.py#test_parse_carbon_artifact",
+   "tests": [
+    "tests/test_carbon_badge.py#test_parse_carbon_artifact",
+    "tests/test_carbon_badge.py#test_the_slug_is_read_off_the_marker_name"
+   ]
+  },
+  "measured-data.artifact-reading.011": {
+   "file": "specs/measured-data/artifact-reading/carbon-marker-format.feature",
+   "fingerprint": "d03d21f0863f",
+   "human": false,
+   "rule": "measured.markers.impossible-cpu-load-rejected",
+   "source": "carbon_badge/base.py#_match_marker",
+   "status": "verified",
+   "test": "tests/test_carbon_badge.py#test_v2_markers_carry_a_measured_load",
+   "tests": [
+    "tests/test_carbon_badge.py#test_v2_markers_carry_a_measured_load"
+   ]
+  },
+  "measured-data.reconciliation.001": {
+   "file": "specs/measured-data/reconciliation/combining-self-reported-and-api-priced-runs.feature",
+   "fingerprint": "af81c5954bb2",
+   "human": false,
+   "rule": "measured.runs.complete-run-uses-its-own-measurement",
+   "source": "carbon_badge/providers.py#ci_kwh_last_30d",
+   "status": "verified",
+   "test": "tests/test_carbon_badge.py#test_full_coverage_costs_one_sample_per_workflow",
+   "tests": [
+    "tests/test_carbon_badge.py#test_full_coverage_costs_one_sample_per_workflow",
+    "tests/test_carbon_badge.py#test_partial_instrumentation_tops_up_from_the_api"
+   ]
+  },
+  "measured-data.reconciliation.003": {
+   "file": "specs/measured-data/reconciliation/combining-self-reported-and-api-priced-runs.feature",
+   "fingerprint": "af81c5954bb2",
+   "human": false,
+   "rule": "measured.runs.ignore-self-reported-prices-everything-from-api",
+   "source": "carbon_badge/providers.py#ci_kwh_last_30d",
+   "status": "verified",
+   "test": "tests/test_carbon_badge.py#test_ignore_self_reported_does_not_consult_artifacts",
+   "tests": [
+    "tests/test_carbon_badge.py#test_ignore_self_reported_does_not_consult_artifacts"
+   ]
+  },
+  "measured-data.reconciliation.004": {
+   "file": "specs/measured-data/reconciliation/combining-self-reported-and-api-priced-runs.feature",
+   "fingerprint": "af81c5954bb2",
+   "human": false,
+   "rule": "measured.runs.api-priced-runs-use-repo-grid-factor",
+   "source": "carbon_badge/providers.py#ci_kwh_last_30d",
+   "status": "inferred",
+   "test": "",
+   "tests": []
+  },
+  "measured-data.reconciliation.005": {
+   "file": "specs/measured-data/reconciliation/combining-self-reported-and-api-priced-runs.feature",
+   "fingerprint": "af81c5954bb2",
+   "human": false,
+   "rule": "measured.runs.coverage-reported-to-operator",
+   "source": "carbon_badge/providers.py#ci_kwh_last_30d",
+   "status": "inferred",
+   "test": "",
+   "tests": []
+  },
+  "measured-data.reconciliation.006": {
+   "file": "specs/measured-data/reconciliation/estimate-reconciliation.feature",
+   "fingerprint": "429eb1dbf37a",
+   "human": false,
+   "rule": "measured-data.reconciliation.refused-without-github-markers",
+   "source": "carbon_badge/cli.py#main",
+   "status": "verified",
+   "test": "tests/test_carbon_badge.py#test_reconcile_refuses_the_combinations_that_cannot_work",
+   "tests": [
+    "tests/test_carbon_badge.py#test_reconcile_refuses_the_combinations_that_cannot_work"
+   ]
+  },
+  "measured-data.reconciliation.007": {
+   "file": "specs/measured-data/reconciliation/estimate-reconciliation.feature",
+   "fingerprint": "6f8a7c53147a",
+   "human": false,
+   "rule": "measured-data.reconciliation.only-fully-instrumented-runs",
+   "source": "carbon_badge/reconcile.py#reconcile_last_30d",
+   "status": "verified",
+   "test": "tests/test_carbon_badge.py#test_a_partly_instrumented_run_is_not_compared",
+   "tests": [
+    "tests/test_carbon_badge.py#test_a_partly_instrumented_run_is_not_compared"
+   ]
+  },
+  "measured-data.reconciliation.008": {
+   "file": "specs/measured-data/reconciliation/estimate-reconciliation.feature",
+   "fingerprint": "6f8a7c53147a",
+   "human": false,
+   "rule": "measured-data.reconciliation.setup-time-is-unseen-seconds",
+   "source": "carbon_badge/reconcile.py#reconcile_last_30d",
+   "status": "verified",
+   "test": "tests/test_carbon_badge.py#test_a_run_the_marker_and_the_api_agree_on_shows_no_setup_gap",
+   "tests": [
+    "tests/test_carbon_badge.py#test_a_run_the_marker_and_the_api_agree_on_shows_no_setup_gap",
+    "tests/test_carbon_badge.py#test_the_setup_gap_is_the_seconds_the_marker_never_saw"
+   ]
+  },
+  "measured-data.reconciliation.009": {
+   "file": "specs/measured-data/reconciliation/estimate-reconciliation.feature",
+   "fingerprint": "6f8a7c53147a",
+   "human": false,
+   "rule": "measured-data.reconciliation.watts-model-term",
+   "source": "carbon_badge/reconcile.py#reconcile_last_30d",
+   "status": "verified",
+   "test": "tests/test_carbon_badge.py#test_a_watts_disagreement_is_not_reported_as_setup_time",
+   "tests": [
+    "tests/test_carbon_badge.py#test_a_watts_disagreement_is_not_reported_as_setup_time"
+   ]
+  },
+  "measured-data.reconciliation.010": {
+   "file": "specs/measured-data/reconciliation/estimate-reconciliation.feature",
+   "fingerprint": "6f8a7c53147a",
+   "human": false,
+   "rule": "measured-data.reconciliation.grid-factor-term",
+   "source": "carbon_badge/reconcile.py#reconcile_last_30d",
+   "status": "verified",
+   "test": "tests/test_carbon_badge.py#test_the_grid_gap_is_separated_from_the_energy_gap",
+   "tests": [
+    "tests/test_carbon_badge.py#test_the_grid_gap_is_separated_from_the_energy_gap",
+    "tests/test_carbon_badge.py#test_an_explicit_grid_figure_removes_the_grid_term"
+   ]
+  },
+  "measured-data.reconciliation.011": {
+   "file": "specs/measured-data/reconciliation/estimate-reconciliation.feature",
+   "fingerprint": "2ede4463684b",
+   "human": false,
+   "rule": "measured-data.reconciliation.jobs-matched-by-name",
+   "source": "carbon_badge/reconcile.py#_marker_seconds_by_run",
+   "status": "verified",
+   "test": "tests/test_carbon_badge.py#test_jobs_are_matched_by_name_between_the_two_paths",
+   "tests": [
+    "tests/test_carbon_badge.py#test_jobs_are_matched_by_name_between_the_two_paths",
+    "tests/test_carbon_badge.py#test_an_unmatched_job_still_counts_in_its_run"
+   ]
+  },
+  "measured-data.reconciliation.012": {
+   "file": "specs/measured-data/reconciliation/estimate-reconciliation.feature",
+   "fingerprint": "4fa041ebc59b",
+   "human": false,
+   "rule": "measured-data.reconciliation.report-explains-divergence",
+   "source": "carbon_badge/reconcile.py#format_reconciliation",
+   "status": "verified",
+   "test": "tests/test_carbon_badge.py#test_the_report_names_all_three_terms",
+   "tests": [
+    "tests/test_carbon_badge.py#test_the_report_names_all_three_terms"
+   ]
+  },
+  "measured-data.reconciliation.013": {
+   "file": "specs/measured-data/reconciliation/estimate-reconciliation.feature",
+   "fingerprint": "562930a98dc8",
+   "human": false,
+   "rule": "estimate.runners.undeclared-runner-named-with-fix",
+   "source": "carbon_badge/reconcile.py#_warn_undeclared_runners",
+   "status": "verified",
+   "test": "tests/test_carbon_badge.py#test_undeclared_warning_never_suggests_a_command_that_will_not_parse",
+   "tests": [
+    "tests/test_carbon_badge.py#test_undeclared_warning_never_suggests_a_command_that_will_not_parse"
+   ]
+  },
+  "measured-data.record-action.001": {
+   "file": "specs/measured-data/record-action/recording-job-measurements.feature",
+   "fingerprint": "426063a375a2",
+   "human": false,
+   "rule": "measured-data.record.artifact-name-encodes-measurement",
+   "source": "record/src/post.js#recordJob",
+   "status": "verified",
+   "test": "record/src/action.test.js#main then post names the artifact after the job's measurement",
+   "tests": [
+    "record/src/action.test.js#main then post names the artifact after the job's measurement",
+    "record/src/action.test.js#post uploads and finalises the artifact when the backend accepts it"
+   ]
+  },
+  "measured-data.record-action.002": {
+   "file": "specs/measured-data/record-action/recording-job-measurements.feature",
+   "fingerprint": "f7e24c34cb7d",
+   "human": false,
+   "rule": "measured-data.record.hosted-duration-includes-setup",
+   "source": "record/src/duration.js#jobSeconds",
+   "status": "verified",
+   "test": "record/src/duration.test.js#self-hosted records step time only",
+   "tests": [
+    "record/src/duration.test.js#self-hosted records step time only",
+    "record/src/duration.test.js#hosted records the VM lifetime, which includes setup",
+    "record/src/duration.test.js#hosted falls back when uptime is not measuring this job",
+    "record/src/duration.test.js#hosted falls back when uptime is below the elapsed time"
+   ]
+  },
+  "measured-data.record-action.003": {
+   "file": "specs/measured-data/record-action/recording-job-measurements.feature",
+   "fingerprint": "c0df6a458584",
+   "human": false,
+   "rule": "measured-data.record.cpu-utilisation-only-when-trustworthy",
+   "source": "record/src/load.js#cpuLoadPercent",
+   "status": "verified",
+   "test": "record/src/load.test.js#a hosted runner reads the counters since boot",
+   "tests": [
+    "record/src/load.test.js#a hosted runner reads the counters since boot",
+    "record/src/load.test.js#elsewhere it reads the interval since the snapshot",
+    "record/src/load.test.js#no snapshot and no uptime reading is no figure",
+    "record/src/load.test.js#counters that did not move or went backwards are refused",
+    "record/src/action.test.js#post uploads and finalises the artifact when the backend accepts it"
+   ]
+  },
+  "measured-data.record-action.004": {
+   "file": "specs/measured-data/record-action/recording-job-measurements.feature",
+   "fingerprint": "426063a375a2",
+   "human": false,
+   "rule": "measured-data.record.region-declared-or-detected",
+   "source": "record/src/post.js#recordJob",
+   "status": "verified",
+   "test": "record/src/action.test.js#main then post names the artifact after the job's measurement",
+   "tests": [
+    "record/src/action.test.js#main then post names the artifact after the job's measurement"
+   ]
+  },
+  "measured-data.record-action.005": {
+   "file": "specs/measured-data/record-action/recording-job-measurements.feature",
+   "fingerprint": "426063a375a2",
+   "human": false,
+   "rule": "measured-data.record.never-fails-the-job",
+   "source": "record/src/post.js#recordJob",
+   "status": "verified",
+   "test": "record/src/action.test.js#main then post names the artifact after the job's measurement",
+   "tests": [
+    "record/src/action.test.js#main then post names the artifact after the job's measurement"
+   ]
+  },
+  "measured-data.record-action.006": {
+   "file": "specs/measured-data/record-action/recording-job-measurements.feature",
+   "fingerprint": "426063a375a2",
+   "human": false,
+   "rule": "measured-data.record.retention-days",
+   "source": "record/src/post.js#recordJob",
+   "status": "verified",
+   "test": "record/src/action.test.js#post uploads and finalises the artifact when the backend accepts it",
+   "tests": [
+    "record/src/action.test.js#post uploads and finalises the artifact when the backend accepts it"
+   ]
+  },
+  "measured-data.record-action.007": {
+   "file": "specs/measured-data/record-action/recording-job-measurements.feature",
+   "fingerprint": "24ff91055149",
+   "human": false,
+   "rule": "measured-data.record.cancelled-jobs-recorded",
+   "source": "record/action.yml#runs",
+   "status": "inferred",
+   "test": "",
+   "tests": []
+  },
+  "usage-collection.github-actions.001": {
+   "file": "specs/usage-collection/github-actions/github-actions-collection.feature",
+   "fingerprint": "5c93b1253f2f",
+   "human": false,
+   "rule": "usage-collection.github-actions.truncation-warned",
+   "source": "carbon_badge/ci.py#_warn_if_truncated",
+   "status": "verified",
+   "test": "tests/test_carbon_badge.py#test_pagination_cap_is_reported_not_silent",
+   "tests": [
+    "tests/test_carbon_badge.py#test_pagination_cap_is_reported_not_silent",
+    "tests/test_carbon_badge.py#test_no_warning_when_everything_was_read"
+   ]
+  },
+  "usage-collection.github-actions.002": {
+   "file": "specs/usage-collection/github-actions/github-actions-collection.feature",
+   "fingerprint": "0ac5bc3d1243",
+   "human": false,
+   "rule": "usage-collection.github-actions.every-job-of-a-run-counted",
+   "source": "carbon_badge/ci.py#run_jobs",
+   "status": "verified",
+   "test": "tests/test_carbon_badge.py#test_run_jobs_pages_past_thirty",
+   "tests": [
+    "tests/test_carbon_badge.py#test_run_jobs_pages_past_thirty",
+    "tests/test_carbon_badge.py#test_github_client_over_real_http"
+   ]
+  },
+  "usage-collection.github-actions.003": {
+   "file": "specs/usage-collection/github-actions/github-actions-collection.feature",
+   "fingerprint": "a2d979d7ad93",
+   "human": false,
+   "rule": "usage-collection.github-actions.token-authenticates-requests",
+   "source": "carbon_badge/ci.py#_get_pages",
+   "status": "verified",
+   "test": "tests/test_carbon_badge.py#test_github_client_over_real_http",
+   "tests": [
+    "tests/test_carbon_badge.py#test_github_client_over_real_http"
+   ]
+  },
+  "usage-collection.gitlab-pipelines.001": {
+   "file": "specs/usage-collection/gitlab-pipelines/gitlab-job-usage.feature",
+   "fingerprint": "b60548b450af",
+   "human": false,
+   "rule": "gitlab.jobs.only-recent-jobs-with-duration-charged",
+   "source": "carbon_badge/providers.py#gitlab_kwh_last_30d",
+   "status": "inferred",
+   "test": "",
+   "tests": []
+  },
+  "usage-collection.gitlab-pipelines.002": {
+   "file": "specs/usage-collection/gitlab-pipelines/gitlab-job-usage.feature",
+   "fingerprint": "b60548b450af",
+   "human": false,
+   "rule": "gitlab.runners.undeclared-runner-charged-at-baseline",
+   "source": "carbon_badge/providers.py#gitlab_kwh_last_30d",
+   "status": "verified",
+   "test": "tests/test_carbon_badge.py#test_gitlab_kwh_charges_self_managed_runners",
+   "tests": [
+    "tests/test_carbon_badge.py#test_gitlab_kwh_charges_self_managed_runners",
+    "tests/test_carbon_badge.py#test_gitlab_takes_an_injected_getter"
+   ]
+  },
+  "usage-collection.gitlab-pipelines.003": {
+   "file": "specs/usage-collection/gitlab-pipelines/gitlab-job-usage.feature",
+   "fingerprint": "b60548b450af",
+   "human": false,
+   "rule": "gitlab.runners.declared-watts-match-tags-or-description",
+   "source": "carbon_badge/providers.py#gitlab_kwh_last_30d",
+   "status": "verified",
+   "test": "tests/test_carbon_badge.py#test_gitlab_runner_watts_matches_on_tags",
+   "tests": [
+    "tests/test_carbon_badge.py#test_gitlab_runner_watts_matches_on_tags",
+    "tests/test_carbon_badge.py#test_gitlab_honours_a_blanket_override_on_untagged_jobs"
+   ]
+  },
+  "usage-collection.gitlab-pipelines.004": {
+   "file": "specs/usage-collection/gitlab-pipelines/gitlab-job-usage.feature",
+   "fingerprint": "b60548b450af",
+   "human": false,
+   "rule": "gitlab.jobs.page-cap-warns-of-undercount",
+   "source": "carbon_badge/providers.py#gitlab_kwh_last_30d",
+   "status": "inferred",
+   "test": "",
+   "tests": []
+  },
+  "usage-collection.other-ci-platforms.001": {
+   "file": "specs/usage-collection/other-ci-platforms/devtron-badge-refresh.feature",
+   "fingerprint": "d96d928c870e",
+   "human": false,
+   "rule": "ci-platforms.devtron.target-repo-required",
+   "source": "examples/ci-platforms/devtron-task.sh#TARGET_REPO",
+   "status": "inferred",
+   "test": "",
+   "tests": []
+  },
+  "usage-collection.other-ci-platforms.002": {
+   "file": "specs/usage-collection/other-ci-platforms/devtron-badge-refresh.feature",
+   "fingerprint": "766098832c2e",
+   "human": false,
+   "rule": "ci-platforms.devtron.badge-written-and-printed",
+   "source": "examples/ci-platforms/devtron-task.sh#docker run",
+   "status": "inferred",
+   "test": "",
+   "tests": []
+  },
+  "usage-collection.other-ci-platforms.003": {
+   "file": "specs/usage-collection/other-ci-platforms/devtron-badge-refresh.feature",
+   "fingerprint": "766098832c2e",
+   "human": false,
+   "rule": "ci-platforms.devtron.provider-token-forwarded",
+   "source": "examples/ci-platforms/devtron-task.sh#docker run",
+   "status": "inferred",
+   "test": "",
+   "tests": []
+  },
+  "usage-collection.other-ci-platforms.004": {
+   "file": "specs/usage-collection/other-ci-platforms/devtron-badge-refresh.feature",
+   "fingerprint": "cc14f180c5b3",
+   "human": false,
+   "rule": "ci-platforms.devtron.fixed-grid-intensity-always-applied",
+   "source": "examples/ci-platforms/devtron-task.sh#GRID_INTENSITY",
+   "status": "inferred",
+   "test": "",
+   "tests": []
+  },
+  "usage-collection.other-ci-platforms.005": {
+   "file": "specs/usage-collection/other-ci-platforms/devtron-badge-refresh.feature",
+   "fingerprint": "766098832c2e",
+   "human": false,
+   "rule": "ci-platforms.devtron.failed-refresh-empties-badge",
+   "source": "examples/ci-platforms/devtron-task.sh#docker run",
+   "status": "inferred",
+   "test": "",
+   "tests": []
+  }
+ },
+ "taxonomy": {
+  "domains": [
+   {
+    "areas": [
+     {
+      "description": "Paging the GitHub Actions API for the last 30 days of workflow runs and their jobs, warning when results are truncated.",
+      "slug": "github-actions",
+      "title": "GitHub Actions runs and jobs"
+     },
+     {
+      "description": "Collecting job usage from GitLab projects as an alternative CI provider.",
+      "slug": "gitlab-pipelines",
+      "title": "GitLab pipelines"
+     },
+     {
+      "description": "Running the badge refresh from third-party CI systems such as Devtron tasks.",
+      "slug": "other-ci-platforms",
+      "title": "Other CI platforms"
+     }
+    ],
+    "description": "Gathering what a repository's CI actually ran from the CI provider's API.",
+    "slug": "usage-collection",
+    "title": "CI usage collection"
+   },
+   {
+    "areas": [
+     {
+      "description": "Mapping runner labels and machine classes to wattage, including user-declared overrides and spec-based estimates.",
+      "slug": "runner-power",
+      "title": "Runner power models"
+     },
+     {
+      "description": "Deciding which jobs ran and for how long they drew power, including runner boot and setup time.",
+      "slug": "job-duration",
+      "title": "Job duration"
+     },
+     {
+      "description": "Scaling power draw by measured average CPU utilisation instead of assuming full load.",
+      "slug": "cpu-load",
+      "title": "CPU load adjustment"
+     },
+     {
+      "description": "Shared defaults, constants and naming rules the estimate is built on, all overridable.",
+      "slug": "estimate-assumptions",
+      "title": "Estimate assumptions"
+     }
+    ],
+    "description": "Turning CI job time into kilowatt-hours using runner power models.",
+    "slug": "energy-estimation",
+    "title": "Energy estimation"
+   },
+   {
+    "areas": [
+     {
+      "description": "Static per-region grid intensity factors and manual overrides.",
+      "slug": "regional-factors",
+      "title": "Regional grid factors"
+     },
+     {
+      "description": "Fetching current grid intensity from external providers such as Energy-Charts, the UK Carbon Intensity API and EIA.",
+      "slug": "live-grid-data",
+      "title": "Live grid data"
+     },
+     {
+      "description": "Multiplying energy by grid intensity to produce grams of CO2e.",
+      "slug": "co2e-calculation",
+      "title": "CO2e calculation"
+     }
+    ],
+    "description": "Converting energy into CO2e using the carbon intensity of the region's electricity grid.",
+    "slug": "carbon-intensity",
+    "title": "Grid carbon intensity"
+   },
+   {
+    "areas": [
+     {
+      "description": "A GitHub Action that stamps job start and CPU counters and, at job end, publishes the measurement as a carbon artifact.",
+      "slug": "record-action",
+      "title": "Recording action"
+     },
+     {
+      "description": "Listing and parsing carbon artifacts left by runs to obtain measured energy per run.",
+      "slug": "artifact-reading",
+      "title": "Carbon artifact reading"
+     },
+     {
+      "description": "Comparing the API-based estimate against artifact measurements and reporting divergences and undeclared runners.",
+      "slug": "reconciliation",
+      "title": "Estimate reconciliation"
+     }
+    ],
+    "description": "Recording real per-job measurements in CI and using them to check the estimate.",
+    "slug": "measured-data",
+    "title": "Measured job data"
+   },
+   {
+    "areas": [
+     {
+      "description": "Formatting grams, confidence level and Shields.io endpoint JSON or SVG for the badge.",
+      "slug": "badge-content",
+      "title": "Badge content"
+     },
+     {
+      "description": "Serving the badge over HTTP with a cached, periodically refreshed estimate.",
+      "slug": "badge-server",
+      "title": "Badge server"
+     },
+     {
+      "description": "The carbon-badge command, its flags and entry points for running an estimate.",
+      "slug": "command-line",
+      "title": "Command line"
+     }
+    ],
+    "description": "Presenting the footprint as a badge others can embed.",
+    "slug": "badge-output",
+    "title": "Badge output"
+   },
+   {
+    "areas": [
+     {
+      "description": "The one-line installer that sets up the CLI via pipx or pip.",
+      "slug": "installation",
+      "title": "Installation"
+     },
+     {
+      "description": "The Docker image whose entrypoint is the CLI.",
+      "slug": "container-image",
+      "title": "Container image"
+     },
+     {
+      "description": "Makefile targets for setup, lint, test and build.",
+      "slug": "build-tasks",
+      "title": "Build and dev tasks"
+     },
+     {
+      "description": "Styling of the published documentation site.",
+      "slug": "documentation-site",
+      "title": "Documentation site"
+     }
+    ],
+    "description": "Installing, packaging, building and documenting carbon-badge.",
+    "slug": "developer-tooling",
+    "title": "Distribution and developer tooling"
+   }
+  ]
+ }
+}
