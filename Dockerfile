@@ -3,7 +3,7 @@
 #   docker run --rm -e GITHUB_TOKEN carbon-badge owner/repo > badge.json
 
 # --- build stage: produce a wheel ---
-FROM python:3.14-slim@sha256:cad9a2c871761c413caa6fdd6441c783451e740a48aaeba60ae62a8b53525ef6 AS build
+FROM python:3.15-slim@sha256:65a65fc7b30b06cb6df4930fd4650697cb23f4c2698ab81fc87e4b031bc36928 AS build
 WORKDIR /src
 COPY . .
 # --require-hashes, not `build==<version>`: Scorecard's pinned-dependencies
@@ -12,7 +12,7 @@ RUN pip install --no-cache-dir --require-hashes -r requirements-build.txt \
     && python -m build --wheel
 
 # --- runtime stage ---
-FROM python:3.14-slim@sha256:cad9a2c871761c413caa6fdd6441c783451e740a48aaeba60ae62a8b53525ef6
+FROM python:3.15-slim@sha256:65a65fc7b30b06cb6df4930fd4650697cb23f4c2698ab81fc87e4b031bc36928
 RUN adduser --disabled-password --uid 10001 app
 WORKDIR /app
 COPY --from=build /src/dist/*.whl /tmp/
