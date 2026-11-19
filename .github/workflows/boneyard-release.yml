@@ -41,7 +41,7 @@ jobs:
       - name: Post to boneyard
         env:
           TOKEN: ${{ secrets.BONEYARD_TOKEN }}
-          LABEL: PR #${{ github.event.pull_request.number }}
+          LABEL: "PR #${{ github.event.pull_request.number }}"
         run: |
           set -euo pipefail
           test -s sbom-diff-result.json
