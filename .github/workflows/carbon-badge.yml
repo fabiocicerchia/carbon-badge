@@ -42,6 +42,6 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
 
       - if: steps.gate.outputs.recent != '0' || github.event_name == 'workflow_dispatch'
-        uses: fabiocicerchia/carbon-badge@c2a8960de4261881f7d8da3b1a632dc3c3f0859b  # v0.7.5
+        uses: fabiocicerchia/carbon-badge@aa3353d87343f262add84321af37e4711f461bd1  # v0.8.0
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
